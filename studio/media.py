@@ -385,6 +385,32 @@ def info(url: str) -> dict:
     return out
 
 
+def _is_mismatched_auto_lang(lang: str, title: str, words: list) -> bool:
+    """Detect when YouTube auto-captioning mis-tags a noisy English/Hinglish video as another script (e.g. Arabic)."""
+    base = (lang or "").lower().split("-")[0]
+    if base in ("", "en", "hi"):
+        return False
+    # Only suspect auto-caption mismatches for non-Latin scripts like Arabic/Persian/Hebrew/Cyrillic/CJK
+    if base not in ("ar", "fa", "ur", "he", "iw", "ru", "uk", "ko", "ja", "zh", "th"):
+        return False
+    title_letters = [c for c in (title or "") if c.isalpha()]
+    if not title_letters:
+        return False
+    ascii_ratio = sum(1 for c in title_letters if ord(c) < 128) / len(title_letters)
+    # If the title is strongly Latin/ASCII (e.g. English/Hinglish gaming video) and has NO characters
+    # from Arabic/Urdu/Cyrillic/CJK, reject a noisy auto-guessed Arabic/foreign caption track (except Urdu
+    # when the title explicitly mentions Urdu/Pakistan).
+    if ascii_ratio >= 0.75:
+        if base == "ur" and any(k in (title or "").lower() for k in ("urdu", "pakistan", "pakistani")):
+            return False
+        sample = " ".join(w.get("w", "") for w in words[:80])
+        non_ascii = sum(1 for c in sample if c.isalpha() and ord(c) >= 128)
+        total = max(1, sum(1 for c in sample if c.isalpha()))
+        if non_ascii / total >= 0.5:
+            return True
+    return False
+
+
 def youtube_words(url: str):
     """YouTube's own transcript of a video, word by word: ([{'w', 's', 'e'}, ...], language), or None if the video
     has none. Only the transcript in the language that was spoken is used, never a translation."""
@@ -393,15 +419,29 @@ def youtube_words(url: str):
     import json
     i = _extract_info(url, download=False)
     auto = i.get("automatic_captions") or {}
+    subs = i.get("subtitles") or {}
     key = next((k for k in auto if k.endswith("-orig")), None)
     if not key and i.get("language") in auto:
         key = i["language"]
-    track = next((f for f in auto.get(key) or [] if f.get("ext") == "json3" and f.get("url")), None) if key else None
+    track = None
+    is_auto = True
+    # Prefer human-written subtitles in the video's own language if available
+    if i.get("language") and i["language"] in subs:
+        track = next((f for f in subs.get(i["language"]) or [] if f.get("ext") == "json3" and f.get("url")), None)
+        if track:
+            key = i["language"]
+            is_auto = False
+    if not track:
+        track = next((f for f in auto.get(key) or [] if f.get("ext") == "json3" and f.get("url")), None) if key else None
     if not track:
         return None
     with _ydl({}) as ydl:
         raw = ydl.urlopen(track["url"]).read(40_000_000)
-    return _caption_words(json.loads(raw)), key.replace("-orig", "")
+    words = _caption_words(json.loads(raw))
+    lang = (key or "").replace("-orig", "")
+    if is_auto and _is_mismatched_auto_lang(lang, i.get("title") or "", words):
+        return None
+    return words, lang
 
 
 def youtube_english_words(url: str):

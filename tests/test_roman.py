@@ -15,7 +15,7 @@ def text(words):
 # ---- the spelling rules on their own
 for hi, want in [("चूना जो उसको", "chuna jo usko"), ("कहना करता समझना", "kahna karta samajhna"), ("आज", "aaj"),
                  ("ज़िंदगी", "zindagi"), ("नहीं यार", "nahi yaar"), ("बात", "baat"), ("हमारा", "hamara"),
-                 ("GTA गेम में 1000", "GTA gem mein 1000")]:
+                 ("GTA गेम में 1000", "GTA game mein 1000")]:
     check(f"{hi} -> {want}", roman.to_roman(hi) == want, roman.to_roman(hi))
 check("English is left alone", roman.to_roman("Hello there, 25 cars!") == "Hello there, 25 cars!")
 

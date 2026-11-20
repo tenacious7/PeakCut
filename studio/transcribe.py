@@ -1,10 +1,14 @@
-"""Speech to text with word timestamps, using Parakeet 0.6b through sherpa-onnx.
+"""Speech to text with word timestamps, supporting BOTH:
+1. Parakeet-v2 0.6b through sherpa-onnx (ultra-fast local English ONNX INT8, plus optional remote GPU worker)
+2. Faster-Whisper through CTranslate2 (free local multilingual English + Hindi/Hinglish with Silero VAD noise filtering)
 
-It runs in one of two places. On this machine's processors (the default), or, when PEAKCUT_ASR_URL is set, on a
-separate machine with a graphics card (studio/asr_worker.py), which does the same work many times faster. If that
-machine cannot be reached, the pieces are done here instead, so transcription never stops because of it."""
+Only ONE engine is kept loaded in memory at a time: switching engines in Settings immediately unloads the
+inactive model and loads the chosen one in the background with INT8/int8_float16 quantization for low RAM/CPU use."""
+import gc
+import importlib.util
 import os
 import queue
+import re
 import threading
 import time
 
@@ -34,10 +38,321 @@ REMOTE_PARALLEL = int(os.environ.get("PEAKCUT_ASR_REMOTE_PARALLEL", "4"))   # pi
 REMOTE_SLOTS = threading.BoundedSemaphore(max(1, int(os.environ.get("PEAKCUT_ASR_REMOTE_INFLIGHT", "6"))))
 _remote_down_until = 0.0
 
+# ------------------------------------------------------------------ dual ASR engine state (Parakeet + Faster-Whisper)
+WHISPER_MODELS = [
+    {"id": "base", "label": "Base (~150 MB · Fastest)", "desc": "Lowest RAM & fastest CPU speed"},
+    {"id": "small", "label": "Small (~500 MB · Recommended)", "desc": "Best balance of speed, accuracy & Hinglish"},
+    {"id": "medium", "label": "Medium (~1.5 GB · High Accuracy)", "desc": "Sharper accents & noisy gameplay audio"},
+    {"id": "large-v3-turbo", "label": "Large-v3-Turbo (~1.6 GB · Best)", "desc": "Top English + Hindi/Hinglish quality"},
+]
+WHISPER_MODEL_IDS = {m["id"] for m in WHISPER_MODELS}
+WHISPER_THREADS = int(os.environ.get("PEAKCUT_WHISPER_THREADS") or min(4, max(2, _CPUS // 2)))
+WHISPER_HINGLISH_PROMPT = (
+    "Natural Hinglish gaming stream. Keep spoken English words like table, chair, game, bro, clutch, "
+    "watch, stream, laptop, phone, video, question, athletic, what's up in standard English spelling."
+)
+_ARABIC_SCRIPT_RE = re.compile(r"[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]")
+
+_state_lock = threading.RLock()
+_whisper_lock = threading.Lock()
+_whisper_model = None
+_whisper_meta = None          # (model_size, device, compute_type)
+_asr_state = {
+    "engine": os.environ.get("PEAKCUT_ASR_ENGINE", "parakeet").strip().lower() or "parakeet",
+    "whisper_model": os.environ.get("PEAKCUT_WHISPER_MODEL", "small").strip().lower() or "small",
+    "language": os.environ.get("PEAKCUT_ASR_LANGUAGE", "auto").strip().lower() or "auto",
+    "status": "idle",         # idle | loading | ready | error | not_installed
+    "message": "",
+    "device": PROVIDER,
+    "compute_type": "int8",
+    "gen": 0,
+}
+
+
+def faster_whisper_installed() -> bool:
+    return importlib.util.find_spec("faster_whisper") is not None
+
+
+def _read_user_asr_settings() -> tuple[str, str, str, bool]:
+    """Read (engine, whisper_model, language, gpu_enabled) from active user settings, falling back to module state."""
+    with _state_lock:
+        eng = _asr_state["engine"]
+        wmod = _asr_state["whisper_model"]
+        lang = _asr_state["language"]
+    gpu_on = getattr(config, "USE_GPU", True)
+    try:
+        from . import accounts
+        s = accounts.settings()
+        eng = s.get("asr_engine") or eng
+        wmod = s.get("whisper_model") or wmod
+        lang = s.get("asr_language") or lang
+        gpu_on = bool(s.get("gpu_enabled", True)) and getattr(config, "USE_GPU", True)
+    except Exception:
+        pass
+    if eng not in ("parakeet", "faster-whisper"):
+        eng = "parakeet"
+    if wmod not in WHISPER_MODEL_IDS:
+        wmod = "small"
+    if lang not in ("auto", "en", "hi"):
+        lang = "auto"
+    return eng, wmod, lang, gpu_on
+
+
+def active_engine() -> str:
+    eng, _, _, _ = _read_user_asr_settings()
+    return eng
+
 
 def model_ready() -> bool:
+    eng = active_engine()
+    if eng == "faster-whisper":
+        return faster_whisper_installed()
     from . import fetch_model
     return fetch_model.ready()
+
+
+def _detect_whisper_device(gpu_on: bool) -> tuple[str, str]:
+    """Pick optimal (device, compute_type) for Faster-Whisper: CUDA int8_float16 if available, else CPU int8."""
+    pref = os.environ.get("PEAKCUT_WHISPER_DEVICE", "auto").strip().lower()
+    if pref == "cpu" or not gpu_on:
+        return "cpu", "int8"
+    try:
+        import ctranslate2
+        if ctranslate2.get_cuda_device_count() > 0:
+            return "cuda", os.environ.get("PEAKCUT_WHISPER_COMPUTE", "int8_float16").strip() or "int8_float16"
+    except Exception:
+        pass
+    return "cpu", "int8"
+
+
+def unload_parakeet():
+    """Free idle Parakeet ONNX recognizers from RAM so only one ASR engine stays resident."""
+    global _made
+    drained = 0
+    while True:
+        try:
+            rec = _free.get_nowait()
+            del rec
+            drained += 1
+        except queue.Empty:
+            break
+    if drained:
+        with _lock:
+            _made = max(0, _made - drained)
+    gc.collect()
+
+
+def unload_whisper():
+    """Free the loaded Faster-Whisper model from RAM/VRAM."""
+    global _whisper_model, _whisper_meta
+    with _whisper_lock:
+        if _whisper_model is not None:
+            _whisper_model = None
+            _whisper_meta = None
+    gc.collect()
+
+
+def _get_whisper_model(model_size: str = None, gpu_on: bool = None):
+    """Load (or reuse) the optimized Faster-Whisper model under lock. Automatically falls back to CPU INT8 if CUDA fails."""
+    global _whisper_model, _whisper_meta
+    _, cfg_model, _, cfg_gpu = _read_user_asr_settings()
+    size = (model_size or cfg_model or "small").strip().lower()
+    if size not in WHISPER_MODEL_IDS:
+        size = "small"
+    use_gpu = cfg_gpu if gpu_on is None else bool(gpu_on)
+    device, compute_type = _detect_whisper_device(use_gpu)
+
+    with _whisper_lock:
+        if _whisper_model is not None and _whisper_meta == (size, device, compute_type):
+            return _whisper_model, device, compute_type
+        if not faster_whisper_installed():
+            raise RuntimeError("faster-whisper is not installed. Run: pip install -r requirements.txt")
+        from faster_whisper import WhisperModel
+        # Unload any previous Whisper variant before allocating the new one
+        _whisper_model = None
+        _whisper_meta = None
+        gc.collect()
+
+        dl_dir = config.MODELS_DIR / "faster-whisper"
+        dl_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            model = WhisperModel(
+                size,
+                device=device,
+                compute_type=compute_type,
+                cpu_threads=WHISPER_THREADS,
+                num_workers=1,
+                download_root=str(dl_dir),
+            )
+        except Exception:
+            if device != "cpu":
+                device, compute_type = "cpu", "int8"
+                model = WhisperModel(
+                    size,
+                    device=device,
+                    compute_type=compute_type,
+                    cpu_threads=WHISPER_THREADS,
+                    num_workers=1,
+                    download_root=str(dl_dir),
+                )
+            else:
+                raise
+        _whisper_model = model
+        _whisper_meta = (size, device, compute_type)
+        return _whisper_model, device, compute_type
+
+
+def switch_engine(engine: str, whisper_model: str = None, language: str = None, preload: bool = True) -> dict:
+    """Switch active ASR engine, immediately unload the inactive model to save RAM/VRAM,
+    and optionally warm-load the newly selected model in a background thread."""
+    eng = (engine or "parakeet").strip().lower()
+    if eng not in ("parakeet", "faster-whisper"):
+        raise ValueError(f"Unknown speech engine: {eng}")
+    _, cur_wmod, cur_lang, gpu_on = _read_user_asr_settings()
+    wmod = (whisper_model or cur_wmod or "small").strip().lower()
+    if wmod not in WHISPER_MODEL_IDS:
+        wmod = "small"
+    lang = (language or cur_lang or "auto").strip().lower()
+    if lang not in ("auto", "en", "hi"):
+        lang = "auto"
+
+    with _state_lock:
+        _asr_state["gen"] += 1
+        gen = _asr_state["gen"]
+        _asr_state["engine"] = eng
+        _asr_state["whisper_model"] = wmod
+        _asr_state["language"] = lang
+
+    # Immediately free the other engine so RAM/VRAM never doubles up
+    if eng == "faster-whisper":
+        unload_parakeet()
+        if not faster_whisper_installed():
+            with _state_lock:
+                _asr_state.update(
+                    status="not_installed",
+                    message="Install faster-whisper first: pip install -r requirements.txt",
+                    device="cpu",
+                    compute_type="int8",
+                )
+            return asr_status()
+        dev, ctype = _detect_whisper_device(gpu_on)
+        with _state_lock:
+            already = _whisper_model is not None and _whisper_meta == (wmod, dev, ctype)
+            _asr_state.update(
+                status="ready" if already else ("loading" if preload else "idle"),
+                message=f"Faster-Whisper ({wmod}, {dev.upper()} {ctype}) ready." if already else (
+                    f"Loading Faster-Whisper ({wmod}) in background…" if preload else "Ready to load on next clip."
+                ),
+                device=dev,
+                compute_type=ctype,
+            )
+        if preload and not already:
+            def _load_w():
+                try:
+                    _, d_used, c_used = _get_whisper_model(wmod, gpu_on=gpu_on)
+                    with _state_lock:
+                        if _asr_state["gen"] != gen:
+                            return
+                        _asr_state.update(
+                            status="ready",
+                            message=f"Faster-Whisper ({wmod}, {d_used.upper()} {c_used}, Silero VAD) ready.",
+                            device=d_used,
+                            compute_type=c_used,
+                        )
+                except Exception as e:  # noqa: BLE001
+                    with _state_lock:
+                        if _asr_state["gen"] != gen:
+                            return
+                        _asr_state.update(status="error", message=f"Failed to load Faster-Whisper: {e}")
+            threading.Thread(target=_load_w, daemon=True, name="asr-load-whisper").start()
+    else:
+        unload_whisper()
+        with _state_lock:
+            already = _made > 0
+            _asr_state.update(
+                status="ready" if already else ("loading" if preload else "idle"),
+                message="Parakeet-v2 (ONNX INT8) ready." if already else (
+                    "Loading Parakeet-v2 in background…" if preload else "Ready to load on next clip."
+                ),
+                device=PROVIDER,
+                compute_type="int8" if PROVIDER == "cpu" else "fp16",
+            )
+        if preload and not already:
+            def _load_p():
+                try:
+                    _recognizer()
+                    with _state_lock:
+                        if _asr_state["gen"] != gen:
+                            return
+                        _asr_state.update(
+                            status="ready",
+                            message=f"Parakeet-v2 ({PROVIDER.upper()} ONNX) ready.",
+                            device=PROVIDER,
+                            compute_type="int8" if PROVIDER == "cpu" else "fp16",
+                        )
+                except Exception as e:  # noqa: BLE001
+                    with _state_lock:
+                        if _asr_state["gen"] != gen:
+                            return
+                        _asr_state.update(status="error", message=f"Failed to load Parakeet-v2: {e}")
+            threading.Thread(target=_load_p, daemon=True, name="asr-load-parakeet").start()
+    return asr_status()
+
+
+def asr_status() -> dict:
+    """Current speech-to-text engine configuration, install state, and live load status."""
+    eng, wmod, lang, gpu_on = _read_user_asr_settings()
+    fw_ok = faster_whisper_installed()
+    from . import fetch_model
+    pk_ok = fetch_model.ready()
+    with _state_lock:
+        st = dict(_asr_state)
+    # Sync with user settings if not currently loading a switch
+    st["engine"] = eng
+    st["whisper_model"] = wmod
+    st["language"] = lang
+    pk_loaded = _made > 0
+    fw_loaded = _whisper_model is not None and _whisper_meta is not None and _whisper_meta[0] == wmod
+
+    if eng == "faster-whisper":
+        if not fw_ok:
+            st["status"] = "not_installed"
+            st["message"] = "faster-whisper is not installed yet. Run: pip install -r requirements.txt"
+            st["device"], st["compute_type"] = "cpu", "int8"
+        elif fw_loaded:
+            st["status"] = "ready"
+            st["device"], st["compute_type"] = _whisper_meta[1], _whisper_meta[2]
+            st["message"] = f"Faster-Whisper ({wmod}, {st['device'].upper()} {st['compute_type']}, Silero VAD) loaded."
+        elif st["status"] not in ("loading", "error"):
+            dev, ctype = _detect_whisper_device(gpu_on)
+            st["status"] = "idle"
+            st["device"], st["compute_type"] = dev, ctype
+            st["message"] = f"Faster-Whisper ({wmod}, {dev.upper()} {ctype}) ready to load."
+    else:
+        st["device"] = PROVIDER
+        st["compute_type"] = "int8" if PROVIDER == "cpu" else "fp16"
+        if pk_loaded:
+            st["status"] = "ready"
+            st["message"] = f"Parakeet-v2 ({PROVIDER.upper()} ONNX) loaded."
+        elif st["status"] not in ("loading", "error"):
+            st["status"] = "ready" if pk_ok else "idle"
+            st["message"] = "Parakeet-v2 (ONNX INT8) ready." if pk_ok else "Parakeet-v2 will download automatically on first use."
+
+    return {
+        "engine": st["engine"],
+        "whisper_model": st["whisper_model"],
+        "language": st["language"],
+        "status": st["status"],
+        "message": st["message"],
+        "device": st["device"],
+        "compute_type": st["compute_type"],
+        "faster_whisper_installed": fw_ok,
+        "parakeet_installed": pk_ok,
+        "parakeet_loaded": pk_loaded,
+        "whisper_loaded": fw_loaded,
+        "whisper_threads": WHISPER_THREADS,
+        "models": WHISPER_MODELS,
+    }
 
 
 def _model_files(d) -> dict:
@@ -78,7 +393,6 @@ def _load_sherpa():
         first = e
     import ctypes
     import importlib
-    import importlib.util
     import shutil
     from pathlib import Path
 
@@ -240,6 +554,32 @@ def _words(tokens, timestamps, a: int, b: int) -> list:
     return out
 
 
+def _clean_words(raw_words: list) -> list:
+    """Remove duplicate/hallucinated stutter runs and normalize word timings cleanly."""
+    words = []
+    repeat_run = 0
+    for w in raw_words:
+        txt = str(w.get("w") or "").strip()
+        if not txt or re.fullmatch(r"[\[(].*[\])]", txt):
+            continue
+        s = round(max(0.0, float(w.get("s", 0.0))), 2)
+        e = round(max(s + 0.06, float(w.get("e", s + 0.12))), 2)
+        if words and words[-1]["w"] == txt and abs(words[-1]["s"] - s) < 0.05:
+            continue  # same word repeated at the exact same timestamp
+        if words and words[-1]["w"].lower() == txt.lower():
+            repeat_run += 1
+            if repeat_run >= 3:
+                continue  # suppress 4+ consecutive hallucinated loop tokens ("you you you you")
+        else:
+            repeat_run = 0
+        words.append({"w": txt, "s": s, "e": e})
+    # A word lasts until the next one starts, capped so pauses stay pauses.
+    for i, w in enumerate(words):
+        nxt = words[i + 1]["s"] if i + 1 < len(words) else w["e"] + 0.4
+        w["e"] = round(max(w["s"] + 0.08, min(nxt, max(w["e"], w["s"] + 0.6))), 2)
+    return words
+
+
 def decode_pieces(pieces: list, rec=None) -> list:
     """[(tokens, timestamps), ...] for float32 pieces of audio, done on this machine with one copy of the model."""
     streams = []
@@ -273,17 +613,17 @@ def _decode_remote(pieces: list) -> list:
     return [(p["tokens"], p["timestamps"]) for p in got]
 
 
-def transcribe(audio: np.ndarray, on_progress=None) -> list:
-    """Returns [{'w': word, 's': start_sec, 'e': end_sec}, ...] for the whole audio.
-    Speech is cut at quiet moments into 12-24 s pieces; silent pieces are skipped."""
+def _transcribe_parakeet(audio: np.ndarray, on_progress=None) -> list:
+    """Parakeet-v2 via sherpa-onnx (local CPU/GPU or remote GPU worker)."""
     global _remote_down_until
-    words = []
     todo = []
     for a, b in _chunks(audio):
         seg = audio[a:b].astype(np.float32) / 32768.0
-        if len(seg) < 4800 or float(np.sqrt((seg ** 2).mean())) < 0.003:
+        if len(seg) < 4800 or float(np.sqrt((seg ** 2).mean())) < 0.004:
             continue  # silence: skip, saves time and avoids made-up words
         todo.append((a, b, seg))
+    if not todo:
+        return []
     remote = _remote_ok()
     size = max(1, REMOTE_BATCH if remote else BATCH)
     groups = [todo[i:i + size] for i in range(0, len(todo), size)]
@@ -333,14 +673,117 @@ def transcribe(audio: np.ndarray, on_progress=None) -> list:
             results = list(ex.map(decode, groups))
     else:
         results = [decode(g) for g in groups]
+    raw_words = []
     for out in results:
         for piece in out:
-            for w in piece:
-                if words and words[-1]["w"] == w["w"] and words[-1]["s"] == w["s"]:
-                    continue  # the model sometimes says the same word twice at the same moment
-                words.append(w)
-    # A word lasts until the next one starts, capped so pauses stay pauses.
-    for i, w in enumerate(words):
-        nxt = words[i + 1]["s"] if i + 1 < len(words) else w["e"] + 0.4
-        w["e"] = round(max(w["s"] + 0.08, min(nxt, max(w["e"], w["s"] + 0.6))), 2)
-    return words
+            raw_words.extend(piece)
+    return _clean_words(raw_words)
+
+
+def _extract_whisper_words(segments, total_sec: float, on_progress=None) -> list:
+    out = []
+    for seg in segments:
+        seg_words = getattr(seg, "words", None) or []
+        if seg_words:
+            for wd in seg_words:
+                txt = str(getattr(wd, "word", "") or "").strip()
+                if not txt:
+                    continue
+                s = round(max(0.0, float(getattr(wd, "start", seg.start) or 0.0)), 2)
+                e = round(max(s + 0.08, float(getattr(wd, "end", s + 0.15) or (s + 0.15))), 2)
+                out.append({"w": txt, "s": s, "e": e})
+        else:
+            parts = str(getattr(seg, "text", "") or "").strip().split()
+            if parts:
+                s0 = float(getattr(seg, "start", 0.0) or 0.0)
+                e0 = max(s0 + 0.2, float(getattr(seg, "end", s0 + 0.4) or (s0 + 0.4)))
+                step = (e0 - s0) / len(parts)
+                for idx, p in enumerate(parts):
+                    out.append({"w": p, "s": round(s0 + idx * step, 2), "e": round(s0 + (idx + 1) * step, 2)})
+        if on_progress and total_sec > 0:
+            on_progress(min(1.0, float(getattr(seg, "end", 0.0) or 0.0) / total_sec))
+    return out
+
+
+def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = "") -> list:
+    """Faster-Whisper (CTranslate2 INT8 / int8_float16) with Silero VAD noise filtering & anti-Arabic hallucination guard."""
+    if len(audio) < 4800:
+        return []
+    wav = audio.astype(np.float32) / 32768.0
+    if float(np.sqrt((wav ** 2).mean())) < 0.003:
+        return []
+
+    _, wmod, pref_lang, gpu_on = _read_user_asr_settings()
+    model, device, compute_type = _get_whisper_model(wmod, gpu_on=gpu_on)
+    with _state_lock:
+        _asr_state.update(status="ready", device=device, compute_type=compute_type)
+
+    # Resolve language: explicit setting wins, else reliable hint, else auto with hallucination guard
+    hint = (lang_hint or "").strip().lower().split("-")[0]
+    chosen_lang = None
+    if pref_lang in ("en", "hi"):
+        chosen_lang = pref_lang
+    elif hint in ("en", "hi"):
+        chosen_lang = hint
+
+    total_sec = len(wav) / 16000.0
+    vad_params = {"min_silence_duration_ms": 400, "speech_pad_ms": 200}
+
+    def _run(lang_arg):
+        prompt = WHISPER_HINGLISH_PROMPT if lang_arg == "hi" else None
+        kwargs = {
+            "beam_size": 1,
+            "best_of": 1,
+            "vad_filter": True,
+            "vad_parameters": vad_params,
+            "word_timestamps": True,
+            "condition_on_previous_text": False,
+            "no_speech_threshold": 0.6,
+            "compression_ratio_threshold": 2.4,
+            "language": lang_arg,
+        }
+        if prompt:
+            kwargs["initial_prompt"] = prompt
+        with _whisper_lock:
+            segments, info = model.transcribe(wav, **kwargs)
+            got_words = _extract_whisper_words(segments, total_sec, on_progress=on_progress)
+        return got_words, info
+
+    try:
+        raw_words, info = _run(chosen_lang)
+    except Exception:
+        # Retry once without VAD if onnxruntime/silero VAD asset fails in an offline environment
+        with _whisper_lock:
+            segments, info = model.transcribe(
+                wav,
+                beam_size=1,
+                best_of=1,
+                vad_filter=False,
+                word_timestamps=True,
+                condition_on_previous_text=False,
+                language=chosen_lang,
+                initial_prompt=WHISPER_HINGLISH_PROMPT if chosen_lang == "hi" else None,
+            )
+            raw_words = _extract_whisper_words(segments, total_sec, on_progress=on_progress)
+
+    # Guard against Whisper auto-detect hallucinating Arabic/random scripts on noisy English gaming audio
+    if chosen_lang is None and info is not None:
+        det_lang = str(getattr(info, "language", "") or "").lower()
+        det_prob = float(getattr(info, "language_probability", 1.0) or 0.0)
+        sample_txt = " ".join(w["w"] for w in raw_words[:40])
+        has_arabic = bool(_ARABIC_SCRIPT_RE.search(sample_txt))
+        if (det_lang not in ("en", "hi") and det_prob < 0.78) or (has_arabic and det_prob < 0.88):
+            raw_words, _ = _run("en")
+
+    if on_progress:
+        on_progress(1.0)
+    return _clean_words(raw_words)
+
+
+def transcribe(audio: np.ndarray, on_progress=None, lang_hint: str = "") -> list:
+    """Returns [{'w': word, 's': start_sec, 'e': end_sec}, ...] using the active ASR engine
+    (Parakeet-v2 or Faster-Whisper). Falls back gracefully to Parakeet if Faster-Whisper is not installed."""
+    eng = active_engine()
+    if eng == "faster-whisper" and faster_whisper_installed():
+        return _transcribe_whisper(audio, on_progress=on_progress, lang_hint=lang_hint)
+    return _transcribe_parakeet(audio, on_progress=on_progress)

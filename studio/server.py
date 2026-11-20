@@ -587,7 +587,8 @@ def status(request: Request):
             "styles": {k: v["label"] for k, v in render.STYLES.items()}, "layouts": render.LAYOUTS,
             "memes": {k: v for k, v in meme.MEME_MOODS.items() if k != "none"},
             "music_beds": {k: v for k, v in meme.MUSIC_BEDS.items() if k != "none"},
-            "gpu": gpu_info}
+            "gpu": gpu_info,
+            "asr": transcribe.asr_status()}
 
 
 @app.post("/api/gpu/toggle")
@@ -598,6 +599,35 @@ def toggle_gpu(body: dict = Body(None)):
     ctx.bump()
     has_nvenc = render.check_nvenc()
     return {"gpu_enabled": new_val, "supported": has_nvenc}
+
+
+@app.get("/api/asr")
+def get_asr():
+    return transcribe.asr_status()
+
+
+@app.post("/api/asr")
+def set_asr(request: Request, body: dict = Body(...)):
+    _admin(request)
+    patch = {}
+    if "engine" in body and body["engine"] is not None:
+        patch["asr_engine"] = str(body["engine"]).strip().lower()
+    if "whisper_model" in body and body["whisper_model"] is not None:
+        patch["whisper_model"] = str(body["whisper_model"]).strip().lower()
+    if "language" in body and body["language"] is not None:
+        patch["asr_language"] = str(body["language"]).strip().lower()
+    try:
+        saved = accounts.save_settings(patch) if patch else accounts.settings()
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, str(e))
+    status_out = transcribe.switch_engine(
+        engine=saved.get("asr_engine", "parakeet"),
+        whisper_model=saved.get("whisper_model", "small"),
+        language=saved.get("asr_language", "auto"),
+        preload=bool(body.get("preload", True)),
+    )
+    ctx.bump()
+    return status_out
 
 
 # ================================================================ videos
@@ -1036,6 +1066,14 @@ def update_clip_edit(cid: str, body: dict = Body(...), jid: str = None):
 
     valid = edit.validate_edit({**current, **body, "version": current.get("version", 1) + 1},
                                src_w=job.get("width") or 1920, src_h=job.get("height") or 1080)
+    # Mark words_edited if the user explicitly changed caption words in the editor
+    prev_words = (current.get("caption") or {}).get("words") or []
+    new_words = (valid.get("caption") or {}).get("words") or []
+    if isinstance(body.get("caption"), dict) and "words" in body["caption"] and new_words != prev_words:
+        valid["caption"]["words_edited"] = True
+        clip["words_edited"] = True
+    elif (current.get("caption") or {}).get("words_edited"):
+        valid["caption"]["words_edited"] = True
     edit.save_edit(ef, valid)
 
     clip["start"] = valid["start"]

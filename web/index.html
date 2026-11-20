@@ -155,15 +155,19 @@ main{background:var(--bg);margin:8px 8px 8px 0;border-radius:var(--r-lg);height:
 .ttabs .tabbtn:hover{background:#EDE3DB;color:var(--text)}
 .ttabs .tabbtn.on{background:var(--brand-soft);color:var(--brand-ink)}
 .ttabs .tabbtn.on .n{background:#fff}
-#actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+#actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 #actions a.btn{text-decoration:none}
+.social-links{display:inline-flex;align-items:center;gap:2px}
+.social-link{width:30px;height:30px;display:grid;place-items:center;border-radius:8px;color:var(--faint);text-decoration:none;transition:background-color .15s ease,color .15s ease}
+.social-link svg{width:15px;height:15px}
+.social-link:hover,.social-link:focus-visible{background:var(--muted);color:var(--text)}
 @media (max-width:560px){#actions .btn .long{display:none}}
 @media (max-width:900px){.ttabs .tabbtn .lbl{display:none}.ttabs .tabbtn{padding:0 10px}}
 /* channels in Setup */
 .chans{display:flex;flex-direction:column;gap:8px}
-.chan{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:var(--muted);min-height:64px}
-.chan .logo{flex:none;width:36px;height:36px;border-radius:10px;display:grid;place-items:center}
-.chan .logo svg{width:20px;height:20px}
+.chan{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:var(--muted);min-height:58px}
+.chan .logo{flex:none;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;opacity:.92}
+.chan .logo svg{width:14px;height:14px}
 .chan .pic{flex:none;width:40px;height:40px;border-radius:50%;object-fit:cover;background:#EFE7E1}
 .chan .who{flex:1;min-width:0}
 .chan .who b{display:block;font-size:14px;color:var(--brand-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -200,18 +204,24 @@ img.avatar.ring{background:transparent}
 .btn:active{background:var(--muted)}
 .btn.primary{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
 .btn.primary:active{background:var(--brand-press);border-color:var(--brand-press)}
+.btn.good{background:var(--good);border-color:var(--good);color:#fff}
+.btn.good:hover{background:#0D774B;border-color:#0D774B}
+.btn.good:active{background:#0B653F;border-color:#0B653F}
 .btn.dark{background:var(--brand-ink);border-color:var(--brand-ink);color:#fff}
 .btn.dark svg{color:var(--brand)}
 .btn.danger{background:var(--bad-soft);border-color:transparent;color:var(--bad)}
 .btn.ghost{background:transparent;border-color:transparent;color:var(--dim)}
 .btn.sm{height:32px;padding:0 11px;font-size:13px;gap:6px}
-.btn.sm svg{width:16px;height:16px}
+.btn.sm svg{width:15px;height:15px}
 .btn.icon{width:32px;padding:0}
 .btn.lg{height:44px;padding:0 20px;font-size:15px}
 .btn:disabled{opacity:.45;cursor:default;pointer-events:none}
 
 /* ---------- fields */
 :where(input:not([type=checkbox],[type=radio],[type=file],[type=range]),select,textarea){width:100%;height:40px;padding:0 12px;background:#fff;border:1px solid var(--line-2);border-radius:var(--r-sm);min-width:0;outline:none;transition:border-color .15s ease}
+:where(input[type=file]){width:100%;padding:8px 10px;background:#fff;border:1px solid var(--line-2);border-radius:var(--r-sm);font-size:13px;color:var(--dim);cursor:pointer}
+:where(input[type=file])::file-selector-button{margin-right:10px;padding:5px 10px;border-radius:6px;border:1px solid var(--line-2);background:var(--muted);color:var(--text);font-size:12px;font-weight:600;cursor:pointer;transition:background-color .15s ease}
+:where(input[type=file])::file-selector-button:hover{background:#EDE3DB}
 :where(textarea){height:auto;padding:10px 12px;resize:vertical}
 :where(input:not([type=checkbox],[type=radio],[type=file],[type=range]),select,textarea):hover{border-color:#D9CCC2}
 :where(input:not([type=checkbox],[type=radio],[type=file],[type=range]),select,textarea):focus{background:#fff;border-color:var(--brand)}
@@ -276,17 +286,16 @@ label.ck input{accent-color:var(--brand);margin:0}
 .composer-input>svg{position:absolute;left:18px;color:var(--faint);width:20px;height:20px;transition:color .15s ease}
 .composer-input:focus-within>svg{color:var(--brand)}
 .composer-input input,.composer-input input:focus{height:60px;border:0;background:transparent;padding:0 18px 0 48px;font-size:16px;border-radius:var(--r-lg) var(--r-lg) 0 0}
-.composer-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:2px 10px 10px 12px}
-.chip{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:999px;border:0;background:var(--muted);color:var(--dim);font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;transition:background-color .15s ease,color .15s ease}
+.composer-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 10px 10px 12px}
+.chip{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:999px;border:1px solid transparent;background:var(--muted);color:var(--dim);font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;transition:background-color .15s ease,color .15s ease,border-color .15s ease}
 .composer.compact .chip{background:#fff}
-.chip svg{width:16px;height:16px}
+.chip svg{width:15px;height:15px}
 .chip:hover,.chip:focus-visible{background:#EDE3DB;color:var(--text)}
 .chip.on,.pick.open .chip{background:var(--brand-soft);color:var(--brand-ink)}
-.hint{font-size:12px;color:var(--faint);margin-right:6px}
-.composer-bar{flex-wrap:nowrap}
+.hint{font-size:12px;color:var(--faint);margin-right:4px}
 .composer-bar .grow{display:none}
-.composer-bar .hint{flex:1 1 0;min-width:0;text-align:right;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-@media (max-width:560px){.composer-bar{flex-wrap:wrap}}
+.composer-bar .hint{flex:1 1 110px;min-width:0;text-align:right;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+@media (max-width:720px){.composer-bar .hint{display:none}.composer-bar .btn.primary{margin-left:auto}}
 .composer-opts{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows .32s ease,opacity .25s ease}
 .composer-opts.open{grid-template-rows:1fr;opacity:1}
 .composer-opts>.og{min-height:0;overflow:hidden;padding:0 12px;transition:padding .32s ease}
@@ -402,18 +411,21 @@ img.av{object-fit:cover}
 .lay-prev.stack .ph i{left:0;right:0;top:40%;height:60%;transform:none;background:linear-gradient(135deg,#FF8B33,#FFB27A)}
 .lay-prev.stack .ph .split-top{position:absolute;top:0;left:0;right:0;height:40%;background:#fff;border-bottom:1px solid #1E1612;display:flex;align-items:center;justify-content:center;z-index:2}
 .lay-prev.stack .ph .split-top::after{content:"";width:6px;height:6px;border-radius:50%;background:#FF8B33}
-.opts-badges{display:inline-flex;align-items:center;gap:4px;margin-left:4px}
-.opt-pill{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:5px;font-size:11px;font-weight:600;background:rgba(42,26,18,.08);color:var(--brand-ink);line-height:1.2}
+.opts-badges{display:inline-flex;align-items:center;gap:4px;margin-left:2px;max-width:190px;overflow:hidden}
+.opt-pill{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:5px;font-size:11px;font-weight:600;background:rgba(42,26,18,.07);color:var(--brand-ink);line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:92px}
 .chip.on .opt-pill{background:#fff;color:var(--brand-ink)}
-.opt-pill.gameplay{background:var(--brand);color:var(--brand-ink)}
-.chip.opt-active{border-color:rgba(255,139,51,.5)}
+.opt-pill.gameplay,.opt-pill.stack{background:var(--brand-soft);color:var(--brand-deep)}
+.chip.opt-active{border-color:var(--brand-line)}
 .seg{display:flex;gap:4px;background:#fff;border-radius:10px;padding:4px}
+.seg.sm{display:inline-flex;gap:2px;padding:3px;border-radius:8px;background:var(--muted)}
 .composer.compact .seg{background:var(--muted)}
 .seg button{flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 6px;border:0;border-radius:7px;background:transparent;color:var(--dim);font-size:13px;font-weight:600;cursor:pointer;transition:background-color .15s ease,color .15s ease;min-width:0}
+.seg.sm button{flex:none;flex-direction:row;padding:4px 10px;font-size:12px;border-radius:6px;white-space:nowrap}
 .seg button small{font-size:10.5px;font-weight:500;color:var(--faint);transition:color .15s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;padding:0 2px}
 .seg button:hover,.seg button:focus-visible{background:#EDE3DB;color:var(--text)}
-.seg button[aria-pressed=true]{background:var(--brand-soft);color:var(--brand-ink)}
-.seg button[aria-pressed=true] small{color:#B8693A}
+.seg button[aria-pressed=true],.seg button.active{background:var(--brand-soft);color:var(--brand-ink)}
+.seg.sm button[aria-pressed=true],.seg.sm button.active{background:#fff;color:var(--brand-ink)}
+.seg button[aria-pressed=true] small,.seg button.active small{color:#B8693A}
 .range{display:flex;align-items:center;gap:8px}
 .range label{flex:1;display:flex;align-items:center;gap:6px;background:#fff;border-radius:10px;padding:0 10px;height:44px;font-size:12px;color:var(--faint);min-width:0}
 .composer.compact .range label{background:var(--muted)}
@@ -421,19 +433,38 @@ img.av{object-fit:cover}
 .range>svg{width:14px;height:14px;color:var(--faint);flex:none}
 @media (max-width:640px){.og{grid-template-columns:1fr}.nsteps{grid-template-columns:1fr}}
 
-.audio-prev-btn{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;font-size:11px;font-weight:600;height:26px;border-radius:6px;border:1px solid var(--line);background:#fff;color:var(--dim);cursor:pointer;transition:all .15s ease}
+.fc-panel{margin-top:10px;padding:12px;background:#fff;border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;gap:10px}
+.fc-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.fc-head-title{font-size:12px;font-weight:600;color:var(--brand-ink)}
+.fc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:560px){.fc-grid{grid-template-columns:1fr}}
+.fc-field label{display:block;font-size:11.5px;font-weight:600;color:var(--dim);margin-bottom:4px}
+.fc-field select,.ob-select{width:100%;height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--line-2);background:#fff;font-size:12.5px;color:var(--text);font-weight:500}
+.audio-prev-btn{display:inline-flex;align-items:center;gap:4px;padding:0 10px;font-size:12px;font-weight:600;height:36px;border-radius:8px;border:1px solid var(--line-2);background:#fff;color:var(--dim);cursor:pointer;white-space:nowrap;transition:background-color .15s ease,color .15s ease,border-color .15s ease}
 .audio-prev-btn:hover{background:var(--muted);color:var(--text)}
 .audio-prev-btn.playing{background:var(--brand-soft);color:var(--brand-ink);border-color:var(--brand)}
-.audio-vol-row{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);margin-top:6px}
-.audio-vol-row small{white-space:nowrap}
-.audio-vol-row input[type=range]{flex:1;height:4px;accent-color:var(--brand);cursor:pointer}
-.range-active{background:var(--brand-soft)!important;color:var(--brand-ink)!important;border-color:var(--brand)!important;font-weight:700!important}
-.range-mode-btn{border:0;background:transparent;color:var(--dim);cursor:pointer;transition:all .15s ease}
-.range-mode-btn[aria-pressed=true]{background:var(--brand-soft);color:var(--brand-ink);font-weight:700}
-.ai-rate-banner{display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:8px;font-size:12px;margin-top:10px;line-height:1.4}
-.ai-rate-banner.ok{background:var(--muted);border:1px solid rgba(42,26,18,0.08);color:var(--dim)}
-.ai-rate-banner.warn{background:#FFF4E5;border:1px solid rgba(255,139,51,0.5);color:#8A4300}
+.audio-row{display:flex;align-items:center;gap:8px}
+.audio-row select{flex:1;min-width:0}
+.audio-vol-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);margin-top:8px}
+.audio-vol-row small{white-space:nowrap;font-size:12px}
+.audio-vol-row span{font-variant-numeric:tabular-nums;font-size:12px;font-weight:600;color:var(--brand-ink);min-width:34px;text-align:right}
+.range-active{background:var(--brand-soft)!important;color:var(--brand-ink)!important;border-color:var(--brand-line)!important;font-weight:600!important}
+.range-mode-btn{border:0;background:transparent;color:var(--dim);cursor:pointer;transition:background-color .15s ease,color .15s ease}
+.range-mode-btn[aria-pressed=true]{background:var(--brand-soft);color:var(--brand-ink);font-weight:600}
+.range-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;background:#fff;border:1px solid var(--line);border-radius:10px;font-size:12.5px;color:var(--dim)}
+.range-custom-box{background:#fff;border:1px solid var(--brand-line);border-radius:10px;padding:14px}
+.ai-rate-banner{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;font-size:12px;margin-top:10px;line-height:1.4}
+.ai-rate-banner.ok{background:var(--muted);border:1px solid var(--line);color:var(--dim)}
+.ai-rate-banner.warn{background:#FFF4E5;border:1px solid var(--brand-line);color:var(--brand-deep)}
 .ai-rate-banner svg{flex:none;width:15px;height:15px}
+.job-filter-bar{display:flex;align-items:center;justify-content:space-between;margin:10px 0 12px;flex-wrap:wrap;gap:8px}
+.asr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+.asr-opt{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:14px 16px;border-radius:10px;border:1px solid var(--line-2);background:#fff;color:var(--text);text-align:left;cursor:pointer;transition:background-color .15s ease,border-color .15s ease}
+.asr-opt:hover{background:var(--muted);border-color:#D4CAC3}
+.asr-opt.on{background:var(--brand-soft);border-color:var(--brand)}
+.asr-opt b{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--brand-ink)}
+.asr-opt b svg{width:15px;height:15px;color:var(--brand-deep)}
+.asr-opt small{font-size:12px;color:var(--dim);font-weight:400;line-height:1.35}
 
 /* ---------- home blocks */
 .tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:16px}
@@ -491,12 +522,11 @@ img.av{object-fit:cover}
 .kv div{display:grid;grid-template-columns:180px 1fr;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
 .kv dt{font-size:13px;color:var(--dim)}.kv dd{margin:0;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .apps{display:flex;flex-direction:column;gap:10px}
-.appcard{display:flex;gap:14px;align-items:flex-start;padding:14px 16px;border:1px solid var(--line);border-radius:12px}
-.applogo{flex:none;width:40px;height:40px;border-radius:10px;display:grid;place-items:center}
-.applogo svg{width:22px;height:22px}
-.apptx{flex:1;min-width:0}.apptx>b{display:block;font-size:15px;color:var(--brand-ink)}.apptx>span{font-size:13px;color:var(--dim)}
+.appcard{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.applogo{flex:none;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;background:var(--muted);border:1px solid var(--line)}
+.applogo svg{width:15px;height:15px}
+.apptx{flex:1;min-width:0}.apptx>b{display:block;font-size:14px;color:var(--brand-ink)}.apptx>span{font-size:13px;color:var(--dim)}
 .appact{flex:none}
-.appcard{flex-wrap:wrap}
 .stor-path{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .stor-path code{flex:1 1 260px;min-width:0;overflow-wrap:anywhere;font-size:13px;background:var(--muted);border-radius:8px;padding:10px 12px}
 .stor-bar{height:10px;border-radius:999px;background:var(--muted);overflow:hidden;margin:14px 0 6px}
@@ -551,8 +581,14 @@ img.av{object-fit:cover}
 .veil svg{width:15px;height:15px;margin-left:2px}
 .badge{position:absolute;top:10px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:var(--r-sm);background:#fff;color:var(--brand-ink)}
 .badge.l{left:10px}.badge.r{right:10px}
+.badge.bot{top:auto;bottom:10px;left:10px;font-size:11px}
 .badge.s-hi{background:var(--brand);color:var(--brand-ink)}.badge.s-mid{background:#FFE3CC;color:var(--brand-ink)}
-.badge.qc-pass{background:#E9F6EE;color:#1F7A4D;border:1px solid #C3E9D0}.badge.qc-warn{background:#FFF1DC;color:#9A5B12;border:1px solid #FFE0B2}.badge.qc-fail{background:#FDECEC;color:#C53030;border:1px solid #F8B4B4}
+.badge.qc-pass{background:var(--good-soft);color:var(--good);border:1px solid #C3E9D0}.badge.qc-warn{background:#FFF1DC;color:#9A5B12;border:1px solid #FFE0B2}.badge.qc-fail{background:var(--bad-soft);color:var(--bad);border:1px solid #F8B4B4}
+.editor .panel .badge{position:static;display:inline-flex;align-items:center;gap:4px;font-size:11.5px;padding:3px 8px}
+.editor .panel .badge svg{width:12px;height:12px}
+.shot .veil .veil-pill{width:auto;height:auto;padding:5px 10px;border-radius:var(--r-sm);font-size:11.5px;font-weight:600}
+.shot .veil .veil-pill.good{background:var(--good);color:#fff}
+.shot .veil .veil-pill.bad{background:var(--bad);color:#fff}
 .rule-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}
 .rule-pill.allowed{background:#E9F6EE;color:#1F7A4D}.rule-pill.ask{background:#FFF1DC;color:#9A5B12}.rule-pill.no{background:#FDECEC;color:#C53030}.rule-pill.unknown{background:#F0EDE9;color:#786E64}
 .streamer-shelf{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 14px}
@@ -791,10 +827,10 @@ dialog::backdrop{background:rgba(14,12,11,.42);animation:fadein .16s ease}
 .ai-home .row .btn:hover{color:var(--brand-ink);background:var(--muted)}
 
 .stack{display:flex;flex-direction:column;gap:16px}
-input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:999px;margin:8px 0 6px;cursor:pointer;
-  background:linear-gradient(90deg,var(--brand) 0 var(--p,5%),var(--line) var(--p,5%) 100%)}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;border:6px solid var(--brand)}
-input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#fff;border:6px solid var(--brand)}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:5px;border-radius:999px;margin:6px 0;cursor:pointer;background:var(--line-2)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid var(--brand);transition:border-color .15s ease}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#fff;border:3px solid var(--brand)}
+input[type=range]:hover::-webkit-slider-thumb{border-color:var(--brand-press)}
 .note{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:var(--r);background:var(--muted);color:var(--dim);font-size:13px;margin-top:14px}
 .note svg{color:var(--brand-deep);margin-top:1px}
 .split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
@@ -820,7 +856,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
 .nav-item.on:hover{background:#FF9A4C}
 .icon-btn:hover{background:var(--muted);color:var(--text)}
 .side .icon-btn:hover{background:var(--frame-2);color:var(--frame-text)}
-.chip:hover{background:var(--muted);color:var(--text)}
+.chip:hover{background:#EDE3DB;color:var(--text)}
 .chip.on:hover,.pick.open .chip:hover{background:#FFE2CC;color:var(--brand-ink)}
 .step:hover{background:#F1EBE6}
 .tabbtn:hover{color:var(--brand-ink);background:var(--muted)}
@@ -926,21 +962,31 @@ dialog[open]{animation:fadein .16s ease}
 .word-pill{padding:3px 8px;background:#fff;border:1px solid var(--line);border-radius:4px;font-size:12px;font-weight:600;color:var(--brand-ink);cursor:text;outline:none;transition:border-color 0.15s, background-color 0.15s}
 .word-pill:focus{border-color:var(--brand);background:#fffaf5}
 .word-pill:hover{border-color:var(--brand)}
-.split-preset-btn, .cap-anchor-btn{padding:4px 8px;font-size:11px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;font-weight:600;color:var(--brand-ink)}
-.split-preset-btn.active, .cap-anchor-btn.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+.split-preset-btn, .cap-anchor-btn{padding:4px 9px;font-size:11.5px;border:1px solid var(--line-2);background:#fff;border-radius:6px;cursor:pointer;font-weight:600;color:var(--dim);transition:background-color .15s ease,color .15s ease,border-color .15s ease}
+.split-preset-btn:hover, .cap-anchor-btn:hover{background:var(--muted);color:var(--text)}
+.split-preset-btn.active, .cap-anchor-btn.active{background:var(--brand-soft);color:var(--brand-ink);border-color:var(--brand)}
 .video-preview-wrap{position:relative;width:100%;max-height:calc(100vh - 48px);aspect-ratio:9/16;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:6px}
 .video-preview-wrap video{width:100%;height:100%;object-fit:contain;display:block}
 .live-overlay-container{position:absolute;inset:0;pointer-events:none;overflow:hidden}
-.live-hook-box{position:absolute;left:50%;transform:translateX(-50%);width:88%;text-align:center;font-weight:900;line-height:1.15;cursor:grab;pointer-events:auto;user-select:none;z-index:10;text-transform:uppercase;background:rgba(0,0,0,0.85);color:#fff;padding:6px 12px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.2);box-sizing:border-box;touch-action:none}
-.live-hook-box:active{cursor:grabbing;transform:translateX(-50%) scale(1.02)}
-.live-hook-box.nobox{background:transparent!important;border:none!important;box-shadow:none!important;text-shadow:-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 3px 6px rgba(0,0,0,0.8)}
-.live-cap-box{position:absolute;left:50%;transform:translateX(-50%);width:88%;text-align:center;font-weight:800;line-height:1.2;cursor:grab;pointer-events:auto;user-select:none;z-index:9;text-transform:uppercase;color:#fff;text-shadow:-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 3px 6px rgba(0,0,0,0.9);touch-action:none}
-.live-cap-box:active{cursor:grabbing;transform:translateX(-50%) scale(1.02)}
+.live-hook-box{position:absolute;left:50%;transform:translateX(-50%);width:88%;text-align:center;font-weight:900;line-height:1.15;cursor:grab;pointer-events:auto;user-select:none;z-index:10;text-transform:uppercase;background:rgba(0,0,0,0.85);color:#fff;padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);box-sizing:border-box;touch-action:none}
+.live-hook-box:active{cursor:grabbing}
+.live-hook-box.nobox{background:transparent!important;border:none!important;text-shadow:-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000}
+.live-cap-box{position:absolute;left:50%;transform:translateX(-50%);width:88%;text-align:center;font-weight:800;line-height:1.2;cursor:grab;pointer-events:auto;user-select:none;z-index:9;text-transform:uppercase;color:#fff;text-shadow:-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000;touch-action:none}
+.live-cap-box:active{cursor:grabbing}
 .cap-word-hl{color:#FFDE00}
-.btn.xs{padding:2px 6px;font-size:10px;height:auto;line-height:1.4}
-.review-actions-bar{display:flex;flex-direction:column;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);position:sticky;bottom:0;background:#fff;z-index:10}
-.badge.st-review{background:#FFE3CC;color:#A84A00;border:1px solid #FFD0A8}
-.badge.st-approved{background:#E0F2FE;color:#0369A1;border:1px solid #BAE6FD}
+.btn.xs{padding:3px 8px;font-size:11px;height:24px;border-radius:6px;gap:4px}
+.btn.xs svg{width:12px;height:12px}
+.dlg-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.dlg-nav-mid{display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums}
+.dlg-badges{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.dlg-sec{padding:12px;background:var(--muted);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;gap:10px}
+.dlg-sec-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.dlg-sec-title{font-size:12px;font-weight:600;color:var(--brand-ink)}
+.dlg-range-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--dim);margin-bottom:2px}
+.dlg-range-head b{color:var(--brand-ink);font-variant-numeric:tabular-nums}
+.review-actions-bar{display:flex;flex-direction:column;gap:8px;margin-top:6px;padding-top:12px;border-top:1px solid var(--line);position:sticky;bottom:0;background:#fff;z-index:10}
+.badge.st-review{background:var(--brand-soft);color:var(--brand-deep);border:1px solid var(--brand-line)}
+.badge.st-approved{background:var(--good-soft);color:var(--good);border:1px solid #C3E9D0}
 .badge.st-rendering{background:#F3E8FF;color:#7E22CE;border:1px solid #E9D5FF}
 </style>
 </head>
@@ -1431,8 +1477,9 @@ function drawShell() {  const nav = (v, icon, label, extra = "") => `<button cla
   }
   if (S.view === "overview" || S.view === "library") {
     const L = S.status.links || {};
-    act = (L.repo ? `<a class="btn" href="${esc(L.repo)}" target="_blank" rel="noopener" title="Star PeakCut on GitHub">${ic("github")}<span>Star<span class="long"> on GitHub</span></span></a>` : "")
-        + (L.follow ? `<a class="btn primary" href="${esc(L.follow)}" target="_blank" rel="noopener" title="Follow the maker of PeakCut on Instagram">${ic("instagram")}Follow me</a>` : "");
+    const icons = (L.repo ? `<a class="social-link" href="${esc(L.repo)}" target="_blank" rel="noopener" title="GitHub" aria-label="Star PeakCut on GitHub">${ic("github")}</a>` : "")
+                + (L.follow ? `<a class="social-link" href="${esc(L.follow)}" target="_blank" rel="noopener" title="Instagram" aria-label="Follow on Instagram">${ic("instagram")}</a>` : "");
+    act = icons ? `<div class="social-links">${icons}</div>` : "";
   }
   const me = S.status.user;
   const kk = S.status.ai;
@@ -1460,7 +1507,7 @@ function pathFor(v, tab) {
 function fromPath(path) {
   const m = path.match(/^\/app\/creators\/([^/]+)(?:\/(setup|activity|clips))?\/?$/);
   if (m) return ["c:" + decodeURIComponent(m[1]), m[2] || "clips"];
-  const st = path.match(/^\/app\/settings(?:\/(ai|profile|security|apps|storage))?\/?$/);
+  const st = path.match(/^\/app\/settings(?:\/(ai|profile|security|apps|youtube|hardware|storage))?\/?$/);
   if (st) return ["settings", st[1] || null];
   const k = Object.keys(ROUTES).find(x => ROUTES[x] && path.replace(/\/$/, "") === "/app/" + ROUTES[x]);
   return [k || "overview", "clips"];
@@ -1512,7 +1559,7 @@ function toggleAudioSample(cat, targetId, btn) {
     curAudio.pause();
     curAudio = null;
     if (curAudioBtn) {
-      curAudioBtn.textContent = "▶ Preview";
+      curAudioBtn.textContent = "Preview";
       curAudioBtn.classList.remove("playing");
     }
     if (btn === curAudioBtn) return;
@@ -1520,7 +1567,7 @@ function toggleAudioSample(cat, targetId, btn) {
   const sel = $("#" + targetId);
   const val = sel?.value;
   if (!val || val === "none") {
-    toast?.("Choose a sound first to preview it.");
+    toast?.("Choose a track first to preview it.");
     return;
   }
   const audio = new Audio(`/api/audio/sample/${cat}/${encodeURIComponent(val)}`);
@@ -1529,22 +1576,22 @@ function toggleAudioSample(cat, targetId, btn) {
   audio.volume = Math.max(0.01, Math.min(1.0, volVal / 100));
   curAudio = audio;
   curAudioBtn = btn;
-  btn.textContent = "■ Stop";
+  btn.textContent = "Stop";
   btn.classList.add("playing");
   audio.onended = () => {
-    btn.textContent = "▶ Preview";
+    btn.textContent = "Preview";
     btn.classList.remove("playing");
     curAudio = null;
     curAudioBtn = null;
   };
   audio.onerror = () => {
-    btn.textContent = "▶ Preview";
+    btn.textContent = "Preview";
     btn.classList.remove("playing");
     curAudio = null;
     curAudioBtn = null;
   };
   audio.play().catch(() => {
-    btn.textContent = "▶ Preview";
+    btn.textContent = "Preview";
     btn.classList.remove("playing");
     curAudio = null;
     curAudioBtn = null;
@@ -1571,8 +1618,8 @@ function drawAdd(variant) {
         ${stepper("o_maxlen", "Longest", c?.max_len ?? 60, 10, 180, 5, "s")}
       </div></div>
       <div class="ob"><div class="ot">Review mode</div>
-        <select id="o_review_mode" style="width:100%;height:32px;padding:4px 8px;border-radius:6px;border:1px solid var(--line);background:var(--muted);font-size:12px;color:var(--brand-ink);font-weight:600">
-          <option value="auto">Automatic (Fastest - render final directly)</option>
+        <select id="o_review_mode" class="ob-select">
+          <option value="auto">Automatic (Fastest — render final directly)</option>
           <option value="review">Review every clip (Pause for approval)</option>
           <option value="review_first">Review first clip (Apply settings to rest)</option>
         </select>
@@ -1581,65 +1628,52 @@ function drawAdd(variant) {
         <label><input type="checkbox" id="o_captions" data-caption-toggle ${c?.captions === false ? "" : "checked"}>Generate captions</label></div>
         ${choice("o_style", Object.entries(S.status.styles).map(([k, v]) => ({v:k, label:v, prev:capPrev(k)})), c?.style ?? "bounce", c?.captions === false)}</div>
       <div class="ob"><div class="ot">Layout</div>${choice("o_layout", Object.entries(S.status.layouts).map(([k, v]) => ({v:k, label:LAYOUT_SHORT[k] || v, title:v, prev:`<span class="lay-prev ${esc(k)}"><span class="ph"><i></i>${k === "gameplay" ? '<span class="cam"></span>' : ""}${k === "stack" ? '<span class="split-top"></span>' : ""}</span></span>`})), c?.layout ?? "blur")}
-        <div class="facecam-cfg" id="facecamCfg" style="display:${(c?.layout === 'gameplay' || c?.layout === 'stack') ? 'block' : 'none'};margin-top:10px;padding:12px;background:#fff;border:1px solid var(--line);border-radius:8px">
-          <!-- Mode switcher -->
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--line)">
-            <div style="display:flex;align-items:center;gap:8px">
-              <span style="font-size:12px;font-weight:700;color:var(--brand-ink)">Facecam Mode:</span>
-              <div class="seg sm" style="margin:0" role="group">
-                <button type="button" id="btnCamAuto" class="active" style="padding:3px 10px;font-size:11px">Auto Face-Detect</button>
-                <button type="button" id="btnCamManual" style="padding:3px 10px;font-size:11px">Manual Crop Box</button>
-              </div>
+        <div class="facecam-cfg fc-panel" id="facecamCfg" style="display:${(c?.layout === 'gameplay' || c?.layout === 'stack') ? 'flex' : 'none'}">
+          <div class="fc-head">
+            <span class="fc-head-title">Facecam</span>
+            <div class="seg sm" role="group" aria-label="Facecam mode">
+              <button type="button" id="btnCamAuto" class="active">Auto detect</button>
+              <button type="button" id="btnCamManual">Manual crop</button>
             </div>
-            <span style="font-size:11px;color:var(--faint)">For Split Screen &amp; Corner Cam</span>
           </div>
 
-          <!-- AUTO MODE -->
           <div id="camAutoBox" style="display:block">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-              <div style="display:inline-flex;align-items:center;gap:6px">
-                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10B981"></span>
-                <span style="font-size:11px;font-weight:700;color:var(--brand-ink);text-transform:uppercase;letter-spacing:0.04em">AI Facecam Detection Active</span>
-              </div>
-              <span style="font-size:11px;color:var(--faint)">Isolates streamer webcam border &amp; face motion</span>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-              <div>
-                <label for="o_cam_pos" style="display:block;font-size:11px;font-weight:600;color:var(--dim);margin-bottom:4px">Camera position in stream:</label>
-                <select id="o_cam_pos" style="width:100%;height:32px;padding:4px 8px;border-radius:6px;border:1px solid var(--line);background:var(--muted);font-size:12px;color:var(--brand-ink);font-weight:600">
-                  <option value="auto">Auto-detect (AI border &amp; motion scan)</option>
-                  <option value="top-right">Top-Right Corner</option>
-                  <option value="top-left">Top-Left Corner</option>
-                  <option value="bottom-right">Bottom-Right Corner</option>
-                  <option value="bottom-left">Bottom-Left Corner</option>
+            <div class="fc-grid">
+              <div class="fc-field">
+                <label for="o_cam_pos">Camera position</label>
+                <select id="o_cam_pos">
+                  <option value="auto">Auto-detect</option>
+                  <option value="top-right">Top-right corner</option>
+                  <option value="top-left">Top-left corner</option>
+                  <option value="bottom-right">Bottom-right corner</option>
+                  <option value="bottom-left">Bottom-left corner</option>
                 </select>
               </div>
-              <div>
-                <label for="o_cam_fallback" style="display:block;font-size:11px;font-weight:600;color:var(--dim);margin-bottom:4px">If no facecam detected in video:</label>
-                <select id="o_cam_fallback" style="width:100%;height:32px;padding:4px 8px;border-radius:6px;border:1px solid var(--line);background:var(--muted);font-size:12px;color:var(--brand-ink);font-weight:600">
-                  <option value="blur">Fallback to Blurred Fill (Safe)</option>
-                  <option value="zoom">Fallback to Zoomed In</option>
+              <div class="fc-field">
+                <label for="o_cam_fallback">If no facecam found</label>
+                <select id="o_cam_fallback">
+                  <option value="blur">Blurred fill</option>
+                  <option value="zoom">Zoomed in</option>
                 </select>
               </div>
             </div>
           </div>
 
-          <!-- MANUAL MODE -->
-          <div id="camManualBox" style="display:none;margin-top:4px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-              <span style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase">Drag &amp; Resize Box on Stream Frame</span>
-              <div style="display:flex;gap:4px">
-                <button type="button" class="btn ghost sm crop-preset-btn" data-crop="tr" style="padding:2px 6px;font-size:10px">Top-Right</button>
-                <button type="button" class="btn ghost sm crop-preset-btn" data-crop="tl" style="padding:2px 6px;font-size:10px">Top-Left</button>
-                <button type="button" class="btn ghost sm crop-preset-btn" data-crop="br" style="padding:2px 6px;font-size:10px">Bottom-Right</button>
-                <button type="button" class="btn ghost sm crop-preset-btn" data-crop="bl" style="padding:2px 6px;font-size:10px">Bottom-Left</button>
-                <button type="button" class="btn sm" id="btnRefreshCropFrame" style="padding:2px 8px;font-size:10px;margin-left:4px">Load Frame</button>
+          <div id="camManualBox" style="display:none">
+            <div class="row" style="justify-content:space-between;margin-bottom:8px">
+              <span style="font-size:11.5px;font-weight:600;color:var(--dim)">Drag &amp; resize crop box</span>
+              <div class="row" style="gap:4px">
+                <button type="button" class="btn ghost xs crop-preset-btn" data-crop="tr">Top-right</button>
+                <button type="button" class="btn ghost xs crop-preset-btn" data-crop="tl">Top-left</button>
+                <button type="button" class="btn ghost xs crop-preset-btn" data-crop="br">Bottom-right</button>
+                <button type="button" class="btn ghost xs crop-preset-btn" data-crop="bl">Bottom-left</button>
+                <button type="button" class="btn xs" id="btnRefreshCropFrame">Load frame</button>
               </div>
             </div>
             <div id="cropContainer" class="crop-container" style="aspect-ratio:16/9">
               <img id="cropImg" src="" style="width:100%;height:100%;object-fit:fill;display:none" alt="Stream Frame" />
-              <div id="cropPlaceholder" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#888;font-size:12px;gap:6px;padding:20px;text-align:center">
-                <span>Click "Load Frame" or paste a video link to see stream preview</span>
+              <div id="cropPlaceholder" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#9C8F86;font-size:12px;gap:6px;padding:20px;text-align:center">
+                <span>Paste a video link above and click Load frame to preview</span>
               </div>
               <div id="cropBox" class="crop-box" style="display:none">
                 <span class="crop-box-tag">FACECAM</span>
@@ -1648,42 +1682,40 @@ function drawAdd(variant) {
             </div>
           </div>
 
-          <!-- 9:16 INTERACTIVE CANVAS & SPLIT SCREEN CONTROLS -->
           <div class="canvas-9-16-wrapper" id="composerSplitCanvasWrapper" style="display:${c?.layout === 'stack' ? 'flex' : 'none'}">
             <div class="canvas-9-16" id="composerCanvas916">
-              <div class="canvas-panel" id="compCanvTop" style="top:0;height:35%;background:linear-gradient(135deg, #2a2a2e, #1e1e24);color:#fff">
+              <div class="canvas-panel" id="compCanvTop" style="top:0;height:35%;background:#2C221D;color:#F4EEEA">
                 <span id="compCanvTopLabel">FACECAM</span>
               </div>
               <div class="canvas-seam" id="compCanvSeam" style="top:35%"><div></div></div>
-              <div class="canvas-panel" id="compCanvBot" style="bottom:0;height:65%;background:linear-gradient(135deg, #18181c, #0d0d11);color:#aaa">
+              <div class="canvas-panel" id="compCanvBot" style="bottom:0;height:65%;background:#17110E;color:#A99A91">
                 <span id="compCanvBotLabel">GAMEPLAY</span>
               </div>
               <div class="canvas-cap-badge" id="compCanvCapBadge" style="bottom:15%">
-                <span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#10B981;margin-right:3px"></span>
                 <span id="compCanvCapText">CAPTIONS SAFE ZONE</span>
               </div>
             </div>
-            <div style="flex:1;display:flex;flex-direction:column;gap:8px">
-              <div style="display:flex;align-items:center;justify-content:space-between">
-                <span style="font-size:12px;font-weight:700;color:var(--brand-ink)">Split Screen (<span id="compSplitRatioText">35% / 65%</span>):</span>
-                <button type="button" class="btn ghost sm" id="btnCompSwap" style="padding:2px 8px;font-size:11px;height:26px">⇄ Swap Panels</button>
+            <div style="flex:1;display:flex;flex-direction:column;gap:8px;min-width:0">
+              <div class="row" style="justify-content:space-between">
+                <span style="font-size:12px;font-weight:600;color:var(--brand-ink)">Split screen (<span id="compSplitRatioText">35% / 65%</span>)</span>
+                <button type="button" class="btn ghost xs" id="btnCompSwap">Swap panels</button>
               </div>
-              <div style="display:flex;gap:4px;flex-wrap:wrap">
-                <button type="button" class="split-preset-btn active" data-ratio="0.35">35% / 65%</button>
-                <button type="button" class="split-preset-btn" data-ratio="0.40">40% / 60%</button>
-                <button type="button" class="split-preset-btn" data-ratio="0.50">50% / 50%</button>
+              <div class="row" style="gap:4px">
+                <button type="button" class="split-preset-btn active" data-ratio="0.35">35 / 65</button>
+                <button type="button" class="split-preset-btn" data-ratio="0.40">40 / 60</button>
+                <button type="button" class="split-preset-btn" data-ratio="0.50">50 / 50</button>
               </div>
-              <div style="font-size:11px;color:var(--dim);line-height:1.4">
+              <div style="font-size:11.5px;color:var(--dim);line-height:1.4">
                 <span id="compSplitInfo">Facecam on top (35%), gameplay below (65%)</span>
               </div>
-              <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--brand-ink);cursor:pointer">
-                <input type="checkbox" id="o_split_divider" checked> Subtle divider line between sections
+              <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;color:var(--text);cursor:pointer">
+                <input type="checkbox" id="o_split_divider" checked style="accent-color:var(--brand)"> Divider line between sections
               </label>
-              <div style="margin-top:2px">
-                <div style="font-size:11px;font-weight:700;color:var(--dim);margin-bottom:4px">Caption Safe-Zone Lock:</div>
-                <div style="display:flex;gap:4px">
-                  <button type="button" class="cap-anchor-btn active" data-anchor="safe_bottom">Safe Bottom (15%)</button>
-                  <button type="button" class="cap-anchor-btn" data-anchor="seam">On Seam</button>
+              <div>
+                <div style="font-size:11.5px;font-weight:600;color:var(--dim);margin-bottom:4px">Caption position</div>
+                <div class="row" style="gap:4px">
+                  <button type="button" class="cap-anchor-btn active" data-anchor="safe_bottom">Safe bottom</button>
+                  <button type="button" class="cap-anchor-btn" data-anchor="seam">On seam</button>
                   <button type="button" class="cap-anchor-btn" data-anchor="top">Top</button>
                 </div>
               </div>
@@ -1694,88 +1726,64 @@ function drawAdd(variant) {
       <div class="ob"><div class="ot">Video quality</div><input type="hidden" id="o_quality" value="720"><div class="seg" role="group" aria-label="Video quality">
         <button type="button" data-seg="o_quality" data-v="720" aria-pressed="true">720p<small>Fast</small></button>
         <button type="button" data-seg="o_quality" data-v="1080" aria-pressed="false">1080p<small>Sharper · ~2x slower</small></button></div></div>
-      <div class="ob"><div class="ot">Audio &amp; Music Bed</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-              <label for="o_meme" style="font-size:11px;font-weight:600;color:var(--dim)">Viral Meme Sound</label>
-              <button type="button" class="audio-prev-btn" id="prev_meme">▶ Preview</button>
-            </div>
-            <select id="o_meme" style="width:100%;height:36px;padding:6px 8px;border-radius:6px;border:1px solid var(--line);background:#fff;color:inherit;font-size:12px">
-              <option value="">None</option>
-              ${opts(S.status.memes || {}, "")}
-            </select>
-            <div class="audio-vol-row">
-              <small>Meme volume:</small>
-              <input type="range" id="o_meme_vol" min="20" max="100" value="80" step="5">
-              <span id="o_meme_vol_txt" style="font-family:monospace;font-size:10.5px">80%</span>
-            </div>
-          </div>
-          <div>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-              <label for="o_music" style="font-size:11px;font-weight:600;color:var(--dim)">Music Bed</label>
-              <button type="button" class="audio-prev-btn" id="prev_music">▶ Preview</button>
-            </div>
-            <select id="o_music" style="width:100%;height:36px;padding:6px 8px;border-radius:6px;border:1px solid var(--line);background:#fff;color:inherit;font-size:12px">
-              <option value="">None</option>
-              ${opts(S.status.music_beds || {}, "")}
-            </select>
-            <div class="audio-vol-row">
-              <small>Duck volume:</small>
-              <input type="range" id="o_music_vol" min="5" max="60" value="25" step="5">
-              <span id="o_music_vol_txt" style="font-family:monospace;font-size:10.5px">25%</span>
-            </div>
-          </div>
+      <div class="ob"><div class="ot">Background music</div>
+        <div class="audio-row">
+          <select id="o_music" class="ob-select" aria-label="Background music track">
+            <option value="">None</option>
+            ${opts(S.status.music_beds || {}, "")}
+          </select>
+          <button type="button" class="audio-prev-btn" id="prev_music">Preview</button>
+        </div>
+        <div class="audio-vol-row">
+          <small>Volume</small>
+          <input type="range" id="o_music_vol" min="5" max="60" value="25" step="5">
+          <span id="o_music_vol_txt">25%</span>
         </div>
       </div>
-      <div class="ob wide" style="grid-column:1/-1" id="pullRangeSection"><div class="ot" style="display:flex;align-items:center;justify-content:space-between">
-          <span>Pull part of stream / video</span>
-          <div class="seg" role="group" aria-label="Range mode" style="padding:2px">
-            <button type="button" id="rangeModeFull" class="range-mode-btn" aria-pressed="true" style="padding:3px 10px;font-size:11.5px;border-radius:6px">Pull Full Video</button>
-            <button type="button" id="rangeModeCustom" class="range-mode-btn" aria-pressed="false" style="padding:3px 10px;font-size:11.5px;border-radius:6px">Custom Time Range</button>
+      <div class="ob wide" id="pullRangeSection"><div class="ot" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <span>Video range</span>
+          <div class="seg sm" role="group" aria-label="Range mode">
+            <button type="button" id="rangeModeFull" class="range-mode-btn" aria-pressed="true">Full video</button>
+            <button type="button" id="rangeModeCustom" class="range-mode-btn" aria-pressed="false">Custom ranges</button>
           </div>
         </div>
         
-        <div id="rangeFullBanner" style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#fff;border:1px solid var(--line);border-radius:8px;font-size:12px;color:var(--dim)">
-          <span style="color:var(--brand);display:inline-flex">${ic("check")}</span>
-          <span><b>Entire video mode:</b> PeakCut will analyze the entire video/stream to find viral highlight moments across the full duration.</span>
-          <button type="button" class="btn sm" id="btnSwitchToRange" style="margin-left:auto;font-size:11.5px;padding:4px 10px;border:1px solid var(--line);background:var(--muted)">Target specific timestamps</button>
+        <div id="rangeFullBanner" class="range-banner">
+          <span style="color:var(--brand-deep);display:inline-flex">${ic("check")}</span>
+          <span>PeakCut will analyze the full video to find the best moments.</span>
+          <button type="button" class="btn sm" id="btnSwitchToRange" style="margin-left:auto">Choose timestamps</button>
         </div>
 
-        <div id="rangeCustomBox" style="display:none;background:#fff;border:1px solid var(--brand);border-radius:8px;padding:14px">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
-            <div style="display:flex;align-items:center;gap:8px">
-              <span style="font-size:12px;font-weight:700;color:var(--dim)">Timestamp Mode:</span>
-              <select id="o_global_timestamp_mode" style="height:32px;padding:0 8px;border:1px solid var(--line);border-radius:6px;font-size:12px;font-weight:700;background:var(--muted);color:var(--brand-ink)">
-                <option value="direct" selected>Direct clip (Cut exact ranges, skip AI filter)</option>
+        <div id="rangeCustomBox" class="range-custom-box" style="display:none">
+          <div class="row" style="justify-content:space-between;margin-bottom:12px">
+            <div class="row" style="gap:8px">
+              <span style="font-size:12px;font-weight:600;color:var(--dim)">Mode</span>
+              <select id="o_global_timestamp_mode" class="ob-select" style="width:auto;height:32px;font-size:12px">
+                <option value="direct" selected>Direct clip (Cut exact ranges)</option>
                 <option value="analyze">Analyze (AI evaluates each range)</option>
               </select>
             </div>
-            <button type="button" class="btn sm" id="btnResetFull" style="font-size:11.5px;padding:6px 12px;border:1px solid var(--line);background:#fff">Reset to full video</button>
+            <button type="button" class="btn sm ghost" id="btnResetFull">Reset to full video</button>
           </div>
 
-          <!-- List of Range Rows -->
           <div id="customRangesList" style="display:flex;flex-direction:column;gap:8px"></div>
 
-          <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
-            <button type="button" class="btn sm" id="btnAddCustomRange" style="background:var(--brand);color:#fff;font-weight:700;padding:6px 14px">+ Add Range</button>
+          <div class="row" style="margin-top:10px">
+            <button type="button" class="btn sm primary" id="btnAddCustomRange">${ic("plus")}Add range</button>
           </div>
 
-          <!-- Bulk Paste Textbox -->
-          <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)">
-            <label for="customBulkInput" style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;font-weight:700;color:var(--dim);margin-bottom:6px">
-              <span>Bulk Paste Timestamp Ranges:</span>
-              <span style="font-weight:normal;color:var(--faint);font-size:11px">Auto-syncs with rows above</span>
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+            <label for="customBulkInput" style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:600;color:var(--dim);margin-bottom:6px">
+              <span>Bulk paste timestamps</span>
+              <span style="font-weight:400;color:var(--faint);font-size:11px">Syncs with rows above</span>
             </label>
-            <textarea id="customBulkInput" rows="2" placeholder="e.g. 1.23.34-2.34.5, 23.3-44.5 (or one range per line)" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;font-family:monospace;font-size:12.5px;background:var(--muted);color:var(--brand-ink);resize:vertical"></textarea>
-            <div style="font-size:11px;color:var(--faint);margin-top:4px;line-height:1.4">
-              Ranges can be separated by commas, semicolons, or newlines. Start and end are separated by a dash (<code>-</code>).<br>
-              <b>Format Rule:</b> Dot (<code>.</code>) or colon (<code>:</code>) separates time units: <code>H.M.S</code> or <code>M.S</code> (e.g. <code>1.23.34</code> = 1h 23m 34s, <code>2.34.5</code> = 2h 34m 5s, <code>23.3</code> = 23m 03s, <code>23.30</code> = 23m 30s). Plain numbers without dots are seconds.
+            <textarea id="customBulkInput" rows="2" placeholder="e.g. 1.23.34-2.34.5, 23.3-44.5 (or one range per line)" style="font-family:monospace;font-size:12.5px;background:var(--muted)"></textarea>
+            <div style="font-size:11px;color:var(--faint);margin-top:5px;line-height:1.45">
+              Separate ranges with commas, semicolons, or new lines. Use <code>-</code> between start and end (<code>H.M.S</code>, <code>M.S</code>, or seconds).
             </div>
           </div>
 
-          <!-- Live Preview List -->
-          <div id="customRangesPreview" style="margin-top:12px;padding:10px 12px;background:var(--muted);border-radius:6px;font-size:12px;line-height:1.5"></div>
+          <div id="customRangesPreview" style="margin-top:12px;padding:10px 12px;background:var(--muted);border-radius:8px;font-size:12px;line-height:1.5"></div>
         </div>
       </div>
     </div>
@@ -1909,24 +1917,21 @@ function drawAdd(variant) {
     const layout = $("#o_layout")?.value || c?.layout || "blur";
     const style = $("#o_style")?.value || c?.style || "bounce";
     const captions = $("#o_captions") ? $("#o_captions").checked : (c?.captions !== false);
-    const meme = $("#o_meme")?.value;
     const music = $("#o_music")?.value;
     const chip = $("#optsChip");
     const badges = $("#optsBadges");
     const fcCfg = $("#facecamCfg");
     if (fcCfg) {
-      fcCfg.style.display = (layout === "gameplay" || layout === "stack") ? "block" : "none";
+      fcCfg.style.display = (layout === "gameplay" || layout === "stack") ? "flex" : "none";
     }
     if (!badges) return;
     const lLabel = LAYOUT_SHORT[layout] || layout;
     const sLabel = S.status.styles?.[style] || style;
     let extra = "";
-    if (meme) extra += `<span class="opt-pill">${esc(S.status.memes?.[meme] || meme)}</span>`;
     if (music) extra += `<span class="opt-pill">${esc(S.status.music_beds?.[music] || music)}</span>`;
     badges.innerHTML = `<span class="opt-pill ${esc(layout)}">${esc(lLabel)}</span><span class="opt-pill">${captions ? esc(sLabel) : "No captions"}</span>${extra}`;
-    chip?.classList.toggle("opt-active", layout !== "blur" || style !== "bounce" || !captions || !!meme || !!music);
+    chip?.classList.toggle("opt-active", layout !== "blur" || style !== "bounce" || !captions || !!music);
   };
-  $("#o_meme")?.addEventListener("change", updateOptsBadges);
   $("#o_music")?.addEventListener("change", updateOptsBadges);
   window.updateOptsBadges = updateOptsBadges;
   updateOptsBadges();
@@ -2872,15 +2877,15 @@ function clipHtml(j, c) {
   if (c.status === "done") {
     body = `<img src="${m}${esc(c.cover)}?v=${c.version || 1}" alt="" loading="lazy"><span class="veil"><span>${ic("play")}</span></span>`;
   } else if (c.status === "awaiting_review") {
-    body = `<img src="${m}${esc(c.cover || (c.id + '.jpg'))}?v=${c.version || 1}" alt="" loading="lazy"><span class="veil" style="opacity:1"><span style="background:var(--brand);color:#fff;font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;width:auto;height:auto">Review</span></span>`;
+    body = `<img src="${m}${esc(c.cover || (c.id + '.jpg'))}?v=${c.version || 1}" alt="" loading="lazy"><span class="veil"><span class="veil-pill">Review</span></span>`;
   } else if (c.status === "approved") {
-    body = `<img src="${m}${esc(c.cover || (c.id + '.jpg'))}?v=${c.version || 1}" alt="" loading="lazy"><span class="veil" style="opacity:1"><span style="background:#10B981;color:#fff;font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;width:auto;height:auto">Approved</span></span>`;
+    body = `<img src="${m}${esc(c.cover || (c.id + '.jpg'))}?v=${c.version || 1}" alt="" loading="lazy"><span class="veil"><span class="veil-pill good">Approved</span></span>`;
   } else if (c.status === "rendering_final") {
     body = `<span class="making">Rendering final…</span>`;
   } else if (c.status === "drafting") {
     body = `<span class="making">Generating draft…</span>`;
   } else if (c.status === "qc_flagged") {
-    body = `<img src="${m}${esc(c.cover || (c.id + '.jpg'))}?v=${c.version || 1}" alt="" loading="lazy"><span class="veil" style="opacity:1"><span style="background:#EF4444;color:#fff;font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;width:auto;height:auto">QC Flagged</span></span>`;
+    body = `<img src="${m}${esc(c.cover || (c.id + '.jpg'))}?v=${c.version || 1}" alt="" loading="lazy"><span class="veil"><span class="veil-pill bad">QC flagged</span></span>`;
   } else if (c.status === "failed" || c.status === "error") {
     body = `<span class="making" style="animation:none;color:var(--bad);background:var(--bad-soft)">${esc(c.error || "Could not make this clip. Open to retry.")}</span>`;
   } else {
@@ -2891,11 +2896,11 @@ function clipHtml(j, c) {
   const busyClip = c.status === "queued" || c.status === "rendering" || c.status === "drafting" || c.status === "rendering_final";
   
   let stBadge = "";
-  if (c.status === "awaiting_review") stBadge = `<span class="badge" style="top:auto;bottom:10px;left:10px;background:#F59E0B;color:#fff;font-size:10px;font-weight:700">Needs review</span>`;
-  else if (c.status === "approved") stBadge = `<span class="badge" style="top:auto;bottom:10px;left:10px;background:#10B981;color:#fff;font-size:10px;font-weight:700">Approved</span>`;
-  else if (c.status === "rendering_final") stBadge = `<span class="badge" style="top:auto;bottom:10px;left:10px;background:#3B82F6;color:#fff;font-size:10px;font-weight:700">Rendering</span>`;
-  else if (c.status === "qc_flagged") stBadge = `<span class="badge" style="top:auto;bottom:10px;left:10px;background:#EF4444;color:#fff;font-size:10px;font-weight:700" title="${esc(c.error || '')}">QC Flagged</span>`;
-  else if (c.qc) stBadge = `<span class="badge ${c.qc.status === 'PASS' ? 'qc-pass' : c.qc.status === 'WARN' ? 'qc-warn' : 'qc-fail'}" style="top:auto;bottom:10px;left:10px;font-size:10px" title="${esc((c.qc.notes || []).join(' · ') || c.qc.status)}">QC: ${esc(c.qc.status)}</span>`;
+  if (c.status === "awaiting_review") stBadge = `<span class="badge bot st-review">Needs review</span>`;
+  else if (c.status === "approved") stBadge = `<span class="badge bot st-approved">Approved</span>`;
+  else if (c.status === "rendering_final") stBadge = `<span class="badge bot st-rendering">Rendering</span>`;
+  else if (c.status === "qc_flagged") stBadge = `<span class="badge bot qc-fail" title="${esc(c.error || '')}">QC flagged</span>`;
+  else if (c.qc) stBadge = `<span class="badge bot ${c.qc.status === 'PASS' ? 'qc-pass' : c.qc.status === 'WARN' ? 'qc-warn' : 'qc-fail'}" title="${esc((c.qc.notes || []).join(' · ') || c.qc.status)}">QC: ${esc(c.qc.status)}</span>`;
 
   return `<article class="clip ${sel().has(key) ? "picked" : ""}">
     <button class="shot" data-act="openclip" ${a} aria-label="Open clip: ${esc(c.title || c.hook)}">${body}
@@ -2910,7 +2915,7 @@ function clipHtml(j, c) {
         <button class="btn sm icon ghost" data-act="copy" ${a} title="Copy post text" aria-label="Copy post text">${ic("copy")}</button>
         ${busyClip ? "" : `<button class="btn sm icon ghost" data-act="delclip" ${a} title="Delete this clip" aria-label="Delete this clip">${ic("trash")}</button>`}
         <span class="grow"></span>
-        ${c.status === "awaiting_review" || c.status === "qc_flagged" ? `<button class="btn sm primary" data-act="openclip" ${a} style="background:var(--brand);color:#fff">Review</button><button class="btn sm" data-act="approveclipquick" ${a} style="background:#10B981;color:#fff;border:0" title="Quick Approve">✓</button>` : ""}
+        ${c.status === "awaiting_review" || c.status === "qc_flagged" ? `<button class="btn sm primary" data-act="openclip" ${a}>Review</button><button class="btn sm icon good" data-act="approveclipquick" ${a} title="Quick approve" aria-label="Quick approve">${ic("check")}</button>` : ""}
         ${c.status === "done" ? `<button class="btn sm" data-act="openclip" ${a}>${ic("send")}Post</button>` : ""}
       </div>
     </div></article>`;
@@ -3047,7 +3052,6 @@ function liveHtml(j) {
         <small style="color:var(--dim);margin-left:4px">Fixes streamer camera delay or lip-sync mismatch</small>
       </div>
     </div>
-    </div>
 
     <!-- Dual-Handle Timeline Slider Bar UI -->
     <div class="lt-box" id="ltBox_${j.id}">
@@ -3122,15 +3126,15 @@ function jobHtml(j) {
 
   let filterBar = "";
   if (showFilters) {
-    filterBar = `<div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0;flex-wrap:wrap;gap:8px">
+    filterBar = `<div class="job-filter-bar">
       <div class="seg sm" role="group">
         <button type="button" class="${curFilter==='all'?'active':''}" data-act="clipfilter" data-j="${j.id}" data-v="all">All (${j.clips.length})</button>
-        ${nAwaiting ? `<button type="button" class="${curFilter==='review'?'active':''}" data-act="clipfilter" data-j="${j.id}" data-v="review" style="color:#D97706;font-weight:700">Needs Review (${nAwaiting})</button>` : ''}
+        ${nAwaiting ? `<button type="button" class="${curFilter==='review'?'active':''}" data-act="clipfilter" data-j="${j.id}" data-v="review" style="color:var(--brand-deep)">Needs review (${nAwaiting})</button>` : ''}
         ${nApproved ? `<button type="button" class="${curFilter==='approved'?'active':''}" data-act="clipfilter" data-j="${j.id}" data-v="approved">Approved (${nApproved})</button>` : ''}
         ${nDone ? `<button type="button" class="${curFilter==='done'?'active':''}" data-act="clipfilter" data-j="${j.id}" data-v="done">Done (${nDone})</button>` : ''}
-        ${nQc ? `<button type="button" class="${curFilter==='qc'?'active':''}" data-act="clipfilter" data-j="${j.id}" data-v="qc" style="color:#DC2626;font-weight:700">QC Flagged (${nQc})</button>` : ''}
+        ${nQc ? `<button type="button" class="${curFilter==='qc'?'active':''}" data-act="clipfilter" data-j="${j.id}" data-v="qc" style="color:var(--bad)">QC flagged (${nQc})</button>` : ''}
       </div>
-      ${nAwaiting ? `<button type="button" class="btn sm" data-act="approvealljob" data-j="${j.id}" style="background:#10B981;color:#fff;border:0;font-weight:700">✓ Approve all (${nAwaiting})</button>` : ''}
+      ${nAwaiting ? `<button type="button" class="btn sm good" data-act="approvealljob" data-j="${j.id}">${ic("check")}Approve all (${nAwaiting})</button>` : ''}
     </div>`;
   }
 
@@ -3416,7 +3420,7 @@ const setTabs = () => [
                                           ["security", "Security", "lock", "Password and signing out"]]),
   ["apps", "Connected apps", "plug", "Where your clips get posted"],
   ["youtube", "YouTube & Cookies", "play", "Fix bot checks, sign-in & rate limits"],
-  ...(S.status.user?.is_admin ? [["hardware", "Hardware & GPU", "bolt", "GPU acceleration and rendering options"]] : []),
+  ...(S.status.user?.is_admin ? [["hardware", "Hardware & Speech", "bolt", "GPU acceleration and speech-to-text models"]] : []),
   ...(S.status.user?.is_admin ? [["storage", "Storage", "folder", "Where videos and clips are kept"]] : [])];
 function aiHints() {
   const k = S.ai, sel = $("#ai_provider"); if (!k || !sel) return;
@@ -3489,14 +3493,12 @@ async function drawSettings() {
     }
     if (tab === "apps") {
       const conn = S.accounts || [];
-      const app = (key, name, logo, bg, desc, action, list) => `<div class="appcard"><span class="applogo" style="background:${bg}">${logo}</span>
-          <div class="apptx"><b>${name}</b><span>${desc}</span>${list}</div><div class="appact">${action}</div></div>`;
       const mine = plat => conn.filter(a => (a.platform || a.label || "").toLowerCase().includes(plat));
       const listOf = arr => arr.length ? `<div class="applist">${arr.map(a => `<div><span class="pill ok">Connected</span><b>${esc(a.name)}</b><span class="sub">${esc(a.detail || "")}</span>
           <button class="btn sm ghost" data-act="accremove" data-id="${esc(a.id)}">Disconnect</button></div>`).join("")}</div>` : "";
-      const yt = '<svg viewBox="0 0 24 24"><path fill="#fff" d="M23.5 6.19a3.02 3.02 0 0 0-2.12-2.14C19.5 3.55 12 3.55 12 3.55s-7.5 0-9.38.5A3.02 3.02 0 0 0 .5 6.19C0 8.07 0 12 0 12s0 3.93.5 5.81a3.02 3.02 0 0 0 2.12 2.14c1.88.5 9.38.5 9.38.5s7.5 0 9.38-.5a3.02 3.02 0 0 0 2.12-2.14C24 15.93 24 12 24 12s0-3.93-.5-5.81zM9.55 15.57V8.43L15.82 12l-6.27 3.57z"/></svg>';
-      const ig = '<svg viewBox="0 0 24 24"><path fill="#fff" d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23a3.7 3.7 0 0 1-.9 1.38c-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41a3.7 3.7 0 0 1-1.38-.9 3.7 3.7 0 0 1-.9-1.38c-.16-.42-.36-1.06-.41-2.23C2.17 15.58 2.16 15.2 2.16 12s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41C8.42 2.17 8.8 2.16 12 2.16zM12 5.84a6.16 6.16 0 1 0 0 12.32 6.16 6.16 0 0 0 0-12.32zm0 10.16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.4-11.85a1.44 1.44 0 1 0 0 2.88 1.44 1.44 0 0 0 0-2.88z"/></svg>';
-      const tt = '<svg viewBox="0 0 24 24"><path fill="#fff" d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.3 0 .59.04.86.13v-3.5a6.37 6.37 0 0 0-.86-.05A6.34 6.34 0 0 0 3.15 15.7a6.34 6.34 0 0 0 10.86 4.43 6.3 6.3 0 0 0 1.81-4.43V8.73a8.2 8.2 0 0 0 4.77 1.52V6.8a4.85 4.85 0 0 1-1-.11z"/></svg>';
+      const yt = '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M23.5 6.19a3.02 3.02 0 0 0-2.12-2.14C19.5 3.55 12 3.55 12 3.55s-7.5 0-9.38.5A3.02 3.02 0 0 0 .5 6.19C0 8.07 0 12 0 12s0 3.93.5 5.81a3.02 3.02 0 0 0 2.12 2.14c1.88.5 9.38.5 9.38.5s7.5 0 9.38-.5a3.02 3.02 0 0 0 2.12-2.14C24 15.93 24 12 24 12s0-3.93-.5-5.81zM9.55 15.57V8.43L15.82 12l-6.27 3.57z"/></svg>';
+      const ig = '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23a3.7 3.7 0 0 1-.9 1.38c-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41a3.7 3.7 0 0 1-1.38-.9 3.7 3.7 0 0 1-.9-1.38c-.16-.42-.36-1.06-.41-2.23C2.17 15.58 2.16 15.2 2.16 12s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41C8.42 2.17 8.8 2.16 12 2.16zM12 5.84a6.16 6.16 0 1 0 0 12.32 6.16 6.16 0 0 0 0-12.32zm0 10.16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.4-11.85a1.44 1.44 0 1 0 0 2.88 1.44 1.44 0 0 0 0-2.88z"/></svg>';
+      const tt = '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.3 0 .59.04.86.13v-3.5a6.37 6.37 0 0 0-.86-.05A6.34 6.34 0 0 0 3.15 15.7a6.34 6.34 0 0 0 10.86 4.43 6.3 6.3 0 0 0 1.81-4.43V8.73a8.2 8.2 0 0 0 4.77 1.52V6.8a4.85 4.85 0 0 1-1-.11z"/></svg>';
       const ok = S.status.connect || {}, admin = me.is_admin;
       const setup = admin ? await api("/api/apps").catch(() => null) : null;
       const GUIDE = {
@@ -3512,7 +3514,7 @@ async function drawSettings() {
           ["Create an app and add <b>Login Kit</b> and <b>Content Posting API</b> with Direct Post turned on.",
            "Add the address below as a redirect URI, with the scopes <b>user.info.basic</b> and <b>video.publish</b>.", "Paste the Client key and Client secret here."],
           "Until TikTok reviews your app, clips are posted as private: only the account owner sees them."]};
-      const card = (pf, name, logo, bg, desc) => {
+      const card = (pf, name, logo, fg, desc) => {
         const accs = mine(pf), st = setup?.[pf], open = S.setupOpen === pf, g = GUIDE[pf];
         const act = (ok[pf] ? `<a class="btn sm primary" href="/oauth/${pf}/start">${ic("plus")}${accs.length ? "Add another" : "Connect"}</a>`
             : admin ? `<button class="btn sm primary" data-act="appsetup" data-p="${pf}">${ic("cog")}Set up</button>` : `<span class="pill">Not set up on this server</span>`)
@@ -3526,14 +3528,14 @@ async function drawSettings() {
               <label class="f">${esc(st.secret_label)}<input id="app_secret" type="password" placeholder="${st.ready ? "Saved. Paste a new one to replace it" : ""}" autocomplete="off"></label></div>
             <p class="sub">${g[3]}</p>
             <div class="row"><button class="btn primary" data-act="appsave" data-p="${pf}">Save</button><button class="btn ghost" data-act="appsetup" data-p="">Close</button></div></div>` : "";
-        return `<div class="appcard"><span class="applogo" style="background:${bg}">${logo}</span>
+        return `<div class="appcard"><span class="applogo" style="color:${fg}">${logo}</span>
           <div class="apptx"><b>${name}</b><span>${desc}</span>${listOf(accs)}</div><div class="appact">${act}</div>${panel}</div>`;
       };
       body.innerHTML = `<section class="set-sec"><h2>Connected apps</h2><p class="help">Connect the accounts PeakCut posts clips to: press Connect, sign in on the platform's own page, and you're back here. PeakCut never sees your passwords. Then pick which accounts each creator posts to, in that creator's Setup.</p>
         <div class="apps">
-          ${card("youtube", "YouTube", yt, "#FF0000", "Post clips to your channel as Shorts.")}
-          ${card("instagram", "Instagram", ig, "linear-gradient(45deg,#F58529,#DD2A7B,#8134AF)", "Post clips as Reels. Needs a Creator or Business account.")}
-          ${card("tiktok", "TikTok", tt, "#000", "Post clips straight to your TikTok.")}
+          ${card("youtube", "YouTube", yt, "#CC2B2B", "Post clips to your channel as Shorts.")}
+          ${card("instagram", "Instagram", ig, "#B83B6E", "Post clips as Reels. Needs a Creator or Business account.")}
+          ${card("tiktok", "TikTok", tt, "var(--brand-ink)", "Post clips straight to your TikTok.")}
         </div></section>`;
     }
     if (tab === "youtube") {
@@ -3541,83 +3543,163 @@ async function drawSettings() {
       const paused = yt.paused;
       const hasCookies = yt.has_cookies;
       const admin = me.is_admin;
-      body.innerHTML = `<section class="set-sec"><h2>YouTube & Cookies</h2>
-        <p class="help">YouTube periodically tests automated tools with bot challenges or rate limits. Adding your YouTube cookies or using mobile player fallbacks ensures videos and streams download smoothly without interruption.</p>
-        <div class="ai-state" style="margin-bottom:16px">
-          ${paused ? `<span class="pill warn">${ic("warn")}Temporarily Paused</span><span class="sub">Paused for ${yt.pause_seconds_left}s due to YouTube bot verification.</span>`
+      body.innerHTML = `<section class="set-sec"><h2>YouTube &amp; Cookies</h2>
+        <p class="help">YouTube periodically checks automated downloads with rate limits or bot prompts. Adding cookies or relying on mobile player fallbacks keeps downloads smooth.</p>
+        <div class="ai-state">
+          ${paused ? `<span class="pill warn">${ic("warn")}Temporarily paused</span><span class="sub">Paused for ${yt.pause_seconds_left}s due to YouTube bot verification.</span>`
             : `<span class="pill ok">${ic("check")}Ready</span><span class="sub">YouTube downloads are active and ready.</span>`}
-          ${paused ? `<button class="btn sm primary" data-act="ytunpause" style="margin-left:auto">${ic("refresh")}Retry / Unpause Now</button>` : ""}
+          ${paused ? `<button class="btn sm primary" data-act="ytunpause" style="margin-left:auto">${ic("refresh")}Retry / Unpause</button>` : ""}
         </div>
-        <div class="card" style="margin-bottom:20px"><div class="card-head"><div><h3>Cookie Authentication</h3><p class="sub">Upload a <code>cookies.txt</code> file exported from your browser so PeakCut can download age-restricted, member-only, or bot-checked videos.</p></div></div>
-          <div style="padding:16px 20px">
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-              ${hasCookies ? `<span class="pill ok">${ic("check")}Cookies Active</span><b>${esc(yt.file_name)}</b><span class="sub">(${Math.round(yt.size_bytes / 1024)} KB)</span>
-                ${admin ? `<button class="btn sm ghost" data-act="ytrmcookies" style="margin-left:auto">${ic("trash")}Remove Cookies</button>` : ""}`
-              : `<span class="pill">No cookies configured</span><span class="sub">Using mobile/desktop player client fallbacks.</span>`}
-            </div>
-            ${admin ? `<div class="fields">
-              <label class="f">Upload cookies.txt file<input type="file" id="yt_cookie_file" accept=".txt"></label>
-              <label class="f">Or paste Netscape Cookie text<textarea id="yt_cookie_text" rows="4" placeholder="# Netscape HTTP Cookie File&#10;.youtube.com\tTRUE\t/\tTRUE\t..."></textarea><span class="hint">Export cookies from Chrome, Firefox, or Edge using an extension like "Get cookies.txt LOCALLY".</span></label>
-              <div class="row" style="margin-top:14px"><button class="btn primary" data-act="ytsavecookies">${ic("check")}Save Cookies</button></div>
-            </div>` : `<p class="sub">Only server administrators can update YouTube cookies.</p>`}
+        <div class="card"><div class="card-head"><div><h2>Cookie authentication</h2><p class="sub">Upload a <code>cookies.txt</code> file exported from your browser to download age-restricted, member-only, or bot-checked videos.</p></div></div>
+          <div class="row" style="margin-bottom:16px">
+            ${hasCookies ? `<span class="pill ok">${ic("check")}Cookies active</span><b>${esc(yt.file_name)}</b><span class="sub">(${Math.round(yt.size_bytes / 1024)} KB)</span>
+              ${admin ? `<button class="btn sm ghost" data-act="ytrmcookies" style="margin-left:auto">${ic("trash")}Remove cookies</button>` : ""}`
+            : `<span class="pill">No cookies configured</span><span class="sub">Using mobile/desktop player fallbacks.</span>`}
           </div>
+          ${admin ? `<div class="fields">
+            <label class="f span">Upload cookies.txt file<input type="file" id="yt_cookie_file" accept=".txt"></label>
+            <label class="f span">Or paste Netscape cookie text<textarea id="yt_cookie_text" rows="4" placeholder="# Netscape HTTP Cookie File&#10;.youtube.com\tTRUE\t/\tTRUE\t..."></textarea><span class="hint">Export cookies from Chrome, Firefox, or Edge using an extension like "Get cookies.txt LOCALLY".</span></label>
+          </div>
+          <div class="row" style="margin-top:16px"><button class="btn primary" data-act="ytsavecookies">${ic("check")}Save cookies</button></div>` : `<p class="sub">Only server administrators can update YouTube cookies.</p>`}
         </div>
-        <div class="card"><div class="card-head"><div><h3>Test YouTube Connection</h3><p class="sub">Check whether YouTube videos can be read and downloaded right now.</p></div></div>
-          <div style="padding:16px 20px">
-            <div class="row"><button class="btn" data-act="yttest">${ic("bolt")}Test Connection Now</button><span id="yt_test_res" class="sub" style="margin-left:12px"></span></div>
-          </div>
+        <div class="card"><div class="card-head"><div><h2>Test YouTube connection</h2><p class="sub">Check whether YouTube videos can be read and downloaded right now.</p></div></div>
+          <div class="row"><button class="btn" data-act="yttest">${ic("bolt")}Test connection</button><span id="yt_test_res" class="sub"></span></div>
         </div></section>`;
     }
     if (tab === "hardware") {
       const g = S.status.gpu || {supported: false, enabled: false, name: "CPU (libx264)"};
-      body.innerHTML = `<section class="set-sec"><h2>Hardware & GPU Acceleration</h2>
-        <p class="help">Hardware acceleration offloads video rendering, scaling, aspect ratio conversion (9:16), and subtitle burning to your graphics card. On supported NVIDIA GPUs (NVENC), this cuts rendering time by 3x–8x and keeps your CPU cool.</p>
-        <div class="ai-state" style="margin-bottom:16px">
-          ${g.enabled && g.supported ? `<span class="pill ok">${ic("check")}GPU Acceleration Active</span><span class="sub">${esc(g.name)}</span>`
-            : g.supported ? `<span class="pill warn">${ic("pause")}GPU Acceleration Off</span><span class="sub">Currently using CPU mode (libx264). Hardware detected: ${esc(g.name)}</span>`
-            : `<span class="pill">${ic("warn")}No GPU Encoder Detected</span><span class="sub">Using multi-core CPU encoder (libx264).</span>`}
-        </div>
-        <div class="card" style="margin-bottom:20px">
-          <div class="card-head">
-            <div>
-              <h3>NVIDIA NVENC Video Encoding</h3>
-              <p class="sub">Toggle hardware acceleration for clip video rendering.</p>
-            </div>
-          </div>
-          <div style="padding:16px 20px">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
-              <div>
-                <b>GPU Acceleration</b>
-                <p class="sub" style="margin-top:4px">${g.enabled && g.supported ? `Enabled: Rendering utilizes <b>${esc(g.name)}</b>.` : "Disabled: Rendering utilizes CPU multi-threaded libx264 encoder."}</p>
-              </div>
-              <div>
-                <button class="btn ${g.enabled && g.supported ? "danger" : "primary"}" data-act="gputoggle" ${g.supported ? "" : "disabled"}>
-                  ${g.enabled && g.supported ? ic("x") + " Turn GPU Off" : ic("bolt") + " Turn GPU On"}
-                </button>
-              </div>
-            </div>
-            ${!g.supported ? `<p class="warnline" style="margin-top:12px">No supported NVENC hardware encoder was found. Standard multi-core CPU encoding is used.</p>` : ""}
-          </div>
+      const asr = S.asr = await api("/api/asr").catch(() => S.status.asr || {
+        engine: "parakeet", whisper_model: "small", language: "auto", status: "ready",
+        message: "Parakeet-v2 ready.", device: "cpu", compute_type: "int8",
+        faster_whisper_installed: false, parakeet_installed: true, models: []
+      });
+      const isWhisper = asr.engine === "faster-whisper";
+      const asrPill = asr.status === "ready"
+        ? `<span class="pill ok">${ic("check")}Ready</span>`
+        : asr.status === "loading"
+        ? `<span class="pill warn">${ic("clock")}Loading model…</span>`
+        : asr.status === "not_installed"
+        ? `<span class="pill warn">${ic("warn")}Install needed</span>`
+        : asr.status === "error"
+        ? `<span class="pill bad">${ic("x")}Load error</span>`
+        : `<span class="pill">${ic("bolt")}Standby</span>`;
+      const models = (asr.models && asr.models.length) ? asr.models : [
+        {id: "base", label: "Base (~150 MB · Fastest)"},
+        {id: "small", label: "Small (~500 MB · Recommended)"},
+        {id: "medium", label: "Medium (~1.5 GB · High Accuracy)"},
+        {id: "large-v3-turbo", label: "Large-v3-Turbo (~1.6 GB · Best)"}
+      ];
+      body.innerHTML = `<section class="set-sec"><h2>Speech-to-text engine</h2>
+        <p class="help">Switch between <b>Parakeet-v2</b> and <b>Faster-Whisper</b> anytime. Only one model stays loaded in memory — toggling unloads the other automatically to keep RAM and CPU usage low.</p>
+        <div class="ai-state" id="asr_state_bar">
+          ${asrPill}
+          <span class="sub" id="asr_state_msg">${esc(asr.message || "")}</span>
         </div>
         <div class="card">
           <div class="card-head">
             <div>
-              <h3>How Processing is Handled</h3>
-              <p class="sub">Hardware distribution for PeakCut workflows</p>
+              <h2>Transcription model</h2>
+              <p class="sub">Both engines run locally with INT8 optimization.</p>
             </div>
           </div>
-          <div style="padding:16px 20px">
-            <ul style="padding-left:18px;margin:0;line-height:1.8" class="sub">
-              <li><b>Video Rendering & Encoding:</b> Offloaded to NVIDIA Turing NVENC (GeForce GTX 1650) with high quality preset. Very fast, low CPU load.</li>
-              <li><b>Speech-to-Text Transcription:</b> Run locally on multi-threaded CPU INT8 quantization for optimal numerical stability.</li>
-              <li><b>Analysis & Moment Detection:</b> Analyzed by LLM prompts and silence/scene detection.</li>
-            </ul>
+          <div class="stack">
+            <div class="asr-grid">
+              <button type="button" class="asr-opt ${!isWhisper ? "on" : ""}" data-act="asrengine" data-engine="parakeet">
+                <b>${ic("bolt")}Parakeet-v2 (ONNX)${!isWhisper ? ' <span class="pill brand">Active</span>' : ""}</b>
+                <small>Fast English · Low RAM · sherpa-onnx INT8</small>
+              </button>
+              <button type="button" class="asr-opt ${isWhisper ? "on" : ""}" data-act="asrengine" data-engine="faster-whisper">
+                <b>${ic("bolt")}Faster-Whisper (VAD)${isWhisper ? ' <span class="pill brand">Active</span>' : ""}</b>
+                <small>Hindi, Hinglish &amp; English · Silero noise filter</small>
+              </button>
+            </div>
+            ${isWhisper ? `<div class="fields">
+              <label class="f">Whisper model size
+                <select id="asr_wmodel" data-act-change="asrcfg">
+                  ${models.map(m => `<option value="${esc(m.id)}" ${m.id === asr.whisper_model ? "selected" : ""}>${esc(m.label)}</option>`).join("")}
+                </select>
+                <span class="hint">Small is fast and accurate on CPU INT8. Larger models help with heavy accents or noisy game audio.</span>
+              </label>
+              <label class="f">Caption language mode
+                <select id="asr_lang" data-act-change="asrcfg">
+                  <option value="auto" ${asr.language === "auto" ? "selected" : ""}>Auto (English &amp; Hinglish)</option>
+                  <option value="en" ${asr.language === "en" ? "selected" : ""}>English only</option>
+                  <option value="hi" ${asr.language === "hi" ? "selected" : ""}>Hindi + Hinglish (keeps English words in English)</option>
+                </select>
+                <span class="hint">Auto uses Silero VAD + language guard so noisy English never turns into wrong scripts.</span>
+              </label>
+            </div>
+            <div class="row"><button type="button" class="btn primary" data-act="asrsave">${ic("check")}Apply &amp; load model</button></div>` : ""}
+            ${!asr.faster_whisper_installed ? `<div class="note" style="margin:0">${ic("warn")}<span><b>Faster-Whisper is not installed yet.</b> Run <code>pip install -r requirements.txt</code> (or <code>pip install faster-whisper</code>) and restart PeakCut. Parakeet-v2 keeps working meanwhile.</span></div>` : ""}
           </div>
+        </div></section>
+        <section class="set-sec"><h2>Hardware &amp; GPU acceleration</h2>
+        <p class="help">Offload video rendering, scaling, and subtitle burning to an NVIDIA GPU (NVENC) when available to speed up rendering and keep CPU usage low.</p>
+        <div class="ai-state">
+          ${g.enabled && g.supported ? `<span class="pill ok">${ic("check")}GPU acceleration active</span><span class="sub">${esc(g.name)}</span>`
+            : g.supported ? `<span class="pill warn">${ic("pause")}GPU acceleration off</span><span class="sub">Using CPU mode (libx264). Detected: ${esc(g.name)}</span>`
+            : `<span class="pill">${ic("warn")}No GPU encoder detected</span><span class="sub">Using multi-core CPU encoder (libx264).</span>`}
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>NVIDIA NVENC encoding</h2>
+              <p class="sub">${g.enabled && g.supported ? `Rendering uses <b>${esc(g.name)}</b>.` : "Rendering uses multi-threaded CPU libx264 encoding."}</p>
+            </div>
+            <button class="btn ${g.enabled && g.supported ? "danger" : "primary"}" data-act="gputoggle" ${g.supported ? "" : "disabled"}>
+              ${g.enabled && g.supported ? ic("x") + "Turn GPU off" : ic("bolt") + "Turn GPU on"}
+            </button>
+          </div>
+          ${!g.supported ? `<p class="sub">No supported NVENC hardware encoder was detected on this machine.</p>` : ""}
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>How processing is handled</h2>
+              <p class="sub">Current hardware setup</p>
+            </div>
+          </div>
+          <ul style="padding-left:18px;margin:0;line-height:1.8" class="sub">
+            <li><b>Video encoding:</b> NVIDIA NVENC when enabled, otherwise multi-core CPU libx264.</li>
+            <li><b>Speech-to-text:</b> Local ${isWhisper ? `Faster-Whisper (${esc(asr.whisper_model)}, ${esc((asr.device || "cpu").toUpperCase())} ${esc(asr.compute_type || "int8")}, Silero VAD)` : `Parakeet-v2 (${esc((asr.device || "cpu").toUpperCase())} ONNX INT8)`}.</li>
+            <li><b>Memory:</b> Switching engines unloads the previous speech model automatically.</li>
+          </ul>
         </div></section>`;
+      if (asr.status === "loading") pollAsrStatus();
     }
   } catch (e) { body.innerHTML = `<div class="set-load">${esc(e.message)}</div>`; }
 }
 async function saveSettings() { const d = {}; $$("#sform [data-s]").forEach(i => d[i.dataset.s] = i.value); await send("/api/settings", d, "PUT"); }
+let _asrPollTimer = null;
+function pollAsrStatus() {
+  if (_asrPollTimer) clearTimeout(_asrPollTimer);
+  _asrPollTimer = setTimeout(async () => {
+    if (S.view !== "settings" || S.stab !== "hardware") return;
+    try {
+      const asr = S.asr = await api("/api/asr");
+      const bar = $("#asr_state_bar");
+      if (bar) {
+        const pill = asr.status === "ready"
+          ? `<span class="pill ok">${ic("check")}Ready</span>`
+          : asr.status === "loading"
+          ? `<span class="pill warn">${ic("clock")}Loading model…</span>`
+          : asr.status === "not_installed"
+          ? `<span class="pill warn">${ic("warn")}Install needed</span>`
+          : asr.status === "error"
+          ? `<span class="pill bad">${ic("x")}Load error</span>`
+          : `<span class="pill">${ic("bolt")}Standby</span>`;
+        bar.innerHTML = `${pill}<span class="sub" id="asr_state_msg">${esc(asr.message || "")}</span>`;
+      }
+      if (asr.status === "loading") {
+        pollAsrStatus();
+      } else if (asr.status === "ready") {
+        toast(asr.message || "Speech model loaded and ready.", "ok");
+      } else if (asr.status === "error") {
+        toast(asr.message || "Speech model failed to load.", "bad");
+      }
+    } catch {}
+  }, 1200);
+}
 
 /* ============================================================ clip editor */
 function openClip(jid, cid) {
@@ -3840,11 +3922,11 @@ function drawClipDlg(full) {
   const startVal = ed.start != null ? ed.start : c.start;
   const endVal = ed.end != null ? ed.end : c.end;
 
-  const statusBadge = c.status === "awaiting_review" ? `<span class="badge st-review">⏳ Needs Review</span>`
-    : c.status === "approved" ? `<span class="badge st-approved">✓ Approved</span>`
-    : c.status === "rendering_final" ? `<span class="badge st-rendering">⚡ Rendering Final</span>`
-    : c.status === "done" ? `<span class="badge qc-pass">✓ Done</span>`
-    : c.status === "qc_flagged" ? `<span class="badge qc-fail">⚠ QC Flagged</span>`
+  const statusBadge = c.status === "awaiting_review" ? `<span class="badge st-review">${ic("clock")}Needs review</span>`
+    : c.status === "approved" ? `<span class="badge st-approved">${ic("check")}Approved</span>`
+    : c.status === "rendering_final" ? `<span class="badge st-rendering">${ic("bolt")}Rendering final</span>`
+    : c.status === "done" ? `<span class="badge qc-pass">${ic("check")}Done</span>`
+    : c.status === "qc_flagged" ? `<span class="badge qc-fail">${ic("warn")}QC flagged</span>`
     : `<span class="badge">${esc(c.status)}</span>`;
 
   const vBust = c.draft_v || Date.now();
@@ -3855,15 +3937,15 @@ function drawClipDlg(full) {
   if (c.status === "error" || c.status === "failed") {
     stageHtml = `<div class="err" style="padding:20px;text-align:center">${esc(c.error || "Could not make this clip.")}</div>`;
   } else if (c.status === "drafting") {
-    stageHtml = `<div class="making">⚡ Rendering fast draft preview…</div>`;
+    stageHtml = `<div class="making">Rendering draft preview…</div>`;
   } else if (c.status === "rendering_final") {
-    stageHtml = `<div class="making">🚀 Rendering final high-quality 1080p clip…</div>`;
+    stageHtml = `<div class="making">Rendering final 1080p clip…</div>`;
   } else if (c.file) {
     stageHtml = `<div class="video-preview-wrap" id="vwrap">
       <video id="dlgVideo" src="${videoFile}" poster="${posterFile}" controls playsinline preload="metadata"></video>
       <div class="live-overlay-container" id="liveOverlayContainer">
-        <div id="liveStackSeam" style="position:absolute;left:0;right:0;border-bottom:2px dashed rgba(255,102,0,0.7);pointer-events:none;z-index:5;top:${((camSwap ? (1 - splitRatio) : splitRatio) * 100)}%;display:${layout === 'stack' ? 'block' : 'none'}">
-          <span style="position:absolute;right:8px;bottom:2px;font-size:10px;font-weight:700;color:#fff;background:rgba(0,0,0,0.6);padding:1px 6px;border-radius:3px">SPLIT SEAM</span>
+        <div id="liveStackSeam" style="position:absolute;left:0;right:0;border-bottom:2px dashed rgba(255,139,51,0.8);pointer-events:none;z-index:5;top:${((camSwap ? (1 - splitRatio) : splitRatio) * 100)}%;display:${layout === 'stack' ? 'block' : 'none'}">
+          <span style="position:absolute;right:8px;bottom:2px;font-size:10px;font-weight:700;color:#fff;background:rgba(30,22,18,0.75);padding:1px 6px;border-radius:4px">SPLIT SEAM</span>
         </div>
         <div id="liveHookBox" class="live-hook-box ${hk.style === 'nobox' ? 'nobox' : ''}" style="top:${((hk.y_pos || 300) / 1920 * 100)}%;display:${(hk.enabled !== false && (hk.text || c.hook)) ? 'block' : 'none'}">
           <span id="liveHookText">${esc(hk.text || c.hook || '')}</span>
@@ -3877,88 +3959,78 @@ function drawClipDlg(full) {
   if (full) {
     dlg.innerHTML = `<div class="editor"><div class="stage" id="stage">${stageHtml}</div>
       <div class="panel">
-        <!-- Top Nav & Status -->
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-          <div style="display:flex;gap:6px;align-items:center">
+        <div class="dlg-nav">
+          <div class="dlg-nav-mid">
             <button type="button" class="btn sm ghost" data-act="prevclip" ${prevC ? '' : 'disabled'} title="Previous Clip (Left Arrow)">← Prev</button>
-            <span style="font-size:12px;font-weight:700;color:var(--dim)">Clip ${idx + 1} of ${j.clips.length}</span>
+            <span style="font-size:12px;font-weight:600;color:var(--dim)">Clip ${idx + 1} of ${j.clips.length}</span>
             <button type="button" class="btn sm ghost" data-act="nextclip" ${nextC ? '' : 'disabled'} title="Next Clip (Right Arrow)">Next →</button>
           </div>
           <button class="btn icon ghost" data-act="closedlg" aria-label="Close">${ic("x")}</button>
         </div>
 
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <div class="dlg-badges">
           ${statusBadge}
-          <span class="badge ${scoreCls(c.score)}" style="position:static">${c.judges ? "Words " + c.judges.words + (c.judges.reaction ? " · Reaction " + c.judges.reaction : "") : c.score ? "Score " + c.score : "Clipped by hand"}</span>
-          ${c.qc ? `<span class="badge ${c.qc.status === 'PASS' ? 'qc-pass' : c.qc.status === 'WARN' ? 'qc-warn' : 'qc-fail'}" style="position:static" title="${esc((c.qc.notes || []).join(' · ') || c.qc.status)}">QC: ${esc(c.qc.status)}</span>` : ""}
+          <span class="badge ${scoreCls(c.score)}">${c.judges ? "Words " + c.judges.words + (c.judges.reaction ? " · Reaction " + c.judges.reaction : "") : c.score ? "Score " + c.score : "Clipped by hand"}</span>
+          ${c.qc ? `<span class="badge ${c.qc.status === 'PASS' ? 'qc-pass' : c.qc.status === 'WARN' ? 'qc-warn' : 'qc-fail'}" title="${esc((c.qc.notes || []).join(' · ') || c.qc.status)}">QC: ${esc(c.qc.status)}</span>` : ""}
         </div>
-        ${c.reason ? `<p class="sub" style="margin-top:2px;font-size:12px">${esc(c.reason)}</p>` : ""}
-        ${c.qc && c.qc.notes?.length ? `<div style="font-size:11px;color:var(--dim);background:var(--muted);padding:4px 8px;border-radius:4px;margin-top:4px">QC Notes: ${esc(c.qc.notes.join(' · '))}${c.qc.lufs != null ? ` (${c.qc.lufs} LUFS)` : ''}</div>` : ''}
+        ${c.reason ? `<p class="sub" style="font-size:12px">${esc(c.reason)}</p>` : ""}
+        ${c.qc && c.qc.notes?.length ? `<div style="font-size:11.5px;color:var(--dim);background:var(--muted);padding:6px 10px;border-radius:6px">QC notes: ${esc(c.qc.notes.join(' · '))}${c.qc.lufs != null ? ` (${c.qc.lufs} LUFS)` : ''}</div>` : ''}
 
         <h3>On the video</h3>
-        <!-- Big text (Hook) -->
-        <div style="margin-bottom:12px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <label class="sw" style="margin:0;font-size:12px">
-              <input type="checkbox" id="dlg_hook_enabled" ${hk.enabled !== false ? "checked" : ""}> Enable Big text
+
+        <div class="dlg-sec">
+          <div class="dlg-sec-head">
+            <label class="sw" style="margin:0;font-size:12.5px">
+              <input type="checkbox" id="dlg_hook_enabled" ${hk.enabled !== false ? "checked" : ""}> Big text
             </label>
-            <div style="display:flex;gap:4px">
-              <button type="button" class="btn xs ghost danger" id="btnRemoveHook" style="padding:2px 8px;font-size:11px" title="Remove Big text from this clip">
-                🗑 Remove Big text
-              </button>
-              <button type="button" class="btn sm ghost" data-act="applyhookall" style="padding:2px 8px;font-size:11px" title="Apply Big Text style, size and position to all clips">
-                ⚡ Apply to all
-              </button>
+            <div class="row" style="gap:4px">
+              <button type="button" class="btn xs ghost" id="btnRemoveHook" title="Remove Big text from this clip">${ic("trash")}Remove</button>
+              <button type="button" class="btn xs ghost" data-act="applyhookall" title="Apply Big Text style, size and position to all clips">Apply to all</button>
             </div>
           </div>
-          <label class="f" style="margin-bottom:6px">Big text
-            <input data-f="hook" id="dlg_hook_text" value="${esc(hk.text || c.hook || '')}" placeholder="HOOK / HEADLINE TEXT">
+          <label class="f">Headline text
+            <input data-f="hook" id="dlg_hook_text" value="${esc(hk.text || c.hook || '')}" placeholder="Hook or headline text">
           </label>
-          <div style="margin-bottom:6px">
-            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
-              <span>Font Size: <b id="hookSizeVal" style="color:var(--brand-ink)">${hk.font_size || 96}px</b></span>
-              <div style="display:flex;gap:4px">
+          <div>
+            <div class="dlg-range-head">
+              <span>Font size: <b id="hookSizeVal">${hk.font_size || 96}px</b></span>
+              <div class="row" style="gap:4px">
                 <button type="button" class="btn xs ghost" data-hook-size="64">Small</button>
                 <button type="button" class="btn xs ghost" data-hook-size="96">Normal</button>
-                <button type="button" class="btn xs ghost" data-hook-size="128">Huge</button>
+                <button type="button" class="btn xs ghost" data-hook-size="128">Large</button>
               </div>
             </div>
-            <input type="range" id="dlg_hook_size" min="36" max="150" step="2" value="${hk.font_size || 96}" style="width:100%">
+            <input type="range" id="dlg_hook_size" min="36" max="150" step="2" value="${hk.font_size || 96}">
           </div>
-          <div style="margin-bottom:6px">
-            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
-              <span>Position (Y): <b id="hookYVal" style="color:var(--brand-ink)">${hk.y_pos || 300}px</b></span>
+          <div>
+            <div class="dlg-range-head">
+              <span>Position (Y): <b id="hookYVal">${hk.y_pos || 300}px</b></span>
             </div>
-            <input type="range" id="dlg_hook_y" min="80" max="1750" step="10" value="${hk.y_pos || 300}" style="width:100%">
-            <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">
+            <input type="range" id="dlg_hook_y" min="80" max="1750" step="10" value="${hk.y_pos || 300}">
+            <div class="row" style="gap:4px;margin-top:4px">
               <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 220) < 50 ? 'active' : ''}" data-hook-pos="220">Top</button>
-              <button type="button" class="cap-anchor-btn" data-hook-pos="seam" title="Keep label neatly inside the facecam section near the divider">Inside Facecam</button>
+              <button type="button" class="cap-anchor-btn" data-hook-pos="seam" title="Keep label neatly inside the facecam section near the divider">Inside facecam</button>
               <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 400) < 50 ? 'active' : ''}" data-hook-pos="400">Upper</button>
               <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 960) < 50 ? 'active' : ''}" data-hook-pos="960">Middle</button>
-              <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 1300) < 50 ? 'active' : ''}" data-hook-pos="1300">Above Captions</button>
+              <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 1300) < 50 ? 'active' : ''}" data-hook-pos="1300">Above captions</button>
             </div>
           </div>
-          <label class="f" style="margin:0">Style
+          <label class="f">Style
             <select id="dlg_hook_style">
-              <option value="default" ${(hk.style||'default')==='default'?'selected':''}>Dark Boxed Backing</option>
-              <option value="nobox" ${(hk.style||'default')==='nobox'?'selected':''}>Clean Text with Outline</option>
+              <option value="default" ${(hk.style||'default')==='default'?'selected':''}>Dark boxed backing</option>
+              <option value="nobox" ${(hk.style||'default')==='nobox'?'selected':''}>Clean text with outline</option>
             </select>
           </label>
         </div>
 
-        <!-- Captions -->
-        <div style="margin-bottom:12px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <label class="sw" style="margin:0">
-              <input type="checkbox" data-f="captions" data-caption-toggle id="dlg_cap_enabled" ${cap.enabled !== false && c.captions !== false ? "checked" : ""}>Generate captions
+        <div class="dlg-sec">
+          <div class="dlg-sec-head">
+            <label class="sw" style="margin:0;font-size:12.5px">
+              <input type="checkbox" data-f="captions" data-caption-toggle id="dlg_cap_enabled" ${cap.enabled !== false && c.captions !== false ? "checked" : ""}> Captions
             </label>
-            <div style="display:flex;gap:4px">
-              <button type="button" class="btn xs ghost danger" id="btnRemoveCap" style="padding:2px 8px;font-size:11px" title="Remove captions from this clip">
-                🗑 Remove captions
-              </button>
-              <button type="button" class="btn sm ghost" data-act="applycapall" style="padding:2px 8px;font-size:11px" title="Apply caption style, size and position to all clips">
-                ⚡ Apply to all
-              </button>
+            <div class="row" style="gap:4px">
+              <button type="button" class="btn xs ghost" id="btnRemoveCap" title="Remove captions from this clip">${ic("trash")}Remove</button>
+              <button type="button" class="btn xs ghost" data-act="applycapall" title="Apply caption style, size and position to all clips">Apply to all</button>
             </div>
           </div>
           <div class="two">
@@ -3970,93 +4042,87 @@ function drawClipDlg(full) {
             </label>
           </div>
 
-          <!-- Extra caption customization -->
-          <div id="dlgCapExtraControls" style="display:${cap.enabled !== false && c.captions !== false ? 'block' : 'none'};margin-top:6px">
-            <div style="margin-bottom:6px">
-              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
-                <span>Caption Size: <b id="capSizeVal" style="color:var(--brand-ink)">${cap.font_size || 132}px</b></span>
-                <div style="display:flex;gap:4px">
+          <div id="dlgCapExtraControls" style="display:${cap.enabled !== false && c.captions !== false ? 'flex' : 'none'};flex-direction:column;gap:8px">
+            <div>
+              <div class="dlg-range-head">
+                <span>Caption size: <b id="capSizeVal">${cap.font_size || 132}px</b></span>
+                <div class="row" style="gap:4px">
                   <button type="button" class="btn xs ghost" data-cap-size="100">Compact</button>
                   <button type="button" class="btn xs ghost" data-cap-size="132">Standard</button>
                   <button type="button" class="btn xs ghost" data-cap-size="160">Large</button>
                 </div>
               </div>
-              <input type="range" id="dlg_cap_size" min="40" max="220" step="2" value="${cap.font_size || 132}" style="width:100%">
+              <input type="range" id="dlg_cap_size" min="40" max="220" step="2" value="${cap.font_size || 132}">
             </div>
-            <div style="margin-bottom:6px">
-              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
-                <span>Caption Position (Y): <b id="capYVal" style="color:var(--brand-ink)">${cap.y_pos || 1630}px</b></span>
+            <div>
+              <div class="dlg-range-head">
+                <span>Caption position (Y): <b id="capYVal">${cap.y_pos || 1630}px</b></span>
               </div>
-              <input type="range" id="dlg_cap_y" min="150" max="1800" step="10" value="${cap.y_pos || 1630}" style="width:100%">
-              <div style="display:flex;gap:4px;margin-top:4px">
-                <button type="button" class="cap-anchor-btn ${Math.abs((cap.y_pos||1630) - 250) < 50 ? 'active' : ''}" data-cap-pos="250">Top (250)</button>
-                <button type="button" class="cap-anchor-btn ${Math.abs((cap.y_pos||1630) - 960) < 50 ? 'active' : ''}" data-cap-pos="960">On Seam (960)</button>
-                <button type="button" class="cap-anchor-btn ${Math.abs((cap.y_pos||1630) - 1630) < 50 ? 'active' : ''}" data-cap-pos="1630">Safe Bottom (1630)</button>
+              <input type="range" id="dlg_cap_y" min="150" max="1800" step="10" value="${cap.y_pos || 1630}">
+              <div class="row" style="gap:4px;margin-top:4px">
+                <button type="button" class="cap-anchor-btn ${Math.abs((cap.y_pos||1630) - 250) < 50 ? 'active' : ''}" data-cap-pos="250">Top</button>
+                <button type="button" class="cap-anchor-btn ${Math.abs((cap.y_pos||1630) - 960) < 50 ? 'active' : ''}" data-cap-pos="960">On seam</button>
+                <button type="button" class="cap-anchor-btn ${Math.abs((cap.y_pos||1630) - 1630) < 50 ? 'active' : ''}" data-cap-pos="1630">Safe bottom</button>
               </div>
             </div>
-            <!-- Word pills editor -->
             ${(cap.words && cap.words.length) ? `
-            <div style="margin-top:8px">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-                <span style="font-size:11px;font-weight:700;color:var(--brand-ink)">Words (${cap.words.length}):</span>
-                <span style="font-size:10px;color:var(--faint)">Click word to fix typo</span>
+            <div>
+              <div class="dlg-range-head" style="margin-bottom:4px">
+                <span>Words (${cap.words.length})</span>
+                <span style="font-size:10.5px;color:var(--faint)">Click any word to edit</span>
               </div>
-              <div id="dlgWordsBox" style="display:flex;flex-wrap:wrap;gap:4px;max-height:80px;overflow-y:auto;padding:6px;background:#fff;border:1px solid var(--line);border-radius:6px">
+              <div id="dlgWordsBox" style="display:flex;flex-wrap:wrap;gap:4px;max-height:84px;overflow-y:auto;padding:6px;background:#fff;border:1px solid var(--line);border-radius:8px">
                 ${cap.words.map((w, idx) => `<span class="word-pill" contenteditable="true" data-widx="${idx}" title="${fmtLen(w.start ?? w.s ?? 0)} - ${fmtLen(w.end ?? w.e ?? 0)}">${esc(w.text || w.w || '')}</span>`).join("")}
               </div>
             </div>` : ""}
           </div>
         </div>
 
-        <!-- Split screen controls when layout === 'stack' -->
-        <div id="dlgStackControls" style="display:${layout === 'stack' ? 'block' : 'none'};padding:8px;background:var(--muted);border:1px solid var(--line);border-radius:6px;margin-bottom:12px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <span style="font-size:11px;font-weight:700;color:var(--brand-ink)">Split Screen Layout</span>
-            <button type="button" class="btn sm ghost" data-act="applylayoutall" style="padding:2px 8px;font-size:11px" title="Apply layout to all clips">
-              ⚡ Apply to all
-            </button>
+        <div id="dlgStackControls" class="dlg-sec" style="display:${layout === 'stack' ? 'flex' : 'none'}">
+          <div class="dlg-sec-head">
+            <span class="dlg-sec-title">Split screen layout</span>
+            <button type="button" class="btn xs ghost" data-act="applylayoutall" title="Apply layout to all clips">Apply to all</button>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
-            <select id="dlg_split_ratio" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px;background:#fff;font-weight:600">
+          <div class="two">
+            <select id="dlg_split_ratio">
               <option value="0.35" ${Math.abs(splitRatio - 0.35) < 0.03 ? 'selected' : ''}>35% Cam / 65% Game</option>
               <option value="0.40" ${Math.abs(splitRatio - 0.40) < 0.03 ? 'selected' : ''}>40% Cam / 60% Game</option>
               <option value="0.50" ${Math.abs(splitRatio - 0.50) < 0.03 ? 'selected' : ''}>50% Cam / 50% Game</option>
             </select>
-            <select id="dlg_cam_swap" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px;background:#fff;font-weight:600">
-              <option value="false" ${!camSwap ? 'selected' : ''}>Facecam Top / Game Bottom</option>
-              <option value="true" ${camSwap ? 'selected' : ''}>Game Top / Facecam Bottom</option>
+            <select id="dlg_cam_swap">
+              <option value="false" ${!camSwap ? 'selected' : ''}>Facecam top / Game bottom</option>
+              <option value="true" ${camSwap ? 'selected' : ''}>Game top / Facecam bottom</option>
             </select>
           </div>
-          <label class="sw" style="margin:0;font-size:11px">
-            <input type="checkbox" id="dlg_split_divider" ${splitDivider ? "checked" : ""}> Subtle divider line between sections
+          <label class="sw" style="margin:0;font-size:12px">
+            <input type="checkbox" id="dlg_split_divider" ${splitDivider ? "checked" : ""}> Divider line between sections
           </label>
         </div>
 
-        <!-- Facecam Zoom & Nudge Focus -->
-        <div id="dlgFaceControls" style="display:${(layout === 'stack' || layout === 'gameplay' || !!ed.facecam) ? 'block' : 'none'};padding:8px;background:var(--muted);border:1px solid var(--line);border-radius:6px;margin-bottom:12px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <span style="font-size:11px;font-weight:700;color:var(--brand-ink)">Facecam Zoom &amp; Nudge Focus</span>
-            <button type="button" class="btn sm ghost" data-act="applyfaceall" style="padding:2px 8px;font-size:11px" title="Apply facecam zoom to all clips">⚡ Apply zoom to all</button>
+        <div id="dlgFaceControls" class="dlg-sec" style="display:${(layout === 'stack' || layout === 'gameplay' || !!ed.facecam) ? 'flex' : 'none'}">
+          <div class="dlg-sec-head">
+            <span class="dlg-sec-title">Facecam zoom &amp; focus</span>
+            <button type="button" class="btn xs ghost" data-act="applyfaceall" title="Apply facecam zoom to all clips">Apply to all</button>
           </div>
-          <div style="margin-bottom:6px">
-            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
-              <span>Zoom: <b id="faceZoomVal" style="color:var(--brand-ink)">${(ed.facecam?.zoom || 1.0).toFixed(2)}x</b></span>
-              <div style="display:flex;gap:4px">
-                <button type="button" class="btn xs ghost" data-face-zoom="1.0">Fit (1.0x)</button>
+          <div>
+            <div class="dlg-range-head">
+              <span>Zoom: <b id="faceZoomVal">${(ed.facecam?.zoom || 1.0).toFixed(2)}x</b></span>
+              <div class="row" style="gap:4px">
+                <button type="button" class="btn xs ghost" data-face-zoom="1.0">Fit</button>
                 <button type="button" class="btn xs ghost" data-face-zoom="1.25">1.25x</button>
                 <button type="button" class="btn xs ghost" data-face-zoom="1.5">1.5x</button>
                 <button type="button" class="btn xs ghost" data-face-zoom="2.0">2.0x</button>
               </div>
             </div>
-            <input type="range" id="dlg_face_zoom" min="1.0" max="2.5" step="0.05" value="${ed.facecam?.zoom || 1.0}" style="width:100%">
+            <input type="range" id="dlg_face_zoom" min="1.0" max="2.5" step="0.05" value="${ed.facecam?.zoom || 1.0}">
           </div>
           <div>
-            <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--dim);margin-bottom:4px">
-              <span>Face Focus: <b id="faceFocusVal" style="color:var(--brand-ink)">${ed.facecam?.focus ? `(${ed.facecam.focus[0]}, ${ed.facecam.focus[1]})` : 'Auto Center'}</b></span>
-              <button type="button" class="btn xs ghost" data-act="resetfocus" title="Reset to auto box center">Reset Center</button>
+            <div class="dlg-range-head" style="margin-bottom:6px">
+              <span>Focus: <b id="faceFocusVal">${ed.facecam?.focus ? `(${ed.facecam.focus[0]}, ${ed.facecam.focus[1]})` : 'Auto center'}</b></span>
+              <button type="button" class="btn xs ghost" data-act="resetfocus" title="Reset to auto box center">Reset center</button>
             </div>
-            <div style="display:flex;gap:4px;align-items:center">
-              <span style="font-size:11px;color:var(--dim)">Nudge:</span>
+            <div class="row" style="gap:4px">
+              <span style="font-size:11.5px;color:var(--dim)">Nudge:</span>
               <button type="button" class="btn xs" data-nudge-focus="-30,0" title="Nudge face focus Left">← Left</button>
               <button type="button" class="btn xs" data-nudge-focus="30,0" title="Nudge face focus Right">Right →</button>
               <button type="button" class="btn xs" data-nudge-focus="0,-30" title="Nudge face focus Up">↑ Up</button>
@@ -4065,82 +4131,58 @@ function drawClipDlg(full) {
           </div>
         </div>
 
-        <!-- Audio (Meme & Music Bed) -->
-        <div style="padding:8px;background:var(--muted);border:1px solid var(--line);border-radius:6px;margin-bottom:12px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <span style="font-size:11px;font-weight:700;color:var(--brand-ink)">Audio (Meme &amp; Music Bed)</span>
-            <button type="button" class="btn sm ghost" data-act="applyaudioall" style="padding:2px 8px;font-size:11px" title="Apply audio settings to all clips">
-              ⚡ Apply to all
-            </button>
+        <div class="dlg-sec">
+          <div class="dlg-sec-head">
+            <span class="dlg-sec-title">Background music</span>
+            <button type="button" class="btn xs ghost" data-act="applyaudioall" title="Apply music settings to all clips">Apply to all</button>
           </div>
-          <div class="two">
-            <label class="f" style="margin:0">Meme Sound<select id="dlg_meme"><option value="">None</option>${opts(S.status.memes || {}, memeVal)}</select></label>
-            <label class="f" style="margin:0">Music Bed<select id="dlg_music"><option value="">None</option>${opts(S.status.music_beds || {}, musicVal)}</select></label>
-          </div>
+          <label class="f" style="margin:0">Track
+            <select id="dlg_music"><option value="">None</option>${opts(S.status.music_beds || {}, musicVal)}</select>
+          </label>
         </div>
 
-        <!-- Start / End -->
         <div class="two">
           <label class="f">Start (seconds)<input data-f="start" id="dlg_start" type="number" step="0.5" value="${startVal}"></label>
           <label class="f">End (seconds)<input data-f="end" id="dlg_end" type="number" step="0.5" value="${endVal}"></label>
         </div>
 
-        <!-- Post text -->
         <h3>Post text</h3>
         <label class="f">Title<input data-f="title" id="dlg_title" value="${esc(c.title || '')}"></label>
         <label class="f">Description<textarea data-f="description" id="dlg_description" rows="2">${esc(c.description || '')}</textarea></label>
 
-        <!-- Review Actions & Approval -->
         <div class="review-actions-bar">
           ${(c.status === "awaiting_review" || c.status === "drafting" || c.status === "qc_flagged" || c.status === "failed") ? `
-          <div style="display:flex;gap:6px">
-            <button type="button" class="btn" data-act="savedraft" style="flex:1" title="Save edits and re-render draft preview">
-              💾 Save Draft
-            </button>
-            <button type="button" class="btn primary" data-act="approveclip" style="flex:2;background:linear-gradient(135deg, #1F7A4D, #166534);border:0;color:#fff;font-weight:700" title="Render final 1080p clip with LUFS &amp; QC (Enter)">
-              ✓ Approve (Final Render)
-            </button>
+          <div class="row" style="flex-wrap:nowrap">
+            <button type="button" class="btn" data-act="savedraft" style="flex:1" title="Save edits and re-render draft preview">Save draft</button>
+            <button type="button" class="btn good" data-act="approveclip" style="flex:2" title="Render final 1080p clip with LUFS &amp; QC (Enter)">${ic("check")}Approve &amp; render</button>
           </div>
-          <div style="display:flex;gap:6px">
-            <button type="button" class="btn ghost" data-act="approveapplyall" style="flex:1;font-size:11px" title="Apply global style to all clips, and approve this clip">
-              ⚡ Approve + Apply to all
-            </button>
-            <button type="button" class="btn ghost" data-act="approvealljob" style="flex:1;font-size:11px" title="Approve all clips waiting for review in this video">
-              Approve all remaining
-            </button>
+          <div class="row" style="flex-wrap:nowrap">
+            <button type="button" class="btn sm ghost" data-act="approveapplyall" style="flex:1" title="Apply global style to all clips, and approve this clip">Approve + apply to all</button>
+            <button type="button" class="btn sm ghost" data-act="approvealljob" style="flex:1" title="Approve all clips waiting for review in this video">Approve all remaining</button>
           </div>
-          <div style="display:flex;gap:6px;margin-top:2px">
-            <button type="button" class="btn" data-act="fastremake" style="flex:1;font-size:11px" title="Re-burns captions onto existing video in 2–4s">
-              ⚡ Fast Remake
-            </button>
-            <button type="button" class="btn" data-act="remake" style="flex:1;font-size:11px" title="Full re-render from source video">
-              ${ic("scissors")}Save &amp; Remake
-            </button>
+          <div class="row" style="flex-wrap:nowrap">
+            <button type="button" class="btn sm" data-act="fastremake" style="flex:1" title="Re-burns captions onto existing video in 2–4s">${ic("bolt")}Fast remake</button>
+            <button type="button" class="btn sm" data-act="remake" style="flex:1" title="Full re-render from source video">${ic("scissors")}Save &amp; remake</button>
           </div>
           ` : (c.status === "approved" || c.status === "rendering_final") ? `
-          <div style="display:flex;align-items:center;justify-content:space-between">
-            <span style="font-size:12px;color:var(--brand);font-weight:600">Rendering final 1080p video with LUFS &amp; QC…</span>
-            <button type="button" class="btn sm ghost" data-act="resetreview">Reset to Review</button>
+          <div class="row" style="justify-content:space-between">
+            <span style="font-size:12px;color:var(--brand-deep);font-weight:600">Rendering final 1080p video…</span>
+            <button type="button" class="btn sm ghost" data-act="resetreview">Reset to review</button>
           </div>
           ` : `
-          <div style="display:flex;gap:6px">
-            <button type="button" class="btn primary" data-act="fastremake" style="flex:1;background:linear-gradient(135deg, #FF6600, #E04400);border:0;color:#fff;font-weight:700" title="Re-burns captions onto existing video in 2–4s">
-              ⚡ Fast Remake (2-4s)
-            </button>
-            <button type="button" class="btn" data-act="remake" style="font-size:12px" title="Full re-render from source video">
-              ${ic("scissors")}Save &amp; Remake
-            </button>
+          <div class="row" style="flex-wrap:nowrap">
+            <button type="button" class="btn primary" data-act="fastremake" style="flex:1" title="Re-burns captions onto existing video in 2–4s">${ic("bolt")}Fast remake (2–4s)</button>
+            <button type="button" class="btn" data-act="remake" title="Full re-render from source video">${ic("scissors")}Save &amp; remake</button>
           </div>
           `}
         </div>
 
-        <!-- Social Posting -->
         <h3>Post it</h3>
         <div id="dposts" class="row" style="gap:4px"></div>
         ${S.accounts.length ? `<div class="row">${S.accounts.map(a => `<label class="ck"><input type="checkbox" data-pacc value="${esc(a.id)}">${esc(a.label)} · ${esc(a.name)}</label>`).join("")}</div>
           <div class="row"><button class="btn primary" data-act="postnow">${ic("send")}Post now</button><button class="btn" data-act="postqueue">Add to queue</button></div>`
           : `<p class="help">No accounts connected yet. Connect one in Settings.</p>`}
-        <div class="row" style="margin-top:auto;padding-top:8px;border-top:1px solid var(--line)">
+        <div class="row" style="margin-top:auto;padding-top:10px;border-top:1px solid var(--line)">
           ${c.status === "done" ? `<a class="btn" href="${m}${esc(c.file)}?download=1">${ic("down")}Download</a>` : ""}
           <button class="btn" data-act="copy" data-j="${j.id}" data-c="${esc(c.id)}">${ic("copy")}Copy post text</button>
         </div>
@@ -4154,7 +4196,7 @@ function drawClipDlg(full) {
     $("#dlg_hook_style")?.addEventListener("change", syncLiveOverlay);
 
     $("#dlg_cap_enabled")?.addEventListener("change", e => {
-      if ($("#dlgCapExtraControls")) $("#dlgCapExtraControls").style.display = e.target.checked ? "block" : "none";
+      if ($("#dlgCapExtraControls")) $("#dlgCapExtraControls").style.display = e.target.checked ? "flex" : "none";
       syncLiveOverlay();
     });
     $("#dlg_cap_size")?.addEventListener("input", syncLiveOverlay);
@@ -4245,8 +4287,8 @@ function drawClipDlg(full) {
     });
     $("#dlg_layout")?.addEventListener("change", e => {
       const isStack = e.target.value === "stack";
-      if ($("#dlgStackControls")) $("#dlgStackControls").style.display = isStack ? "block" : "none";
-      if ($("#dlgFaceControls")) $("#dlgFaceControls").style.display = (isStack || e.target.value === "gameplay") ? "block" : "none";
+      if ($("#dlgStackControls")) $("#dlgStackControls").style.display = isStack ? "flex" : "none";
+      if ($("#dlgFaceControls")) $("#dlgFaceControls").style.display = (isStack || e.target.value === "gameplay") ? "flex" : "none";
       syncLiveOverlay();
     });
 
@@ -4874,8 +4916,8 @@ document.addEventListener("click", async e => {
     if (a === "applyaudioall") {
       b.disabled = true;
       try {
-        const memeVal = $("#dlg_meme").value;
-        const musicVal = $("#dlg_music").value;
+        const memeVal = $("#dlg_meme")?.value || "";
+        const musicVal = $("#dlg_music")?.value || "";
         const patch = {
           audio: {
             meme: memeVal !== "" && memeVal !== "none",
@@ -5025,6 +5067,33 @@ document.addEventListener("click", async e => {
         if (out) out.innerHTML = `<span class="pill warn">${ic("warn")}Error</span> ${esc(err.message)}`;
         toast(err.message, "bad");
       } finally { b.disabled = false; }
+      return;
+    }
+    if (a === "asrengine" || a === "asrsave") {
+      b.disabled = true;
+      try {
+        const payload = {preload: true};
+        if (a === "asrengine") {
+          payload.engine = d.engine;
+        } else {
+          payload.engine = "faster-whisper";
+          const wm = $("#asr_wmodel"), lg = $("#asr_lang");
+          if (wm) payload.whisper_model = wm.value;
+          if (lg) payload.language = lg.value;
+        }
+        const res = await send("/api/asr", payload, "POST");
+        S.asr = res;
+        S.status = await api("/api/status");
+        if (res.status === "not_installed") {
+          toast("Saved! Install faster-whisper with: pip install -r requirements.txt", "warn");
+        } else if (res.status === "loading") {
+          toast(res.message || "Loading speech model in background…", "ok");
+        } else {
+          toast(res.message || "Speech engine updated!", "ok");
+        }
+        return drawSettings();
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
       return;
     }
     if (a === "gputoggle") {

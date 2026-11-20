@@ -19,13 +19,48 @@ _NUKTA = {"क": "q", "ख": "kh", "ग": "gh", "ज": "z", "फ": "f", "ड": "
 _VIRAMA, _NUKTA_SIGN = "्", "़"
 _NASAL = {"ं": "n", "ँ": "n"}
 _OTHER = {"ः": "h", "।": ".", "॥": ".", "ॐ": "om", **{chr(0x0966 + i): str(i) for i in range(10)}}
-# Common words whose everyday spelling the rules below would not guess.
+# Common words whose everyday spelling the rules below would not guess (plus English loanwords often written in Devanagari).
 _WORDS = {"में": "mein", "मैं": "main", "हैं": "hain", "है": "hai", "नहीं": "nahi", "नही": "nahi", "हूँ": "hoon",
           "हूं": "hoon", "क्या": "kya", "क्यों": "kyun", "क्यूँ": "kyun", "यह": "yeh", "वह": "woh", "और": "aur",
           "भी": "bhi", "ही": "hi", "की": "ki", "जी": "ji", "तो": "to", "हाँ": "haan", "हां": "haan", "यहाँ": "yahan",
           "यहां": "yahan", "वहाँ": "wahan", "वहां": "wahan", "कहाँ": "kahan", "कहां": "kahan", "थी": "thi",
           "रही": "rahi", "कभी": "kabhi", "अभी": "abhi", "सभी": "sabhi", "भाई": "bhai", "मुझे": "mujhe",
-          "तुम": "tum", "हम": "hum", "आप": "aap", "बहुत": "bahut", "अच्छा": "accha", "ठीक": "theek", "लिए": "liye"}
+          "तुम": "tum", "हम": "hum", "आप": "aap", "बहुत": "bahut", "अच्छा": "accha", "ठीक": "theek", "लिए": "liye",
+          # English loanwords commonly spoken in Hinglish videos/streams
+          "टेबल": "table", "चेयर": "chair", "व्हाट्स": "what's", "अप": "up", "एथलेटिक": "athletic",
+          "गेम": "game", "गेमिंग": "gaming", "गेमर": "gamer", "लैपटॉप": "laptop", "कंप्यूटर": "computer",
+          "मोबाइल": "mobile", "फोन": "phone", "फ़ोन": "phone", "ब्रो": "bro", "क्वेश्चन": "question",
+          "कॉलेज": "college", "स्कूल": "school", "फ्यूचर": "future", "फ़्यूचर": "future", "नॉलेज": "knowledge",
+          "वॉच": "watch", "राइट": "right", "लेफ्ट": "left", "नाइट": "night", "चेक": "check", "चेंज": "change",
+          "ओके": "okay", "थैंक": "thank", "थैंक्स": "thanks", "यू": "you", "वीडियो": "video", "चैनल": "channel",
+          "सब्सक्राइब": "subscribe", "लाइक": "like", "शेयर": "share", "कमेंट": "comment", "गाइज": "guys",
+          "गाइस": "guys", "बॉयज": "boys", "बॉयज़": "boys", "सॉरी": "sorry", "प्लीज": "please", "प्लीज़": "please",
+          "वेबकैम": "webcam", "कैमरा": "camera", "स्क्रीन": "screen", "क्लिप": "clip", "स्ट्रीम": "stream",
+          "लाइव": "live", "चैट": "chat", "क्लच": "clutch", "बॉट": "bot", "प्लेयर": "player", "टीम": "team",
+          "विन": "win", "लूज": "lose", "लेवल": "level", "मैप": "map", "बॉस": "boss", "साउंड": "sound",
+          "ऑडियो": "audio", "माइक": "mic", "टाइम": "time", "स्टार्ट": "start", "स्टॉप": "stop", "नेक्स्ट": "next",
+          "लास्ट": "last", "बेस्ट": "best", "फास्ट": "fast", "स्लो": "slow", "हाई": "high", "लो": "low",
+          "न्यू": "new", "ओल्ड": "old", "रियल": "real", "फेक": "fake", "सुपर": "super", "कूल": "cool",
+          "क्रेजी": "crazy", "फनी": "funny", "इजी": "easy", "हार्ड": "hard", "प्रो": "pro", "नूब": "noob",
+          "कंट्रोल": "control", "बटन": "button", "कीबोर्ड": "keyboard", "माउस": "mouse", "हेडफोन": "headphone",
+          "स्पीकर": "speaker", "रूम": "room", "डोर": "door", "विंडो": "window", "हाउस": "house", "कार": "car",
+          "बाइक": "bike", "रोड": "road", "सिटी": "city", "बैंक": "bank", "शॉप": "shop", "मार्केट": "market",
+          "ऑफिस": "office", "ऑफ़िस": "office", "जॉब": "job", "फ्रेंड": "friend", "फ्रेंड्स": "friends",
+          "फैमिली": "family", "पार्टी": "party", "म्यूजिक": "music", "डांस": "dance", "मूवी": "movie",
+          "फोटो": "photo", "पिक्चर": "picture", "स्टोरी": "story", "न्यूज": "news", "अपडेट": "update",
+          "सेटिंग": "setting", "सेटिंग्स": "settings", "प्रॉब्लम": "problem", "सॉल्यूशन": "solution",
+          "आइडिया": "idea", "प्लान": "plan", "प्वाइंट": "point", "नंबर": "number", "लेटर": "letter",
+          "मैसेज": "message", "कॉल": "call", "टेक्स्ट": "text", "इंटरनेट": "internet", "वाईफाई": "wifi",
+          "बैटरी": "battery", "चार्जर": "charger", "पावर": "power", "सिस्टम": "system", "सॉफ्टवेयर": "software",
+          "ऐप": "app", "वेबसाइट": "website", "लिंक": "link", "कोड": "code", "डेटा": "data", "फाइल": "file",
+          "फोल्डर": "folder", "मेमोरी": "memory", "डिलीट": "delete", "सेव": "save", "ओपन": "open",
+          "क्लोज": "close", "प्ले": "play", "पॉज": "pause", "रिकॉर्ड": "record", "डाउनलोड": "download",
+          "अपलोड": "upload", "इंस्टॉल": "install", "सर्च": "search", "क्लिक": "click", "जूम": "zoom",
+          "जज": "judge", "व्हाट": "what", "वेट": "wait", "शिट": "shit", "डैम": "damn", "ओएमजी": "OMG",
+          "वेलकम": "welcome", "हेलो": "hello", "हाय": "hi", "बाय": "bye", "गुड": "good", "बैड": "bad",
+          "रेडी": "ready", "डन": "done", "ट्राय": "try", "ट्राई": "try", "फाइन": "fine", "श्योर": "sure",
+          "एक्चुअली": "actually", "बेसिकली": "basically", "लिटरली": "literally", "सीरियसली": "seriously",
+          "एग्जैक्टली": "exactly", "परफेक्ट": "perfect", "अमेजिंग": "amazing", "ऑसम": "awesome"}
 DEVANAGARI = re.compile(r"[ऀ-ॿ]")
 OTHER_SCRIPT = re.compile(r"[؀-ۿݐ-ݿﭐ-﷿ﹰ-﻿]")   # Urdu / Arabic letters
 

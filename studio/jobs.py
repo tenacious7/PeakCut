@@ -733,7 +733,7 @@ def render_one(job, clip, words, quality="final"):
         else:
             near = []
 
-        # Ensure {cid}_edit.json exists
+        # Ensure {cid}_edit.json exists and stays synced with cleaned captions unless user manually edited words
         edit_file = d / "clips" / f"{clip['id']}_edit.json"
         if not edit_file.is_file():
             if clip.get("facecam") and not clip.get("facecam_focus") and src.is_file():
@@ -752,6 +752,16 @@ def render_one(job, clip, words, quality="final"):
                     ed["caption"]["enabled"] = bool(clip["captions"])
                 if "hook_enabled" in clip:
                     ed.setdefault("hook", {})["enabled"] = bool(clip["hook_enabled"])
+                if near and not ed["caption"].get("words_edited"):
+                    ed["caption"]["words"] = [
+                        {
+                            "text": str(w.get("w") if "w" in w else w.get("text", "")),
+                            "start": round(float(w.get("s") if "s" in w else w.get("start", 0.0)), 2),
+                            "end": round(float(w.get("e") if "e" in w else w.get("end", 0.0)), 2),
+                        }
+                        for w in near
+                        if str(w.get("w") if "w" in w else w.get("text", "")).strip()
+                    ]
                 edit.save_edit(edit_file, ed)
 
         out = render.render_clip(src, d / "clips", clip["id"], local, near, job["width"], job["height"], quality=quality)
@@ -1256,17 +1266,29 @@ def _run_job(job):
             cam = job.get("facecam") or (src_file and _facecam(job, src=src_file))
             if cam:
                 clip["facecam"] = cam
-        if clip["status"] not in ("error", "failed") and clip.get("captions", True) and yt and yt[1].lower().startswith("en"):
-            # The clip was found with YouTube's transcript. What is shown on screen comes from our own model,
-            # run on just this clip: full punctuation, nothing blanked out, timings to the word.
+        should_retranscribe = bool(
+            yt and (
+                yt[1].lower().startswith("en")
+                or transcribe.active_engine() == "faster-whisper"
+                or brain.needs_translation(yt[1])
+            )
+        )
+        if clip["status"] not in ("error", "failed") and clip.get("captions", True) and should_retranscribe:
+            # The clip was found with YouTube's transcript. What is shown on screen comes from our own local model
+            # (Parakeet-v2 or Faster-Whisper with Silero VAD), run on just this clip: full punctuation, nothing
+            # blanked out, crisp word timings, and no YouTube auto-caption hallucinations.
             a0, b0 = max(lo, int((clip["start"] - 1.5) * 16000)), min(hi, int((clip["end"] + 1.5) * 16000))
             try:
-                tw = [dict(w, s=round(w["s"] + a0 / 16000, 2), e=round(w["e"] + a0 / 16000, 2)) for w in transcribe.transcribe(audio[a0:b0])]
+                tw = [dict(w, s=round(w["s"] + a0 / 16000, 2), e=round(w["e"] + a0 / 16000, 2))
+                      for w in transcribe.transcribe(audio[a0:b0], lang_hint=job.get("lang") or "")]
             except Exception:  # noqa: BLE001 - the clip is still made, with YouTube's words
                 tw = []
             if len(tw) >= 3:
                 exact[clip["id"]] = (a0 / 16000, b0 / 16000, tw)
                 words_now = tw
+                clip.pop("fixed_for", None)
+                clip.pop("fixed_words", None)
+                clip.pop("words", None)
         if clip["status"] not in ("error", "failed"):
             render_one(job, clip, words_now, quality=quality)
 
@@ -1316,7 +1338,7 @@ def _run_job(job):
                 if now_on[0] == i and p - last[0] > 0.05:      # only the part being shown moves the bar
                     last[0] = p
                     _set(job, progress=max(job["progress"], 0.14 + 0.78 * ((a_ - lo) + p * (b_ - a_)) / max(1, hi - lo)))
-            heard[i] = ahead.submit(ctx.bind(transcribe.transcribe), audio[a_:b_], tp)
+            heard[i] = ahead.submit(ctx.bind(transcribe.transcribe), audio[a_:b_], tp, job.get("lang") or "")
 
     # The ad breaks and static screens of the whole video, found once. It reads the video end to end,
     # so it is done here rather than for each clip, and only when asked for.
@@ -1348,7 +1370,7 @@ def _run_job(job):
                     if yt:
                         raw_w = [dict(w) for w in yt[0] if r_start <= w["s"] < r_end]
                     else:
-                        raw_w = transcribe.transcribe(slice_audio)
+                        raw_w = transcribe.transcribe(slice_audio, lang_hint=job.get("lang") or "")
                     clip_words = [dict(w, s=round(w["s"] + (0 if yt else r_start), 2),
                                        e=round(w["e"] + (0 if yt else r_start), 2)) for w in raw_w]
                 except Exception as e:
