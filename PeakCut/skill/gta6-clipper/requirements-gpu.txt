@@ -1,0 +1,3 @@
+# Only with an NVIDIA GPU (nvidia-smi works). About 2 GB, so it is a separate step.
+nvidia-cublas-cu12
+nvidia-cudnn-cu12==9.*

@@ -1,0 +1,9 @@
+yt-dlp[default,deno]  # deno solves YouTube's JS check; without it only 720p
+faster-whisper==1.2.1
+av==18.1.0  # av 19 drops metadata_errors, which faster-whisper 1.2.1 passes
+mediapipe==1.2.3
+opencv-contrib-python==5.0.0.93
+numpy
+streamlink==8.6.3  # live.py: records a live stream
+pillow
+fonttools  # captions: emoji, watermark text, sweep widths (matplotlib already brings both)

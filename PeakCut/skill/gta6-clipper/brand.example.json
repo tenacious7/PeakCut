@@ -1,0 +1,33 @@
+{
+  "_help": "Copy to brand.json. Every key below is read by clip.py (field > env CLIPPER_<KEY> > this file). Colours are hex without #. Booleans: true/false. watermark = text like @name OR a path to a PNG logo. watermark_pos: tl tr bl br bounce. position: auto top middle bottom. aspects: [] or any of 1:1, 4:5. lang: '' or es fr pt de ar hi. Keys starting with _ are ignored. theme: '' or a name from themes.json (clean nocodehack neon bold-yellow minimal-white); look order theme < brand.json < pick fields. flip: true = stacked layouts put the cam BELOW the game.",
+  "style": "hormozi",
+  "font": "Anton-Regular",
+  "colors": {
+    "text": "FFFFFF",
+    "spoken": "00E5FF",
+    "outline": "000000",
+    "key": "FF3B30",
+    "box": "FF2E93"
+  },
+  "hook_text": "FFFFFF",
+  "hook_box": "0B3D91",
+  "position": "auto",
+  "watermark": "@nocodehack",
+  "watermark_color": "FFFFFF",
+  "watermark_pos": "bounce",
+  "watermark_opacity": 0.65,
+  "watermark_size": 0.2,
+  "progress": true,
+  "progress_color": "00E5FF",
+  "endcard": "FOLLOW FOR MORE",
+  "aspects": [],
+  "lang": "",
+  "fillers": true,
+  "emoji": false,
+  "denoise": true,
+  "blackfix": true,
+  "lift": true,
+  "flash": false,
+  "theme": "",
+  "flip": false
+}

@@ -1,0 +1,553 @@
+{
+ "_note": "Shipped default; confidence = how sure we are the handle is right. Verify low ones. The workspace copy is the user's list and is never overwritten by updates.",
+ "en": [
+  {
+   "name": "xQc",
+   "platform": "twitch",
+   "handle": "xqc",
+   "confidence": "high"
+  },
+  {
+   "name": "Kai Cenat",
+   "platform": "twitch",
+   "handle": "kaicenat",
+   "confidence": "high"
+  },
+  {
+   "name": "IShowSpeed",
+   "platform": "youtube",
+   "handle": "@IShowSpeed",
+   "confidence": "high"
+  },
+  {
+   "name": "Asmongold",
+   "platform": "twitch",
+   "handle": "asmongold",
+   "confidence": "high"
+  },
+  {
+   "name": "Adin Ross",
+   "platform": "kick",
+   "handle": "adinross",
+   "confidence": "high"
+  },
+  {
+   "name": "Shroud",
+   "platform": "twitch",
+   "handle": "shroud",
+   "confidence": "high"
+  },
+  {
+   "name": "Summit1g",
+   "platform": "twitch",
+   "handle": "summit1g",
+   "confidence": "high"
+  },
+  {
+   "name": "Sodapoppin",
+   "platform": "twitch",
+   "handle": "sodapoppin",
+   "confidence": "high"
+  },
+  {
+   "name": "TimTheTatman",
+   "platform": "twitch",
+   "handle": "timthetatman",
+   "confidence": "high"
+  },
+  {
+   "name": "Ninja",
+   "platform": "twitch",
+   "handle": "ninja",
+   "confidence": "high"
+  },
+  {
+   "name": "Valkyrae",
+   "platform": "youtube",
+   "handle": "@Valkyrae",
+   "confidence": "medium"
+  },
+  {
+   "name": "Penguinz0",
+   "platform": "youtube",
+   "handle": "@penguinz0",
+   "confidence": "medium"
+  },
+  {
+   "name": "Jynxzi",
+   "platform": "twitch",
+   "handle": "jynxzi",
+   "confidence": "medium"
+  },
+  {
+   "name": "Esfand",
+   "platform": "twitch",
+   "handle": "esfandtv",
+   "confidence": "medium"
+  }
+ ],
+ "fr": [
+  {
+   "name": "Gotaga",
+   "platform": "twitch",
+   "handle": "gotaga",
+   "confidence": "high"
+  },
+  {
+   "name": "Squeezie",
+   "platform": "youtube",
+   "handle": "@Squeezie",
+   "confidence": "high"
+  },
+  {
+   "name": "Michou",
+   "platform": "youtube",
+   "handle": "@Michou",
+   "confidence": "high"
+  },
+  {
+   "name": "Inoxtag",
+   "platform": "youtube",
+   "handle": "@Inoxtag",
+   "confidence": "high"
+  },
+  {
+   "name": "Ponce",
+   "platform": "twitch",
+   "handle": "ponce",
+   "confidence": "medium"
+  },
+  {
+   "name": "Domingo",
+   "platform": "twitch",
+   "handle": "domingo",
+   "confidence": "high"
+  },
+  {
+   "name": "Locklear",
+   "platform": "twitch",
+   "handle": "locklear",
+   "confidence": "high"
+  },
+  {
+   "name": "Kameto",
+   "platform": "twitch",
+   "handle": "kamet0",
+   "confidence": "high"
+  },
+  {
+   "name": "Zerator",
+   "platform": "twitch",
+   "handle": "zerator",
+   "confidence": "high"
+  },
+  {
+   "name": "Maghla",
+   "platform": "twitch",
+   "handle": "maghla",
+   "confidence": "medium"
+  },
+  {
+   "name": "Doigby",
+   "platform": "twitch",
+   "handle": "doigby",
+   "confidence": "medium"
+  }
+ ],
+ "es": [
+  {
+   "name": "Ibai",
+   "platform": "twitch",
+   "handle": "ibai",
+   "confidence": "high"
+  },
+  {
+   "name": "TheGrefg",
+   "platform": "twitch",
+   "handle": "thegrefg",
+   "confidence": "high"
+  },
+  {
+   "name": "AuronPlay",
+   "platform": "twitch",
+   "handle": "auronplay",
+   "confidence": "high"
+  },
+  {
+   "name": "Rubius",
+   "platform": "twitch",
+   "handle": "rubius",
+   "confidence": "high"
+  },
+  {
+   "name": "ElXokas",
+   "platform": "twitch",
+   "handle": "elxokas",
+   "confidence": "high"
+  },
+  {
+   "name": "Illojuan",
+   "platform": "twitch",
+   "handle": "illojuan",
+   "confidence": "medium"
+  },
+  {
+   "name": "Knekro",
+   "platform": "twitch",
+   "handle": "knekro",
+   "confidence": "medium"
+  },
+  {
+   "name": "Spreen",
+   "platform": "kick",
+   "handle": "spreen",
+   "confidence": "medium"
+  },
+  {
+   "name": "Westcol",
+   "platform": "twitch",
+   "handle": "westcol",
+   "confidence": "medium"
+  },
+  {
+   "name": "Quackity",
+   "platform": "twitch",
+   "handle": "quackity",
+   "confidence": "medium"
+  },
+  {
+   "name": "Juan Guarnizo",
+   "platform": "twitch",
+   "handle": "juanguarnizo",
+   "confidence": "medium"
+  },
+  {
+   "name": "Vegetta777",
+   "platform": "youtube",
+   "handle": "@vegetta777",
+   "confidence": "high"
+  },
+  {
+   "name": "Willyrex",
+   "platform": "youtube",
+   "handle": "@Willyrex",
+   "confidence": "medium"
+  },
+  {
+   "name": "Rivers",
+   "platform": "twitch",
+   "handle": "rivers_gg",
+   "confidence": "medium"
+  }
+ ],
+ "pt": [
+  {
+   "name": "Gaules",
+   "platform": "twitch",
+   "handle": "gaules",
+   "confidence": "high"
+  },
+  {
+   "name": "Alanzoka",
+   "platform": "twitch",
+   "handle": "alanzoka",
+   "confidence": "high"
+  },
+  {
+   "name": "Baiano",
+   "platform": "twitch",
+   "handle": "baiano",
+   "confidence": "medium"
+  },
+  {
+   "name": "Loud Coringa",
+   "platform": "twitch",
+   "handle": "loud_coringa",
+   "confidence": "medium"
+  },
+  {
+   "name": "Cellbit",
+   "platform": "twitch",
+   "handle": "cellbit",
+   "confidence": "high"
+  },
+  {
+   "name": "Jazzghost",
+   "platform": "twitch",
+   "handle": "jazzghost",
+   "confidence": "medium"
+  },
+  {
+   "name": "Authentic Games",
+   "platform": "youtube",
+   "handle": "@AuthenticGames",
+   "confidence": "high"
+  },
+  {
+   "name": "Flakes Power",
+   "platform": "youtube",
+   "handle": "@FlakesPower",
+   "confidence": "medium"
+  },
+  {
+   "name": "Casimiro",
+   "platform": "twitch",
+   "handle": "casimito",
+   "confidence": "low"
+  },
+  {
+   "name": "Nobru",
+   "platform": "youtube",
+   "handle": "@Nobru",
+   "confidence": "medium"
+  }
+ ],
+ "de": [
+  {
+   "name": "Papaplatte",
+   "platform": "twitch",
+   "handle": "papaplatte",
+   "confidence": "high"
+  },
+  {
+   "name": "Trymacs",
+   "platform": "twitch",
+   "handle": "trymacs",
+   "confidence": "high"
+  },
+  {
+   "name": "MontanaBlack",
+   "platform": "twitch",
+   "handle": "montanablack88",
+   "confidence": "high"
+  },
+  {
+   "name": "Gronkh",
+   "platform": "twitch",
+   "handle": "gronkh",
+   "confidence": "high"
+  },
+  {
+   "name": "Unge",
+   "platform": "twitch",
+   "handle": "ungespielt",
+   "confidence": "high"
+  },
+  {
+   "name": "Knossi",
+   "platform": "twitch",
+   "handle": "knossi",
+   "confidence": "high"
+  },
+  {
+   "name": "HandOfBlood",
+   "platform": "twitch",
+   "handle": "handofblood",
+   "confidence": "high"
+  },
+  {
+   "name": "EliasN97",
+   "platform": "twitch",
+   "handle": "eliasn97",
+   "confidence": "medium"
+  },
+  {
+   "name": "Tanzverbot",
+   "platform": "twitch",
+   "handle": "tanzverbot",
+   "confidence": "medium"
+  },
+  {
+   "name": "PietSmiet",
+   "platform": "twitch",
+   "handle": "pietsmiet",
+   "confidence": "high"
+  },
+  {
+   "name": "Rewinside",
+   "platform": "youtube",
+   "handle": "@rewinside",
+   "confidence": "medium"
+  },
+  {
+   "name": "ReeZ",
+   "platform": "twitch",
+   "handle": "reevtv",
+   "confidence": "low"
+  }
+ ],
+ "ar": [
+  {
+   "name": "AboFlah",
+   "platform": "youtube",
+   "handle": "@AboFlah",
+   "confidence": "medium"
+  },
+  {
+   "name": "Mo Vlogs",
+   "platform": "youtube",
+   "handle": "@MoVlogs",
+   "confidence": "medium"
+  },
+  {
+   "name": "Khalid Al Ameri",
+   "platform": "youtube",
+   "handle": "@KhalidAlAmeri",
+   "confidence": "medium"
+  },
+  {
+   "name": "Bader Al Awadhi",
+   "platform": "youtube",
+   "handle": "@BaderAlAwadhi",
+   "confidence": "low"
+  },
+  {
+   "name": "Spacetoon Gaming",
+   "platform": "youtube",
+   "handle": "@SpacetoonGaming",
+   "confidence": "low"
+  },
+  {
+   "name": "Abu Rayyan",
+   "platform": "kick",
+   "handle": "aburayyan",
+   "confidence": "low"
+  },
+  {
+   "name": "Saud Al Qahtani Gaming",
+   "platform": "kick",
+   "handle": "saudgaming",
+   "confidence": "low"
+  },
+  {
+   "name": "Joe Gaming Arabia",
+   "platform": "youtube",
+   "handle": "@JoeGamingArabia",
+   "confidence": "low"
+  }
+ ],
+ "it": [
+  {
+   "name": "Dario Moccia",
+   "platform": "twitch",
+   "handle": "dariomocciatwitch",
+   "confidence": "high"
+  },
+  {
+   "name": "Pow3r",
+   "platform": "twitch",
+   "handle": "pow3rtv",
+   "confidence": "medium"
+  },
+  {
+   "name": "Favij",
+   "platform": "youtube",
+   "handle": "@Favij",
+   "confidence": "high"
+  },
+  {
+   "name": "Sabaku no Maiku",
+   "platform": "youtube",
+   "handle": "@SabakuNoMaiku",
+   "confidence": "medium"
+  },
+  {
+   "name": "MeControTe",
+   "platform": "youtube",
+   "handle": "@MeControTe",
+   "confidence": "medium"
+  },
+  {
+   "name": "Mikeshowsha",
+   "platform": "twitch",
+   "handle": "mikeshowsha",
+   "confidence": "medium"
+  },
+  {
+   "name": "Tumblurr",
+   "platform": "twitch",
+   "handle": "tumblurr",
+   "confidence": "medium"
+  },
+  {
+   "name": "Cydonia",
+   "platform": "twitch",
+   "handle": "cydonia",
+   "confidence": "medium"
+  },
+  {
+   "name": "Vegas",
+   "platform": "twitch",
+   "handle": "vegas",
+   "confidence": "low"
+  },
+  {
+   "name": "Zano",
+   "platform": "twitch",
+   "handle": "zanoxd",
+   "confidence": "low"
+  }
+ ],
+ "tr": [
+  {
+   "name": "Wtcn",
+   "platform": "twitch",
+   "handle": "wtcn",
+   "confidence": "high"
+  },
+  {
+   "name": "Jahrein",
+   "platform": "twitch",
+   "handle": "jahrein",
+   "confidence": "high"
+  },
+  {
+   "name": "Elraenn",
+   "platform": "twitch",
+   "handle": "elraenn",
+   "confidence": "high"
+  },
+  {
+   "name": "Unlostv",
+   "platform": "twitch",
+   "handle": "unlostv",
+   "confidence": "high"
+  },
+  {
+   "name": "Pqueen",
+   "platform": "twitch",
+   "handle": "pqueen",
+   "confidence": "medium"
+  },
+  {
+   "name": "Mithrain",
+   "platform": "twitch",
+   "handle": "mithrain",
+   "confidence": "medium"
+  },
+  {
+   "name": "Evonmoss",
+   "platform": "twitch",
+   "handle": "evonmoss",
+   "confidence": "medium"
+  },
+  {
+   "name": "Rraenee",
+   "platform": "twitch",
+   "handle": "rraenee",
+   "confidence": "medium"
+  },
+  {
+   "name": "Pintipanda",
+   "platform": "twitch",
+   "handle": "pintipanda",
+   "confidence": "medium"
+  },
+  {
+   "name": "Kendine Muzisyen",
+   "platform": "twitch",
+   "handle": "kendinemuzisyen",
+   "confidence": "medium"
+  }
+ ]
+}
