@@ -70,7 +70,7 @@ img.avatar{object-fit:cover;background:rgba(255,255,255,.08)}
 .plans-btn{margin-top:10px;width:100%;background:var(--frame-text);color:var(--brand-ink);border:0}
 .scrim{display:none}
 
-main{background:var(--bg);margin:8px 8px 8px 0;border-radius:var(--r-lg);height:calc(100vh - 16px);overflow-y:auto;min-width:0;scrollbar-gutter:stable}
+main{background:var(--bg);margin:8px 8px 8px 0;border-radius:var(--r-lg);height:calc(100vh - 16px);overflow-y:auto;min-width:0;scrollbar-gutter:stable;scroll-padding-top:60px}
 .topbar{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:10px 28px;min-height:54px;border-bottom:1px solid transparent;transition:border-color .2s ease}
 .topbar.stuck{border-color:var(--line)}
 #vbanner:empty{display:none}
@@ -85,7 +85,7 @@ main{background:var(--bg);margin:8px 8px 8px 0;border-radius:var(--r-lg);height:
 .vb span{flex:1;min-width:0}
 .vb b{color:#5A2C06}
 @media (max-width:640px){.vb{margin:10px 16px 0;flex-wrap:wrap}}
-.topbar .titles{flex:1;min-width:0}
+.topbar .titles{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
 #tpic:empty{display:none}
 #tpic img,#tpic .avatar{width:42px;height:42px;border-radius:50%;object-fit:cover;display:block;font-size:15px}
 #tpic span.avatar{background:var(--brand-soft);color:var(--brand-deep);display:grid;place-items:center;font-weight:700}
@@ -173,8 +173,8 @@ main{background:var(--bg);margin:8px 8px 8px 0;border-radius:var(--r-lg);height:
 .chan .main input{accent-color:var(--brand);width:15px;height:15px;flex:none}
 .chan .sbadge{margin:0}
 @media (max-width:640px){.chan{flex-wrap:wrap}.chan .main{order:5}}
-.topbar h1{font-size:15px;font-weight:600;letter-spacing:-.01em;color:var(--brand-ink)}
-.topbar p{font-size:12px;color:var(--dim);margin-top:0;overflow-wrap:anywhere}
+.topbar h1{font-size:15px;font-weight:600;letter-spacing:-.01em;color:var(--brand-ink);line-height:1.2}
+.topbar p{font-size:12px;color:var(--dim);margin-top:2px;line-height:1.3;overflow-wrap:anywhere}
 .icon-btn.menu{display:none}
 .content{padding:28px 32px 72px;max-width:1280px;margin:0 auto}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -260,14 +260,14 @@ label.ck input{accent-color:var(--brand);margin:0}
 .empty b{display:block;color:var(--brand-ink);font-size:15px;font-weight:600}
 
 /* ---------- home hero + composer */
-.hero{position:relative;padding:44px 28px 52px;text-align:center}
+.hero{position:relative;padding:28px 24px 32px;text-align:center}
 .hero .ga-bg{position:absolute;top:24px;bottom:-40px;left:0;width:100%;pointer-events:none;user-select:none;z-index:0;
   -webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 14%,black 70%,transparent 100%);mask-image:linear-gradient(to bottom,transparent 0%,black 14%,black 70%,transparent 100%)}
 .hero>:not(.ga-bg){position:relative;z-index:2}
 #view{position:relative;z-index:1}
 .hero h2{font-size:clamp(21px,5.2vw,28px);font-weight:700;letter-spacing:-.03em;color:var(--brand-ink);line-height:1.2;text-wrap:balance}
-.hero>p{color:var(--dim);margin:8px auto 22px;max-width:520px;font-size:15px}
-.composer{max-width:760px;margin:0 auto;background:#fff;border:1px solid var(--line-2);border-radius:var(--r-lg);text-align:left;transition:background-color .15s ease,border-color .15s ease}
+.hero>p{color:var(--dim);margin:8px auto 20px;max-width:520px;font-size:15px}
+.composer{max-width:760px;margin:0 auto;background:#fff;border:1px solid var(--line-2);border-radius:var(--r-lg);text-align:left;transition:background-color .15s ease,border-color .15s ease;scroll-margin-top:70px}
 .composer:has(#url:focus){border-color:#FFB27A}
 .composer.compact{max-width:none;margin-bottom:28px;background:var(--muted)}
 .composer.over{background:var(--brand-soft);border-color:var(--brand)}
@@ -290,7 +290,7 @@ label.ck input{accent-color:var(--brand);margin:0}
 .composer-opts{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows .32s ease,opacity .25s ease}
 .composer-opts.open{grid-template-rows:1fr;opacity:1}
 .composer-opts>.og{min-height:0;overflow:hidden;padding:0 12px;transition:padding .32s ease}
-.composer-opts.open>.og{padding-bottom:12px}
+.composer-opts.open>.og{padding-top:6px;padding-bottom:12px}
 /* attachments: link preview and files */
 .att{display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s ease}
 .att.has{grid-template-rows:1fr}
@@ -379,11 +379,16 @@ img.av{object-fit:cover}
 .nstep input::-webkit-inner-spin-button,.nstep input::-webkit-outer-spin-button,.range input::-webkit-inner-spin-button,.range input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .nstep .ctl i{font-style:normal;font-size:12px;color:var(--faint);width:10px}
 .tiles3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.tile-o{display:flex;flex-direction:column;gap:7px;padding:6px 6px 8px;border:0;border-radius:10px;background:#fff;color:var(--dim);font-size:12px;font-weight:600;cursor:pointer;text-align:center;transition:background-color .15s ease,color .15s ease}
-.composer.compact .tile-o{background:var(--muted)}
-.tile-o:enabled:hover,.tile-o:focus-visible{background:#EDE3DB;color:var(--text)}
-.tile-o[aria-pressed=true]{background:var(--brand-soft);color:var(--brand-ink)}
-.cap-prev{height:54px;border-radius:7px;background:#1E1612;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden;font-size:14px;line-height:1;color:#fff;letter-spacing:0;-webkit-text-stroke:1px #000;paint-order:stroke fill}
+.tiles4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media (max-width:768px){.tiles4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tile-o{position:relative;display:flex;flex-direction:column;gap:7px;padding:6px 6px 8px;border:2px solid transparent;border-radius:10px;background:#fff;color:var(--dim);font-size:12px;font-weight:600;cursor:pointer;text-align:center;transition:background-color .15s ease,color .15s ease,border-color .15s ease}
+.composer.compact .tile-o{background:var(--muted);border-color:transparent}
+.tile-o:enabled:hover,.tile-o:focus-visible{background:#EDE3DB;color:var(--text);border-color:rgba(255,139,51,.35)}
+.tile-o[aria-pressed=true]{background:var(--brand-soft);color:var(--brand-ink);border-color:var(--brand)}
+.tile-o[aria-pressed=true] .lay-prev{outline:2px solid var(--brand);outline-offset:1px}
+.tile-o[aria-pressed=true] .cap-prev{outline:2px solid var(--brand);outline-offset:1px}
+.tile-o[aria-pressed=true]::after{content:"";position:absolute;top:-4px;right:-4px;width:18px;height:18px;border-radius:50%;background:var(--brand);box-shadow:0 0 0 2px #fff;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' stroke='%232A1A12' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");background-size:11px 11px;background-repeat:no-repeat;background-position:center;z-index:3}
+.cap-prev{height:54px;border-radius:7px;background:#1E1612;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden;font-size:9.5px;line-height:1;color:#fff;letter-spacing:-0.03em;padding:0 2px;box-sizing:border-box;-webkit-text-stroke:0.4px #000;paint-order:stroke fill}
 .cap-prev b{font-weight:inherit}
 .lay-prev{height:54px;border-radius:7px;background:#1E1612;display:grid;place-items:center}
 .lay-prev .ph{position:relative;width:28px;height:48px;border-radius:4px;overflow:hidden;background:#4A3428}
@@ -391,10 +396,21 @@ img.av{object-fit:cover}
 .lay-prev .ph i{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);height:16px;background:linear-gradient(135deg,#FF8B33,#FFB27A)}
 .lay-prev.zoom .ph i{left:-6px;right:-6px;height:24px}
 .lay-prev.crop .ph i{left:0;right:0;top:0;height:100%;transform:none}
+.lay-prev.gameplay .ph i{left:0;right:0;top:0;height:100%;transform:none}
+.lay-prev.gameplay .ph .cam{position:absolute;top:3px;right:3px;width:10px;height:8px;border-radius:2px;background:#fff;border:1px solid #1E1612;display:flex;align-items:center;justify-content:center;z-index:2}
+.lay-prev.gameplay .ph .cam::after{content:"";width:4px;height:4px;border-radius:50%;background:#FF8B33}
+.lay-prev.stack .ph i{left:0;right:0;top:40%;height:60%;transform:none;background:linear-gradient(135deg,#FF8B33,#FFB27A)}
+.lay-prev.stack .ph .split-top{position:absolute;top:0;left:0;right:0;height:40%;background:#fff;border-bottom:1px solid #1E1612;display:flex;align-items:center;justify-content:center;z-index:2}
+.lay-prev.stack .ph .split-top::after{content:"";width:6px;height:6px;border-radius:50%;background:#FF8B33}
+.opts-badges{display:inline-flex;align-items:center;gap:4px;margin-left:4px}
+.opt-pill{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:5px;font-size:11px;font-weight:600;background:rgba(42,26,18,.08);color:var(--brand-ink);line-height:1.2}
+.chip.on .opt-pill{background:#fff;color:var(--brand-ink)}
+.opt-pill.gameplay{background:var(--brand);color:var(--brand-ink)}
+.chip.opt-active{border-color:rgba(255,139,51,.5)}
 .seg{display:flex;gap:4px;background:#fff;border-radius:10px;padding:4px}
 .composer.compact .seg{background:var(--muted)}
-.seg button{flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 6px;border:0;border-radius:7px;background:transparent;color:var(--dim);font-size:13px;font-weight:600;cursor:pointer;transition:background-color .15s ease,color .15s ease}
-.seg button small{font-size:11px;font-weight:500;color:var(--faint);transition:color .15s ease}
+.seg button{flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 6px;border:0;border-radius:7px;background:transparent;color:var(--dim);font-size:13px;font-weight:600;cursor:pointer;transition:background-color .15s ease,color .15s ease;min-width:0}
+.seg button small{font-size:10.5px;font-weight:500;color:var(--faint);transition:color .15s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;padding:0 2px}
 .seg button:hover,.seg button:focus-visible{background:#EDE3DB;color:var(--text)}
 .seg button[aria-pressed=true]{background:var(--brand-soft);color:var(--brand-ink)}
 .seg button[aria-pressed=true] small{color:#B8693A}
@@ -404,6 +420,20 @@ img.av{object-fit:cover}
 .range input,.range input:focus{flex:1;min-width:0;height:40px;border:0;background:transparent;padding:0;font-size:15px;font-weight:600;color:var(--brand-ink);-moz-appearance:textfield}
 .range>svg{width:14px;height:14px;color:var(--faint);flex:none}
 @media (max-width:640px){.og{grid-template-columns:1fr}.nsteps{grid-template-columns:1fr}}
+
+.audio-prev-btn{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;font-size:11px;font-weight:600;height:26px;border-radius:6px;border:1px solid var(--line);background:#fff;color:var(--dim);cursor:pointer;transition:all .15s ease}
+.audio-prev-btn:hover{background:var(--muted);color:var(--text)}
+.audio-prev-btn.playing{background:var(--brand-soft);color:var(--brand-ink);border-color:var(--brand)}
+.audio-vol-row{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);margin-top:6px}
+.audio-vol-row small{white-space:nowrap}
+.audio-vol-row input[type=range]{flex:1;height:4px;accent-color:var(--brand);cursor:pointer}
+.range-active{background:var(--brand-soft)!important;color:var(--brand-ink)!important;border-color:var(--brand)!important;font-weight:700!important}
+.range-mode-btn{border:0;background:transparent;color:var(--dim);cursor:pointer;transition:all .15s ease}
+.range-mode-btn[aria-pressed=true]{background:var(--brand-soft);color:var(--brand-ink);font-weight:700}
+.ai-rate-banner{display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:8px;font-size:12px;margin-top:10px;line-height:1.4}
+.ai-rate-banner.ok{background:var(--muted);border:1px solid rgba(42,26,18,0.08);color:var(--dim)}
+.ai-rate-banner.warn{background:#FFF4E5;border:1px solid rgba(255,139,51,0.5);color:#8A4300}
+.ai-rate-banner svg{flex:none;width:15px;height:15px}
 
 /* ---------- home blocks */
 .tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:16px}
@@ -522,6 +552,13 @@ img.av{object-fit:cover}
 .badge{position:absolute;top:10px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:var(--r-sm);background:#fff;color:var(--brand-ink)}
 .badge.l{left:10px}.badge.r{right:10px}
 .badge.s-hi{background:var(--brand);color:var(--brand-ink)}.badge.s-mid{background:#FFE3CC;color:var(--brand-ink)}
+.badge.qc-pass{background:#E9F6EE;color:#1F7A4D;border:1px solid #C3E9D0}.badge.qc-warn{background:#FFF1DC;color:#9A5B12;border:1px solid #FFE0B2}.badge.qc-fail{background:#FDECEC;color:#C53030;border:1px solid #F8B4B4}
+.rule-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}
+.rule-pill.allowed{background:#E9F6EE;color:#1F7A4D}.rule-pill.ask{background:#FFF1DC;color:#9A5B12}.rule-pill.no{background:#FDECEC;color:#C53030}.rule-pill.unknown{background:#F0EDE9;color:#786E64}
+.streamer-shelf{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 14px}
+.streamer-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid var(--line);border-radius:999px;font-size:12px;background:#fff;cursor:pointer;color:var(--brand-ink);transition:border-color .15s ease,background-color .15s ease}
+.streamer-chip:hover{border-color:var(--brand);background:var(--brand-soft)}
+.streamer-chip .plat{font-size:10px;color:var(--dim);text-transform:uppercase}
 .making{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:14px;color:var(--dim);font-size:13px;font-weight:500;background:linear-gradient(110deg,#F4EFEE 30%,#FBF8F7 50%,#F4EFEE 70%);background-size:220% 100%;animation:shim 1.6s linear infinite}
 @keyframes shim{to{background-position:-220% 0}}
 .clip-body{padding:12px 14px;display:flex;flex-direction:column;gap:5px;flex:1}
@@ -569,6 +606,69 @@ img.av{object-fit:cover}
 .spark i{flex:1;background:var(--brand);min-height:2px;border-radius:1px}.spark.chat i{background:var(--good)}
 .said{font-size:13px;color:var(--faint);height:76px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
 .said div:last-child{color:var(--text)}
+
+/* Sequential clipping banner */
+.lc-seq-banner{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;background:var(--brand-soft);border:1px solid var(--brand-line);border-radius:var(--r);margin:16px 0}
+.lc-seq-info{flex:1;min-width:0}
+.lc-seq-title{font-size:13px;font-weight:600;color:var(--brand-deep);display:flex;align-items:center;gap:6px}
+.lc-seq-desc{font-size:12px;color:var(--brand-ink);margin-top:2px;line-height:1.4}
+.lc-seq-desc b{font-weight:600;color:var(--brand-deep)}
+@media (max-width:800px){.lc-seq-banner{flex-direction:column;align-items:stretch}.lc-seq-banner .btn{width:100%}}
+
+/* Live stream options: Layout and styles */
+.lc-section{margin:18px 0;padding-top:16px;border-top:1px solid var(--line)}
+.lc-section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.lc-section-head h4{font-size:13px;font-weight:600;color:var(--brand-ink)}
+.lc-section-head .sub{font-size:12px;color:var(--dim)}
+.live-layouts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-bottom:12px}
+.live-lay-btn{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--r-sm);background:#fff;cursor:pointer;text-align:left;position:relative;transition:border-color .15s, background-color .15s}
+.live-lay-btn:hover{border-color:var(--brand);background:var(--muted)}
+.live-lay-btn.on{border-color:var(--brand);background:var(--brand-soft);border-width:2px;padding:7px 11px}
+.live-lay-btn svg.tick{position:absolute;top:6px;right:6px;width:14px;height:14px;color:var(--brand-deep)}
+.live-lay-icon{width:26px;height:38px;border-radius:4px;border:1px solid var(--dim);background:#e4deda;position:relative;flex:none;overflow:hidden}
+.live-lay-icon.crop{background:var(--brand-line)}
+.live-lay-icon.blur{background:#ded5cf}
+.live-lay-icon.blur::before{content:'';position:absolute;top:9px;bottom:9px;left:0;right:0;background:var(--brand-line)}
+.live-lay-icon.zoom{background:#ded5cf}
+.live-lay-icon.zoom::before{content:'';position:absolute;top:4px;bottom:4px;left:0;right:0;background:var(--brand-line)}
+.live-lay-icon.split::before{content:'';position:absolute;top:0;left:0;right:0;height:45%;background:var(--brand);border-bottom:1px solid #fff}
+.live-lay-icon.split::after{content:'';position:absolute;bottom:0;left:0;right:0;height:55%;background:var(--brand-line)}
+.live-lay-icon.stack{background:#ded5cf}
+.live-lay-icon.stack::before{content:'';position:absolute;top:0;left:0;right:0;height:40%;background:var(--brand);border-bottom:1px solid #fff}
+.live-lay-icon.stack::after{content:'';position:absolute;bottom:0;left:0;right:0;height:60%;background:var(--brand-line)}
+.live-lay-icon.gameplay{background:var(--brand-line)}
+.live-lay-icon.gameplay .cam{position:absolute;top:2px;right:2px;width:10px;height:8px;border-radius:2px;background:#fff;border:1px solid #1E1612;display:flex;align-items:center;justify-content:center}
+.live-lay-icon.gameplay .cam::after{content:'';width:4px;height:4px;border-radius:50%;background:var(--brand)}
+.live-lay-info{min-width:0;flex:1}
+.live-lay-info b{display:block;font-size:13px;line-height:1.2;color:var(--brand-ink)}
+.live-lay-info small{display:block;font-size:11px;color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.live-subopts{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--dim);margin-bottom:14px}
+.live-pills{display:flex;gap:6px;flex-wrap:wrap}
+.live-pill{padding:3px 10px;border-radius:999px;border:1px solid var(--line-2);background:#fff;font-size:12px;font-weight:500;color:var(--text);cursor:pointer;transition:border-color .15s, background .15s}
+.live-pill:hover{border-color:var(--brand);background:var(--muted)}
+.live-pill.on{border-color:var(--brand);background:var(--brand-soft);color:var(--brand-deep);font-weight:600}
+
+/* Timeline dual range slider */
+.lt-box{background:var(--muted);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;margin:14px 0}
+.lt-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.lt-times{display:flex;align-items:center;gap:10px;font-variant-numeric:tabular-nums;font-size:13px}
+.lt-times b{color:var(--brand-ink);font-weight:600}
+.lt-dur{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--good-soft);color:var(--good);border:1px solid var(--line)}
+.lt-dur.warn{background:var(--bad-soft);color:var(--bad)}
+.lt-slider-box{position:relative;height:36px;display:flex;align-items:center;margin:8px 0}
+.lt-track{position:absolute;left:0;right:0;height:8px;background:var(--line-2);border-radius:4px}
+.lt-sel-bar{position:absolute;height:8px;background:var(--brand);border-radius:4px;pointer-events:none}
+.lt-chk-line{position:absolute;top:4px;bottom:4px;width:2px;background:var(--good);pointer-events:none}
+.lt-chk-badge{position:absolute;bottom:100%;transform:translateX(-50%);font-size:10px;font-weight:600;color:var(--good);background:var(--good-soft);border:1px solid var(--good);padding:1px 5px;border-radius:4px;white-space:nowrap;margin-bottom:4px;pointer-events:none}
+.lt-slider{position:absolute;left:0;top:0;width:100%;height:100%;margin:0;padding:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none}
+.lt-slider::-webkit-slider-thumb{pointer-events:auto;cursor:ew-resize;-webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:50%;background:#fff;border:3px solid var(--brand);transition:border-color .15s}
+.lt-slider::-moz-range-thumb{pointer-events:auto;cursor:ew-resize;width:20px;height:20px;border-radius:50%;background:#fff;border:3px solid var(--brand)}
+.lt-slider:active::-webkit-slider-thumb{border-color:var(--brand-press);background:var(--brand-soft)}
+.lt-slider:active::-moz-range-thumb{border-color:var(--brand-press);background:var(--brand-soft)}
+.lt-presets-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:10px}
+.lt-presets{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.lt-action{display:flex;align-items:center;gap:8px}
+@media (max-width:800px){.lt-presets-row{flex-direction:column;align-items:stretch}.lt-action .btn{width:100%}}
 
 /* ---------- tables + logs */
 .scroll{overflow-x:auto}
@@ -812,6 +912,36 @@ dialog[open]{animation:fadein .16s ease}
   .set-sec h2{font-size:16px}
   .ai-big{font-size:24px}
 }
+/* Manual facecam crop & 9:16 layout canvas & word editor */
+.crop-container{position:relative;width:100%;max-width:440px;aspect-ratio:16/9;background:#000;border-radius:6px;overflow:hidden;border:1px solid var(--line);user-select:none;touch-action:none}
+.crop-box{position:absolute;border:2px solid #FF5500;box-shadow:0 0 0 9999px rgba(0,0,0,0.55);border-radius:4px;cursor:move}
+.crop-box-tag{position:absolute;top:2px;left:4px;background:#FF5500;color:#fff;font-size:9px;font-weight:700;padding:1px 4px;border-radius:2px;pointer-events:none}
+.crop-handle{position:absolute;right:-5px;bottom:-5px;width:12px;height:12px;background:#fff;border:2px solid #FF5500;border-radius:2px;cursor:se-resize}
+.canvas-9-16-wrapper{display:flex;gap:14px;align-items:flex-start;margin-top:10px;background:#f9f8f7;border:1px solid var(--line);border-radius:8px;padding:12px}
+.canvas-9-16{width:130px;height:231px;position:relative;border-radius:6px;overflow:hidden;border:2px solid var(--line);background:#111;user-select:none;touch-action:none;flex-shrink:0}
+.canvas-panel{position:absolute;left:0;right:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;overflow:hidden}
+.canvas-seam{position:absolute;left:0;right:0;height:10px;margin-top:-5px;cursor:row-resize;background:#FF5500;z-index:10;display:flex;align-items:center;justify-content:center}
+.canvas-seam div{width:24px;height:3px;border-radius:2px;background:#fff}
+.canvas-cap-badge{position:absolute;left:8%;right:8%;padding:3px 6px;background:rgba(255,255,255,0.95);color:#000;border-radius:4px;font-size:9px;font-weight:800;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.4);pointer-events:none;z-index:15;transform:translateY(50%);transition:bottom 0.15s, top 0.15s}
+.word-pill{padding:3px 8px;background:#fff;border:1px solid var(--line);border-radius:4px;font-size:12px;font-weight:600;color:var(--brand-ink);cursor:text;outline:none;transition:border-color 0.15s, background-color 0.15s}
+.word-pill:focus{border-color:var(--brand);background:#fffaf5}
+.word-pill:hover{border-color:var(--brand)}
+.split-preset-btn, .cap-anchor-btn{padding:4px 8px;font-size:11px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;font-weight:600;color:var(--brand-ink)}
+.split-preset-btn.active, .cap-anchor-btn.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+.video-preview-wrap{position:relative;width:100%;max-height:calc(100vh - 48px);aspect-ratio:9/16;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:6px}
+.video-preview-wrap video{width:100%;height:100%;object-fit:contain;display:block}
+.live-overlay-container{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.live-hook-box{position:absolute;left:50%;transform:translateX(-50%);width:88%;text-align:center;font-weight:900;line-height:1.15;cursor:grab;pointer-events:auto;user-select:none;z-index:10;text-transform:uppercase;background:rgba(0,0,0,0.85);color:#fff;padding:6px 12px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.2);box-sizing:border-box;touch-action:none}
+.live-hook-box:active{cursor:grabbing;transform:translateX(-50%) scale(1.02)}
+.live-hook-box.nobox{background:transparent!important;border:none!important;box-shadow:none!important;text-shadow:-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 3px 6px rgba(0,0,0,0.8)}
+.live-cap-box{position:absolute;left:50%;transform:translateX(-50%);width:88%;text-align:center;font-weight:800;line-height:1.2;cursor:grab;pointer-events:auto;user-select:none;z-index:9;text-transform:uppercase;color:#fff;text-shadow:-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 3px 6px rgba(0,0,0,0.9);touch-action:none}
+.live-cap-box:active{cursor:grabbing;transform:translateX(-50%) scale(1.02)}
+.cap-word-hl{color:#FFDE00}
+.btn.xs{padding:2px 6px;font-size:10px;height:auto;line-height:1.4}
+.review-actions-bar{display:flex;flex-direction:column;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);position:sticky;bottom:0;background:#fff;z-index:10}
+.badge.st-review{background:#FFE3CC;color:#A84A00;border:1px solid #FFD0A8}
+.badge.st-approved{background:#E0F2FE;color:#0369A1;border:1px solid #BAE6FD}
+.badge.st-rendering{background:#F3E8FF;color:#7E22CE;border:1px solid #E9D5FF}
 </style>
 </head>
 <body>
@@ -1117,22 +1247,39 @@ function drawStream() {
       : `<button class="btn primary" data-act="golive" data-url="${esc(p.channel)}"><span class="rdot"></span>Record this stream</button><small>PeakCut watches it and clips the best moments as they happen.</small>`}</div>`);
 }
 function liveOn(c) { return Object.entries(c.profiles || {}).filter(([k, p]) => p.live && c.channels?.[k] === p.channel).sort(([, p]) => p.channel === c.channel ? -1 : 1); }
-function statusBadge(c) {
-  if (c.live_job) return `<span class="sbadge rec"><i></i>Recording</span>`;
-  const on = liveOn(c);
-  if (on.length) { const [k, p] = on[0]; return `<span class="sbadge live"><i></i>Live on ${PLAT[k].name}${p.viewers ? " · " + fmtK(p.viewers) + " watching" : ""}</span>`; }
-  if (!Object.keys(c.channels || {}).length) return `<span class="sbadge">No channel yet</span>`;
-  return `<span class="sbadge"><i></i>Offline${c.auto_watch ? " · records when live" : ""}</span>`;
+function ruleBadge(ruleObj) {
+  if (!ruleObj) return "";
+  const r = (ruleObj.rule || "unknown").toLowerCase();
+  const label = r === "allowed" ? "Allowed" : r === "ask" ? "Check rules / Ask" : r === "no" ? "No clipping" : "Permission unknown";
+  const icon = r === "allowed" ? "✓" : r === "ask" ? "!" : r === "no" ? "✕" : "?";
+  const title = (ruleObj.note ? ruleObj.note + (ruleObj.source ? ` (${ruleObj.source})` : "") : label);
+  return `<span class="rule-pill ${r}" title="${esc(title)}"><i>${icon}</i> ${label}</span>`;
 }
+function statusBadge(c) {
+  const rb = ruleBadge(c.clip_rule);
+  let sb = "";
+  if (c.live_job) sb = `<span class="sbadge rec"><i></i>Recording</span>`;
+  else {
+    const on = liveOn(c);
+    if (on.length) { const [k, p] = on[0]; sb = `<span class="sbadge live"><i></i>Live on ${PLAT[k].name}${p.viewers ? " · " + fmtK(p.viewers) + " watching" : ""}</span>`; }
+    else if (!Object.keys(c.channels || {}).length) sb = `<span class="sbadge">No channel yet</span>`;
+    else sb = `<span class="sbadge"><i></i>Offline${c.auto_watch ? " · records when live" : ""}</span>`;
+  }
+  return rb ? `${sb} ${rb}` : sb;
+}
+const initialOf = str => {
+  const clean = (str || "").trim().replace(/^[^\p{L}\p{N}]+/u, "");
+  return Array.from(clean || str || "?")[0].toUpperCase();
+};
 const cav = c => { const r = c.live_job || liveOn(c).length ? " ring" : "";
-  return c.profile?.pic && c.profile.channel === c.channel ? `<img class="avatar${r}" src="${avatarUrl(c)}" alt="">` : `<span class="avatar${r}">${esc((c.name || "?")[0].toUpperCase())}</span>`; };
+  return c.profile?.pic && c.profile.channel === c.channel ? `<img class="avatar${r}" src="${avatarUrl(c)}" alt="">` : `<span class="avatar${r}">${esc(initialOf(c.name))}</span>`; };
 const GRADS = [["#FF8B33", "#FFB27A"], ["#7C5CFF", "#B9A7FF"], ["#0EA5E9", "#7DD3FC"], ["#10B981", "#6EE7B7"],
                ["#F43F5E", "#FDA4AF"], ["#F59E0B", "#FDE68A"], ["#EC4899", "#F9A8D4"], ["#14B8A6", "#99F6E4"]];
 function meAvatar(u) {
   if (u.photo) return `<img class="avatar me-pic" src="/api/me/photo?v=${u.photo}" alt="">`;
   let h = 0; for (const ch of u.email || u.name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const [a, b] = GRADS[h % GRADS.length];
-  return `<span class="avatar me-pic" style="background:linear-gradient(135deg,${a},${b});color:#fff">${esc((u.name || "?")[0].toUpperCase())}</span>`;
+  return `<span class="avatar me-pic" style="background:linear-gradient(135deg,${a},${b});color:#fff">${esc(initialOf(u.name))}</span>`;
 }
 const NT_ICON = {live: "radio", clips: "scissors", post: "warn", fail: "warn", account: "user", feedback: "chat"};
 const ago = t => { const s = Date.now() / 1000 - t; return s < 60 ? "just now" : s < 3600 ? Math.floor(s / 60) + " min ago" : s < 86400 ? Math.floor(s / 3600) + " h ago" : new Date(t * 1000).toLocaleDateString([], {day: "numeric", month: "short"}); };
@@ -1358,6 +1505,52 @@ function setTab(t) {
 }
 
 /* ============================================================ add bar */
+let curAudio = null;
+let curAudioBtn = null;
+function toggleAudioSample(cat, targetId, btn) {
+  if (curAudio && !curAudio.paused) {
+    curAudio.pause();
+    curAudio = null;
+    if (curAudioBtn) {
+      curAudioBtn.textContent = "▶ Preview";
+      curAudioBtn.classList.remove("playing");
+    }
+    if (btn === curAudioBtn) return;
+  }
+  const sel = $("#" + targetId);
+  const val = sel?.value;
+  if (!val || val === "none") {
+    toast?.("Choose a sound first to preview it.");
+    return;
+  }
+  const audio = new Audio(`/api/audio/sample/${cat}/${encodeURIComponent(val)}`);
+  const sliderId = cat === "meme" ? "#o_meme_vol" : "#o_music_vol";
+  const volVal = Number($(sliderId)?.value || (cat === "meme" ? 80 : 25));
+  audio.volume = Math.max(0.01, Math.min(1.0, volVal / 100));
+  curAudio = audio;
+  curAudioBtn = btn;
+  btn.textContent = "■ Stop";
+  btn.classList.add("playing");
+  audio.onended = () => {
+    btn.textContent = "▶ Preview";
+    btn.classList.remove("playing");
+    curAudio = null;
+    curAudioBtn = null;
+  };
+  audio.onerror = () => {
+    btn.textContent = "▶ Preview";
+    btn.classList.remove("playing");
+    curAudio = null;
+    curAudioBtn = null;
+  };
+  audio.play().catch(() => {
+    btn.textContent = "▶ Preview";
+    btn.classList.remove("playing");
+    curAudio = null;
+    curAudioBtn = null;
+  });
+}
+
 function drawAdd(variant) {
   const c = creator();
   $("#add").innerHTML = `<form class="composer ${variant === "hero" ? "big" : "compact"}" id="addform">
@@ -1366,7 +1559,8 @@ function drawAdd(variant) {
     <div class="composer-bar">
       <button type="button" class="chip" data-act="pickfile">${ic("up")}Upload video</button>
       ${c ? "" : picker("o_creator", "File under creator", [{v:"", label:"No creator", icon:"user"}, ...S.creators.map(x => ({v:x.id, label:x.name, img:x.profile?.pic && x.profile.channel === x.channel ? avatarUrl(x) : ""}))], "")}
-      <button type="button" class="chip" data-act="toggleopts" aria-expanded="false">${ic("sliders")}Options</button>
+      <button type="button" class="chip" data-act="rangechip" aria-expanded="false" id="rangeChip">${ic("clock")}<span id="rangeLabel">Pull whole video</span></button>
+      <button type="button" class="chip" data-act="toggleopts" aria-expanded="false" id="optsChip">${ic("sliders")}<span id="optsLabel">Options</span><span class="opts-badges" id="optsBadges"></span></button>
       <span class="grow"></span><span class="hint">or drop a video file here</span>
       <button class="btn primary" id="goBtn">${ic("scissors")}Make clips</button>
     </div>
@@ -1376,29 +1570,535 @@ function drawAdd(variant) {
         ${stepper("o_min", "Shortest", c?.min_len ?? 15, 5, 120, 5, "s")}
         ${stepper("o_maxlen", "Longest", c?.max_len ?? 60, 10, 180, 5, "s")}
       </div></div>
+      <div class="ob"><div class="ot">Review mode</div>
+        <select id="o_review_mode" style="width:100%;height:32px;padding:4px 8px;border-radius:6px;border:1px solid var(--line);background:var(--muted);font-size:12px;color:var(--brand-ink);font-weight:600">
+          <option value="auto">Automatic (Fastest - render final directly)</option>
+          <option value="review">Review every clip (Pause for approval)</option>
+          <option value="review_first">Review first clip (Apply settings to rest)</option>
+        </select>
+      </div>
       <div class="ob"><div class="ot cap-head"><span id="o_style_label">Caption style</span>
         <label><input type="checkbox" id="o_captions" data-caption-toggle ${c?.captions === false ? "" : "checked"}>Generate captions</label></div>
         ${choice("o_style", Object.entries(S.status.styles).map(([k, v]) => ({v:k, label:v, prev:capPrev(k)})), c?.style ?? "bounce", c?.captions === false)}</div>
-      <div class="ob"><div class="ot">Layout</div>${choice("o_layout", Object.entries(S.status.layouts).map(([k, v]) => ({v:k, label:LAYOUT_SHORT[k] || v, title:v, prev:`<span class="lay-prev ${esc(k)}"><span class="ph"><i></i></span></span>`})), c?.layout ?? "blur")}</div>
+      <div class="ob"><div class="ot">Layout</div>${choice("o_layout", Object.entries(S.status.layouts).map(([k, v]) => ({v:k, label:LAYOUT_SHORT[k] || v, title:v, prev:`<span class="lay-prev ${esc(k)}"><span class="ph"><i></i>${k === "gameplay" ? '<span class="cam"></span>' : ""}${k === "stack" ? '<span class="split-top"></span>' : ""}</span></span>`})), c?.layout ?? "blur")}
+        <div class="facecam-cfg" id="facecamCfg" style="display:${(c?.layout === 'gameplay' || c?.layout === 'stack') ? 'block' : 'none'};margin-top:10px;padding:12px;background:#fff;border:1px solid var(--line);border-radius:8px">
+          <!-- Mode switcher -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--line)">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:12px;font-weight:700;color:var(--brand-ink)">Facecam Mode:</span>
+              <div class="seg sm" style="margin:0" role="group">
+                <button type="button" id="btnCamAuto" class="active" style="padding:3px 10px;font-size:11px">Auto Face-Detect</button>
+                <button type="button" id="btnCamManual" style="padding:3px 10px;font-size:11px">Manual Crop Box</button>
+              </div>
+            </div>
+            <span style="font-size:11px;color:var(--faint)">For Split Screen &amp; Corner Cam</span>
+          </div>
+
+          <!-- AUTO MODE -->
+          <div id="camAutoBox" style="display:block">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div style="display:inline-flex;align-items:center;gap:6px">
+                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10B981"></span>
+                <span style="font-size:11px;font-weight:700;color:var(--brand-ink);text-transform:uppercase;letter-spacing:0.04em">AI Facecam Detection Active</span>
+              </div>
+              <span style="font-size:11px;color:var(--faint)">Isolates streamer webcam border &amp; face motion</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div>
+                <label for="o_cam_pos" style="display:block;font-size:11px;font-weight:600;color:var(--dim);margin-bottom:4px">Camera position in stream:</label>
+                <select id="o_cam_pos" style="width:100%;height:32px;padding:4px 8px;border-radius:6px;border:1px solid var(--line);background:var(--muted);font-size:12px;color:var(--brand-ink);font-weight:600">
+                  <option value="auto">Auto-detect (AI border &amp; motion scan)</option>
+                  <option value="top-right">Top-Right Corner</option>
+                  <option value="top-left">Top-Left Corner</option>
+                  <option value="bottom-right">Bottom-Right Corner</option>
+                  <option value="bottom-left">Bottom-Left Corner</option>
+                </select>
+              </div>
+              <div>
+                <label for="o_cam_fallback" style="display:block;font-size:11px;font-weight:600;color:var(--dim);margin-bottom:4px">If no facecam detected in video:</label>
+                <select id="o_cam_fallback" style="width:100%;height:32px;padding:4px 8px;border-radius:6px;border:1px solid var(--line);background:var(--muted);font-size:12px;color:var(--brand-ink);font-weight:600">
+                  <option value="blur">Fallback to Blurred Fill (Safe)</option>
+                  <option value="zoom">Fallback to Zoomed In</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- MANUAL MODE -->
+          <div id="camManualBox" style="display:none;margin-top:4px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase">Drag &amp; Resize Box on Stream Frame</span>
+              <div style="display:flex;gap:4px">
+                <button type="button" class="btn ghost sm crop-preset-btn" data-crop="tr" style="padding:2px 6px;font-size:10px">Top-Right</button>
+                <button type="button" class="btn ghost sm crop-preset-btn" data-crop="tl" style="padding:2px 6px;font-size:10px">Top-Left</button>
+                <button type="button" class="btn ghost sm crop-preset-btn" data-crop="br" style="padding:2px 6px;font-size:10px">Bottom-Right</button>
+                <button type="button" class="btn ghost sm crop-preset-btn" data-crop="bl" style="padding:2px 6px;font-size:10px">Bottom-Left</button>
+                <button type="button" class="btn sm" id="btnRefreshCropFrame" style="padding:2px 8px;font-size:10px;margin-left:4px">Load Frame</button>
+              </div>
+            </div>
+            <div id="cropContainer" class="crop-container">
+              <img id="cropImg" src="" style="width:100%;height:100%;object-fit:contain;display:none" alt="Stream Frame" />
+              <div id="cropPlaceholder" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#888;font-size:12px;gap:6px;padding:20px;text-align:center">
+                <span>Click "Load Frame" or paste a video link to see stream preview</span>
+              </div>
+              <div id="cropBox" class="crop-box" style="display:none">
+                <span class="crop-box-tag">FACECAM</span>
+                <div class="crop-handle"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 9:16 INTERACTIVE CANVAS & SPLIT SCREEN CONTROLS -->
+          <div class="canvas-9-16-wrapper" id="composerSplitCanvasWrapper" style="display:${c?.layout === 'stack' ? 'flex' : 'none'}">
+            <div class="canvas-9-16" id="composerCanvas916">
+              <div class="canvas-panel" id="compCanvTop" style="top:0;height:40%;background:linear-gradient(135deg, #2a2a2e, #1e1e24);color:#fff">
+                <span id="compCanvTopLabel">FACECAM</span>
+              </div>
+              <div class="canvas-seam" id="compCanvSeam" style="top:40%"><div></div></div>
+              <div class="canvas-panel" id="compCanvBot" style="bottom:0;height:60%;background:linear-gradient(135deg, #18181c, #0d0d11);color:#aaa">
+                <span id="compCanvBotLabel">GAMEPLAY</span>
+              </div>
+              <div class="canvas-cap-badge" id="compCanvCapBadge" style="bottom:15%">
+                <span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#10B981;margin-right:3px"></span>
+                <span id="compCanvCapText">CAPTIONS SAFE ZONE</span>
+              </div>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <span style="font-size:12px;font-weight:700;color:var(--brand-ink)">Split Ratio: <b id="compSplitRatioText" style="color:var(--brand)">40% / 60%</b></span>
+                <button type="button" class="btn ghost sm" id="btnCompSwap" style="padding:2px 8px;font-size:11px;height:26px">⇄ Swap Panels</button>
+              </div>
+              <div style="display:flex;gap:4px">
+                <button type="button" class="split-preset-btn" data-ratio="0.35">35 / 65</button>
+                <button type="button" class="split-preset-btn active" data-ratio="0.40">40 / 60</button>
+                <button type="button" class="split-preset-btn" data-ratio="0.50">50 / 50</button>
+              </div>
+              <div style="font-size:11px;color:var(--faint);line-height:1.3">Drag the orange seam on preview canvas to adjust height live.</div>
+              <div style="margin-top:2px">
+                <div style="font-size:11px;font-weight:700;color:var(--dim);margin-bottom:4px">Caption Safe-Zone Lock:</div>
+                <div style="display:flex;gap:4px">
+                  <button type="button" class="cap-anchor-btn active" data-anchor="safe_bottom">Safe Bottom (15%)</button>
+                  <button type="button" class="cap-anchor-btn" data-anchor="seam">On Seam</button>
+                  <button type="button" class="cap-anchor-btn" data-anchor="top">Top</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="ob"><div class="ot">Video quality</div><input type="hidden" id="o_quality" value="720"><div class="seg" role="group" aria-label="Video quality">
         <button type="button" data-seg="o_quality" data-v="720" aria-pressed="true">720p<small>Fast</small></button>
-        <button type="button" data-seg="o_quality" data-v="1080" aria-pressed="false">1080p<small>Sharper, about 2x slower</small></button></div></div>
-      <div class="ob"><div class="ot">Part of the video</div><div class="range">
-        <label>From<input id="o_from" type="number" min="0" placeholder="start" aria-label="From minute">min</label>${ic("arrowr")}
-        <label>To<input id="o_to" type="number" min="0" placeholder="end" aria-label="Up to minute">min</label></div></div>
-    </div></div></form>`;
+        <button type="button" data-seg="o_quality" data-v="1080" aria-pressed="false">1080p<small>Sharper · ~2x slower</small></button></div></div>
+      <div class="ob"><div class="ot">Audio &amp; Music Bed</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <label for="o_meme" style="font-size:11px;font-weight:600;color:var(--dim)">Viral Meme Sound</label>
+              <button type="button" class="audio-prev-btn" id="prev_meme">▶ Preview</button>
+            </div>
+            <select id="o_meme" style="width:100%;height:36px;padding:6px 8px;border-radius:6px;border:1px solid var(--line);background:#fff;color:inherit;font-size:12px">
+              <option value="">None</option>
+              ${opts(S.status.memes || {}, "")}
+            </select>
+            <div class="audio-vol-row">
+              <small>Meme volume:</small>
+              <input type="range" id="o_meme_vol" min="20" max="100" value="80" step="5">
+              <span id="o_meme_vol_txt" style="font-family:monospace;font-size:10.5px">80%</span>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <label for="o_music" style="font-size:11px;font-weight:600;color:var(--dim)">Music Bed</label>
+              <button type="button" class="audio-prev-btn" id="prev_music">▶ Preview</button>
+            </div>
+            <select id="o_music" style="width:100%;height:36px;padding:6px 8px;border-radius:6px;border:1px solid var(--line);background:#fff;color:inherit;font-size:12px">
+              <option value="">None</option>
+              ${opts(S.status.music_beds || {}, "")}
+            </select>
+            <div class="audio-vol-row">
+              <small>Duck volume:</small>
+              <input type="range" id="o_music_vol" min="5" max="60" value="25" step="5">
+              <span id="o_music_vol_txt" style="font-family:monospace;font-size:10.5px">25%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="ob wide" style="grid-column:1/-1" id="pullRangeSection"><div class="ot" style="display:flex;align-items:center;justify-content:space-between">
+          <span>Pull part of stream / video</span>
+          <div class="seg" role="group" aria-label="Range mode" style="padding:2px">
+            <button type="button" id="rangeModeFull" class="range-mode-btn" aria-pressed="true" style="padding:3px 10px;font-size:11.5px;border-radius:6px">Pull Full Video</button>
+            <button type="button" id="rangeModeCustom" class="range-mode-btn" aria-pressed="false" style="padding:3px 10px;font-size:11.5px;border-radius:6px">Custom Time Range</button>
+          </div>
+        </div>
+        
+        <div id="rangeFullBanner" style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#fff;border:1px solid var(--line);border-radius:8px;font-size:12px;color:var(--dim)">
+          <span style="color:var(--brand);display:inline-flex">${ic("check")}</span>
+          <span><b>Entire video mode:</b> PeakCut will analyze the entire video/stream to find viral highlight moments across the full duration.</span>
+          <button type="button" class="btn sm" id="btnSwitchToRange" style="margin-left:auto;font-size:11.5px;padding:4px 10px;border:1px solid var(--line);background:var(--muted)">Target specific timestamps</button>
+        </div>
+
+        <div id="rangeCustomBox" style="display:none;background:#fff;border:1px solid var(--brand);border-radius:8px;padding:12px 14px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <label for="o_from" style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:0.04em">Start pulling (HH:MM:SS):</label>
+              <input id="o_from" type="text" placeholder="00:00:00 (or 60m)" aria-label="Start pulling timestamp" style="width:170px;height:38px;padding:0 10px;border:1px solid var(--line);border-radius:6px;background:var(--muted);color:var(--brand-ink);font-weight:700;font-size:13.5px;font-family:monospace,sans-serif">
+            </div>
+            <span style="color:var(--brand);font-size:18px;font-weight:bold;align-self:flex-end;margin-bottom:8px">→</span>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <label for="o_to" style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:0.04em">End pulling (HH:MM:SS):</label>
+              <input id="o_to" type="text" placeholder="01:30:00 (or end)" aria-label="End pulling timestamp" style="width:170px;height:38px;padding:0 10px;border:1px solid var(--line);border-radius:6px;background:var(--muted);color:var(--brand-ink);font-weight:700;font-size:13.5px;font-family:monospace,sans-serif">
+            </div>
+            <button type="button" class="btn sm" id="btnResetFull" style="align-self:flex-end;margin-bottom:2px;font-size:11.5px;padding:8px 12px;border:1px solid var(--line);background:#fff">Reset to full video</button>
+          </div>
+          <div style="margin-top:8px;font-size:11.5px;color:var(--faint);line-height:1.4">
+            Only this exact section will be downloaded and clipped (e.g. <code>8:28:30</code> to <code>8:31:00</code> or <code>45m</code> to <code>50m</code>). The rest of the stream is ignored.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="ai-rate-banner ok" id="aiRateBanner"></div>
+  </div></form>`;
   drawAtt();
+
+  const updateRangeLabel = () => {
+    const isCustom = $("#rangeModeCustom")?.getAttribute("aria-pressed") === "true";
+    const fromV = $("#o_from")?.value.trim();
+    const toV = $("#o_to")?.value.trim();
+    const lbl = $("#rangeLabel");
+    const chip = $("#rangeChip");
+    if (!lbl) return;
+    if (isCustom && (fromV || toV)) {
+      lbl.textContent = `Range: ${fromV || "start"} → ${toV || "end"}`;
+      chip?.classList.add("range-active");
+    } else if (isCustom) {
+      lbl.textContent = "Custom Range";
+      chip?.classList.add("range-active");
+    } else {
+      lbl.textContent = "Pull whole video";
+      chip?.classList.remove("range-active");
+    }
+  };
+
+  const setRangeMode = custom => {
+    const btnFull = $("#rangeModeFull");
+    const btnCust = $("#rangeModeCustom");
+    const bFull = $("#rangeFullBanner");
+    const bCust = $("#rangeCustomBox");
+    if (!btnFull || !btnCust) return;
+    btnFull.setAttribute("aria-pressed", String(!custom));
+    btnCust.setAttribute("aria-pressed", String(custom));
+    if (bFull) bFull.style.display = custom ? "none" : "flex";
+    if (bCust) bCust.style.display = custom ? "block" : "none";
+    if (!custom) {
+      if ($("#o_from")) $("#o_from").value = "";
+      if ($("#o_to")) $("#o_to").value = "";
+    }
+    updateRangeLabel();
+  };
+
+  $("#rangeModeFull")?.addEventListener("click", () => setRangeMode(false));
+  $("#rangeModeCustom")?.addEventListener("click", () => setRangeMode(true));
+  $("#btnSwitchToRange")?.addEventListener("click", () => {
+    setRangeMode(true);
+    $("#o_from")?.focus();
+  });
+  $("#btnResetFull")?.addEventListener("click", () => setRangeMode(false));
+
+  $("#o_from")?.addEventListener("input", updateRangeLabel);
+  $("#o_to")?.addEventListener("input", updateRangeLabel);
+
+  // Audio preview buttons & volume controls
+  $("#prev_meme")?.addEventListener("click", e => {
+    e.preventDefault();
+    toggleAudioSample("meme", "o_meme", e.currentTarget);
+  });
+  $("#prev_music")?.addEventListener("click", e => {
+    e.preventDefault();
+    toggleAudioSample("music", "o_music", e.currentTarget);
+  });
+  $("#o_meme_vol")?.addEventListener("input", e => {
+    const v = e.target.value;
+    if ($("#o_meme_vol_txt")) $("#o_meme_vol_txt").textContent = v + "%";
+    if (curAudio && curAudioBtn?.id === "prev_meme") curAudio.volume = v / 100;
+  });
+  $("#o_music_vol")?.addEventListener("input", e => {
+    const v = e.target.value;
+    if ($("#o_music_vol_txt")) $("#o_music_vol_txt").textContent = v + "%";
+    if (curAudio && curAudioBtn?.id === "prev_music") curAudio.volume = v / 100;
+  });
+
+  const updateAiBanner = () => {
+    const b = $("#aiRateBanner");
+    if (!b) return;
+    const k = S.status.ai;
+    if (!k || !k.ready) {
+      b.className = "ai-rate-banner ok";
+      b.innerHTML = `${ic("bolt")} <span>AI not configured. PeakCut will select clips using audio loudness &amp; speech spikes.</span>`;
+      return;
+    }
+    const calls = k.today_calls || 0;
+    const toks = k.today_tokens || 0;
+    const prov = k.provider || "Groq";
+    if (calls >= 80) {
+      b.className = "ai-rate-banner warn";
+      b.innerHTML = `${ic("warn")} <span><b>High AI usage today:</b> ${calls} calls (${fmtK(toks)} tokens) on ${esc(prov)}. If your AI provider hits daily free-tier limits, PeakCut automatically switches to audio loudness &amp; speech energy analysis so clips still finish safely.</span>`;
+    } else {
+      b.className = "ai-rate-banner ok";
+      b.innerHTML = `${ic("bolt")} <span><b>AI Engine:</b> ${esc(prov)} (${esc(k.model || "ready")}) · ${calls} calls today. Automatic audio spike fallback active if limits are reached.</span>`;
+    }
+  };
+  window.updateAiBanner = updateAiBanner;
+  updateAiBanner();
+
+  const updateOptsBadges = () => {
+    const layout = $("#o_layout")?.value || c?.layout || "blur";
+    const style = $("#o_style")?.value || c?.style || "bounce";
+    const captions = $("#o_captions") ? $("#o_captions").checked : (c?.captions !== false);
+    const meme = $("#o_meme")?.value;
+    const music = $("#o_music")?.value;
+    const chip = $("#optsChip");
+    const badges = $("#optsBadges");
+    const fcCfg = $("#facecamCfg");
+    if (fcCfg) {
+      fcCfg.style.display = (layout === "gameplay" || layout === "stack") ? "block" : "none";
+    }
+    if (!badges) return;
+    const lLabel = LAYOUT_SHORT[layout] || layout;
+    const sLabel = S.status.styles?.[style] || style;
+    let extra = "";
+    if (meme) extra += `<span class="opt-pill">${esc(S.status.memes?.[meme] || meme)}</span>`;
+    if (music) extra += `<span class="opt-pill">${esc(S.status.music_beds?.[music] || music)}</span>`;
+    badges.innerHTML = `<span class="opt-pill ${esc(layout)}">${esc(lLabel)}</span><span class="opt-pill">${captions ? esc(sLabel) : "No captions"}</span>${extra}`;
+    chip?.classList.toggle("opt-active", layout !== "blur" || style !== "bounce" || !captions || !!meme || !!music);
+  };
+  $("#o_meme")?.addEventListener("change", updateOptsBadges);
+  $("#o_music")?.addEventListener("change", updateOptsBadges);
+  window.updateOptsBadges = updateOptsBadges;
+  updateOptsBadges();
+
+  // --- Auto/Manual Cam & 9:16 Canvas controls ---
+  window.composerCamMode = "auto";
+  window.composerSplitRatio = 0.40;
+  window.composerCamSwap = false;
+  window.composerCapAnchor = "safe_bottom";
+  window.manualCropCoords = {x: 0.72, y: 0.04, w: 0.25, h: 0.28};
+
+  const initCropBox = (x, y, w, h) => {
+    window.manualCropCoords = {x, y, w, h};
+    const cBox = $("#cropBox");
+    if (cBox) {
+      cBox.style.left = (x * 100) + "%";
+      cBox.style.top = (y * 100) + "%";
+      cBox.style.width = (w * 100) + "%";
+      cBox.style.height = (h * 100) + "%";
+      cBox.style.display = "block";
+    }
+  };
+
+  $("#btnCamAuto")?.addEventListener("click", () => {
+    window.composerCamMode = "auto";
+    $("#btnCamAuto")?.classList.add("active");
+    $("#btnCamManual")?.classList.remove("active");
+    if ($("#camAutoBox")) $("#camAutoBox").style.display = "block";
+    if ($("#camManualBox")) $("#camManualBox").style.display = "none";
+  });
+  $("#btnCamManual")?.addEventListener("click", () => {
+    window.composerCamMode = "manual";
+    $("#btnCamManual")?.classList.add("active");
+    $("#btnCamAuto")?.classList.remove("active");
+    if ($("#camAutoBox")) $("#camAutoBox").style.display = "none";
+    if ($("#camManualBox")) $("#camManualBox").style.display = "block";
+    initCropBox(window.manualCropCoords.x, window.manualCropCoords.y, window.manualCropCoords.w, window.manualCropCoords.h);
+    loadCropPreviewFrame();
+  });
+
+  const loadCropPreviewFrame = async () => {
+    const img = $("#cropImg"), ph = $("#cropPlaceholder");
+    const url = $("#url")?.value?.trim() || att()?.links?.[0]?.url || "";
+    if (!url) {
+      if (ph) ph.innerHTML = `<span>Type or paste a video link above first, then click Load Frame</span>`;
+      return;
+    }
+    if (ph) ph.innerHTML = `<span>Loading stream frame…</span>`;
+    try {
+      const res = await fetch(`/api/frame-preview?url=${encodeURIComponent(url)}`);
+      if (res.ok) {
+        const blob = await res.blob();
+        if (img) {
+          img.src = URL.createObjectURL(blob);
+          img.style.display = "block";
+        }
+        if (ph) ph.style.display = "none";
+        initCropBox(window.manualCropCoords.x, window.manualCropCoords.y, window.manualCropCoords.w, window.manualCropCoords.h);
+      } else {
+        if (ph) ph.innerHTML = `<span>Presets active for final video render.</span>`;
+        initCropBox(window.manualCropCoords.x, window.manualCropCoords.y, window.manualCropCoords.w, window.manualCropCoords.h);
+      }
+    } catch {
+      if (ph) ph.innerHTML = `<span>Adjust facecam crop box above:</span>`;
+      initCropBox(window.manualCropCoords.x, window.manualCropCoords.y, window.manualCropCoords.w, window.manualCropCoords.h);
+    }
+  };
+  $("#btnRefreshCropFrame")?.addEventListener("click", loadCropPreviewFrame);
+
+  $$(".crop-preset-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const p = btn.dataset.crop;
+      if (p === "tr") initCropBox(0.72, 0.04, 0.25, 0.28);
+      else if (p === "tl") initCropBox(0.03, 0.04, 0.25, 0.28);
+      else if (p === "br") initCropBox(0.72, 0.68, 0.25, 0.28);
+      else if (p === "bl") initCropBox(0.03, 0.68, 0.25, 0.28);
+    });
+  });
+
+  const setupCropDragging = () => {
+    const cBox = $("#cropBox"), cCont = $("#cropContainer"), handle = cBox?.querySelector(".crop-handle");
+    if (!cBox || !cCont) return;
+    let isDragging = false, isResizing = false, startX, startY, startCoords;
+    cBox.addEventListener("pointerdown", e => {
+      if (e.target === handle) return;
+      isDragging = true;
+      cBox.setPointerCapture(e.pointerId);
+      startX = e.clientX; startY = e.clientY;
+      startCoords = {...(window.manualCropCoords || {x: 0.72, y: 0.04, w: 0.25, h: 0.28})};
+      e.preventDefault();
+    });
+    handle?.addEventListener("pointerdown", e => {
+      isResizing = true;
+      handle.setPointerCapture(e.pointerId);
+      startX = e.clientX; startY = e.clientY;
+      startCoords = {...(window.manualCropCoords || {x: 0.72, y: 0.04, w: 0.25, h: 0.28})};
+      e.preventDefault(); e.stopPropagation();
+    });
+    const onMove = e => {
+      if (!isDragging && !isResizing) return;
+      const rect = cCont.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const dx = (e.clientX - startX) / rect.width;
+      const dy = (e.clientY - startY) / rect.height;
+      if (isDragging) {
+        let nx = Math.max(0, Math.min(1 - startCoords.w, startCoords.x + dx));
+        let ny = Math.max(0, Math.min(1 - startCoords.h, startCoords.y + dy));
+        window.manualCropCoords = {x: nx, y: ny, w: startCoords.w, h: startCoords.h};
+        cBox.style.left = (nx * 100) + "%";
+        cBox.style.top = (ny * 100) + "%";
+      } else if (isResizing) {
+        let nw = Math.max(0.08, Math.min(1 - startCoords.x, startCoords.w + dx));
+        let nh = Math.max(0.08, Math.min(1 - startCoords.y, startCoords.h + dy));
+        window.manualCropCoords = {x: startCoords.x, y: startCoords.y, w: nw, h: nh};
+        cBox.style.width = (nw * 100) + "%";
+        cBox.style.height = (nh * 100) + "%";
+      }
+    };
+    const onUp = e => {
+      isDragging = false; isResizing = false;
+      try { cBox.releasePointerCapture(e.pointerId); } catch {}
+      try { handle?.releasePointerCapture(e.pointerId); } catch {}
+    };
+    cBox.addEventListener("pointermove", onMove);
+    cBox.addEventListener("pointerup", onUp);
+    handle?.addEventListener("pointermove", onMove);
+    handle?.addEventListener("pointerup", onUp);
+  };
+  setupCropDragging();
+
+  const setupComposerCanvas = () => {
+    const seam = $("#compCanvSeam"), canvas = $("#composerCanvas916");
+    const topPanel = $("#compCanvTop"), botPanel = $("#compCanvBot");
+    const ratioText = $("#compSplitRatioText"), badge = $("#compCanvCapBadge");
+    if (!seam || !canvas) return;
+
+    const updateCanvasVisuals = (r) => {
+      window.composerSplitRatio = r;
+      if (topPanel) topPanel.style.height = (r * 100) + "%";
+      if (seam) seam.style.top = (r * 100) + "%";
+      if (botPanel) botPanel.style.height = ((1 - r) * 100) + "%";
+      if (ratioText) ratioText.textContent = Math.round(r * 100) + "% / " + Math.round((1 - r) * 100) + "%";
+      if (window.composerCapAnchor === "seam" && badge) {
+        badge.style.bottom = "auto";
+        badge.style.top = (r * 100) + "%";
+      }
+    };
+
+    let draggingSeam = false;
+    seam.addEventListener("pointerdown", e => {
+      draggingSeam = true;
+      seam.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    seam.addEventListener("pointermove", e => {
+      if (!draggingSeam) return;
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.height) return;
+      const r = Math.max(0.20, Math.min(0.80, (e.clientY - rect.top) / rect.height));
+      updateCanvasVisuals(Math.round(r * 100) / 100);
+    });
+    const endSeam = e => { draggingSeam = false; try { seam.releasePointerCapture(e.pointerId); } catch {} };
+    seam.addEventListener("pointerup", endSeam);
+    seam.addEventListener("pointercancel", endSeam);
+
+    $$(".split-preset-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        $$(".split-preset-btn").forEach(b => b.classList.toggle("active", b === btn));
+        updateCanvasVisuals(Number(btn.dataset.ratio));
+      });
+    });
+
+    $("#btnCompSwap")?.addEventListener("click", () => {
+      window.composerCamSwap = !window.composerCamSwap;
+      const tLabel = $("#compCanvTopLabel"), bLabel = $("#compCanvBotLabel");
+      if (window.composerCamSwap) {
+        if (tLabel) tLabel.textContent = "GAMEPLAY";
+        if (bLabel) bLabel.textContent = "FACECAM";
+        if (topPanel) topPanel.style.background = "linear-gradient(135deg, #18181c, #0d0d11)";
+        if (botPanel) botPanel.style.background = "linear-gradient(135deg, #2a2a2e, #1e1e24)";
+      } else {
+        if (tLabel) tLabel.textContent = "FACECAM";
+        if (bLabel) bLabel.textContent = "GAMEPLAY";
+        if (topPanel) topPanel.style.background = "linear-gradient(135deg, #2a2a2e, #1e1e24)";
+        if (botPanel) botPanel.style.background = "linear-gradient(135deg, #18181c, #0d0d11)";
+      }
+    });
+
+    $$(".cap-anchor-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        $$(".cap-anchor-btn").forEach(b => b.classList.toggle("active", b === btn));
+        const anchor = btn.dataset.anchor;
+        window.composerCapAnchor = anchor;
+        if (!badge) return;
+        if (anchor === "safe_bottom") {
+          badge.style.top = "auto";
+          badge.style.bottom = "15%";
+        } else if (anchor === "seam") {
+          badge.style.bottom = "auto";
+          badge.style.top = (window.composerSplitRatio * 100) + "%";
+        } else if (anchor === "top") {
+          badge.style.bottom = "auto";
+          badge.style.top = "12%";
+        }
+      });
+    });
+  };
+  setupComposerCanvas();
 }
-const LAYOUT_SHORT = {blur:"Blurred fill", zoom:"Zoomed in", crop:"Fill screen", gameplay:"Gameplay + facecam"};
-const CAP_LOOK = {bounce:{font:"'Archivo Black'", hl:"#FFFF00", up:true}, hype:{font:"Anton", hl:"#FF3C3C", up:true}, clean:{font:"Poppins", hl:"#6BD7FF", up:false, w:800}};
+const LAYOUT_SHORT = {blur:"Blurred fill", zoom:"Zoomed in", crop:"Fill screen", gameplay:"Corner Cam", stack:"Split Screen"};
+const CAP_LOOK = {
+  bounce: {font:"'Archivo Black'", hl:"#FFFF00", up:true},
+  hype: {font:"Anton", hl:"#FF3C3C", up:true},
+  clean: {font:"Poppins", hl:"#6BD7FF", up:false, w:800},
+  beast: {font:"'Lilita One', Impact", hl:"#FFEE00", up:true},
+  word: {font:"'Montserrat', Impact", hl:"#FF3333", up:true},
+  pop: {font:"'Bowlby One', cursive", hl:"#FF1493", up:true},
+  neon: {font:"'Righteous', cursive", hl:"#00FFFF", up:true}
+};
 function capPrev(k) {
   const s = CAP_LOOK[k] || {font:"inherit", hl:"#FF8B33", up:true};
   const t = s.up ? ["CLIP", "THIS"] : ["Clip", "this"];
-  return `<span class="cap-prev" style="font-family:${s.font},sans-serif;font-weight:${s.w || 400}">${t[0]}&nbsp;<b style="color:${s.hl}">${t[1]}</b></span>`;
+  return `<span class="cap-prev" style="font-family:${s.font},sans-serif;font-weight:${s.w || 600}"><span style="display:inline-block;letter-spacing:-0.035em;max-width:100%;transform:scale(0.92);transform-origin:center">${t[0]}&nbsp;<b style="color:${s.hl}">${t[1]}</b></span></span>`;
 }
 function picker(id, aria, items, val) {
   const cur = items.find(x => String(x.v) === String(val)) || items[0];
-  const av = x => x.img ? `<img class="av" src="${x.img}" alt="">` : `<span class="av">${x.icon ? ic(x.icon) : esc((x.label || "?").trim().slice(0, 1).toUpperCase())}</span>`;
+  const av = x => x.img ? `<img class="av" src="${x.img}" alt="">` : `<span class="av">${x.icon ? ic(x.icon) : esc(initialOf(x.label))}</span>`;
   return `<div class="pick"><input type="hidden" id="${id}" value="${esc(cur.v)}">
     <button type="button" class="chip pick-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="${esc(aria)}">${ic(cur.icon || "user")}<span class="pv">${esc(cur.label)}</span>${ic("caret").replace("<svg", '<svg class="car"')}</button>
     <div class="pick-menu" role="listbox">${items.map(x => `<button type="button" class="pick-opt" role="option" data-v="${esc(x.v)}" aria-selected="${String(x.v) === String(cur.v)}">${av(x)}<span class="pl">${esc(x.label)}</span>${ic("check").replace("<svg", '<svg class="tick"')}</button>`).join("")}${id === "o_creator" ? `${items.length < 2 ? `<p class="pick-empty">No creators yet. Add one to keep each streamer's clips, settings and accounts together.</p>` : ""}<button type="button" class="pick-new" data-act="newcreator"><span class="av">${ic("plus")}</span>New creator</button>` : ""}</div></div>`;
@@ -1411,7 +2111,8 @@ function stepper(id, label, val, min, max, step, unit) {
 }
 function choice(id, items, val, disabled = false) {
   const captions = id === "o_style";
-  return `<input type="hidden" id="${id}" value="${esc(val)}"><div class="tiles3" role="group"${captions ? ' aria-labelledby="o_style_label"' : ""}>${items.map(x =>
+  const gridCls = items.length >= 4 ? "tiles4" : "tiles3";
+  return `<input type="hidden" id="${id}" value="${esc(val)}"><div class="${gridCls}" role="group"${captions ? ' aria-labelledby="o_style_label"' : ""}>${items.map(x =>
     `<button type="button" class="tile-o" data-seg="${id}" data-v="${esc(x.v)}" aria-pressed="${String(x.v) === String(val)}"${captions ? " data-caption-style" : ""}${disabled ? " disabled" : ""}${x.title ? ` title="${esc(x.title)}"` : ""}>${x.prev}${esc(x.label)}</button>`).join("")}</div>`;
 }
 const closePicks = except => $$(".pick.open").forEach(p => { if (p !== except) { p.classList.remove("open"); p.querySelector(".pick-btn").setAttribute("aria-expanded", "false"); } });
@@ -1428,7 +2129,29 @@ document.addEventListener("click", e => {
   if (!e.target.closest(".pick") || e.target.closest(".pick-new")) closePicks();
   const sg = e.target.closest("[data-seg]");
   if (sg && !sg.disabled) { $("#" + sg.dataset.seg).value = sg.dataset.v;
-    sg.parentElement.querySelectorAll("[data-seg]").forEach(b => b.setAttribute("aria-pressed", String(b === sg))); return; }
+    sg.parentElement.querySelectorAll("[data-seg]").forEach(b => b.setAttribute("aria-pressed", String(b === sg)));
+    window.updateOptsBadges?.();
+    return; }
+  const rc = e.target.closest("[data-act='rangechip']");
+  if (rc) {
+    const opts = $(".composer-opts");
+    if (opts && (opts.hasAttribute("inert") || !opts.classList.contains("open"))) {
+      opts.removeAttribute("inert");
+      opts.classList.add("open");
+      $("#optsChip")?.setAttribute("aria-expanded", "true");
+      rc.setAttribute("aria-expanded", "true");
+    }
+    const switchToRange = $("#rangeModeCustom");
+    if (switchToRange && switchToRange.getAttribute("aria-pressed") !== "true") {
+      switchToRange.click();
+    }
+    setTimeout(() => {
+      $("#pullRangeSection")?.scrollIntoView({behavior: "smooth", block: "center"});
+      $("#o_from")?.focus();
+    }, 80);
+    e.preventDefault();
+    return;
+  }
   const st = e.target.closest("[data-step]");
   if (st) { const i = $("#" + st.dataset.step), s = Number(i.step) || 1, d = Number(st.dataset.d);
     const v = Math.min(Number(i.max), Math.max(Number(i.min), (Number(i.value) || 0) + d * s)); i.value = v; }
@@ -1442,12 +2165,86 @@ document.addEventListener("keydown", e => {
   const os = [...p.querySelectorAll(".pick-opt")], i = os.indexOf(document.activeElement);
   os[(i + (e.key === "ArrowDown" ? 1 : -1) + os.length) % os.length].focus();
 });
+function parseTime(val) {
+  if (val == null) return null;
+  const s = String(val).trim().toLowerCase();
+  if (!s || s === "start" || s === "end" || s === "full") return null;
+  if (s.includes(":")) {
+    const parts = s.split(":").map(Number);
+    if (!parts.some(isNaN)) {
+      if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+      if (parts.length === 2) return parts[0] * 60 + parts[1];
+    }
+  }
+  const h = s.match(/(\d+(?:\.\d+)?)\s*h/);
+  const m = s.match(/(\d+(?:\.\d+)?)\s*m/);
+  const sec = s.match(/(\d+(?:\.\d+)?)\s*s/);
+  if (h || m || sec) {
+    let tot = 0;
+    if (h) tot += parseFloat(h[1]) * 3600;
+    if (m) tot += parseFloat(m[1]) * 60;
+    if (sec) tot += parseFloat(sec[1]);
+    return tot;
+  }
+  const num = parseFloat(s);
+  if (!isNaN(num) && num >= 0) {
+    return num * 60;
+  }
+  return null;
+}
 const targetCreator = () => creatorId() || $("#o_creator")?.value || "";
 function jobOptions() {
-  const n = id => { const v = $(id).value; return v === "" ? null : Number(v); };
-  const o = {max_clips:n("#o_max"), min_len:n("#o_min"), max_len:n("#o_maxlen"), captions:$("#o_captions").checked, style:$("#o_style").value, layout:$("#o_layout").value, quality:n("#o_quality")};
-  if (n("#o_from") !== null) o.range_start = n("#o_from") * 60;
-  if (n("#o_to") !== null) o.range_end = n("#o_to") * 60;
+  const n = id => { const el = $(id); if (!el) return null; const v = el.value; return v === "" ? null : Number(v); };
+  const o = {
+    max_clips: n("#o_max"),
+    min_len: n("#o_min"),
+    max_len: n("#o_maxlen"),
+    captions: $("#o_captions") ? $("#o_captions").checked : true,
+    style: $("#o_style")?.value || "bounce",
+    layout: $("#o_layout")?.value || "blur",
+    review_mode: $("#o_review_mode")?.value || "auto",
+    quality: n("#o_quality") || 720
+  };
+  if ($("#o_meme")?.value && $("#o_meme").value !== "none") {
+    o.meme = $("#o_meme").value;
+    const mvol = Number($("#o_meme_vol")?.value || 80);
+    o.meme_vol = Math.round(20 * Math.log10(Math.max(0.05, mvol / 100)) * 10) / 10;
+  }
+  if ($("#o_music")?.value && $("#o_music").value !== "none") {
+    o.music = $("#o_music").value;
+    const bvol = Number($("#o_music_vol")?.value || 25);
+    o.music_db = Math.round(20 * Math.log10(Math.max(0.02, bvol / 100)) * 10) / 10;
+  }
+  if ($("#o_cam_pos")?.value && $("#o_cam_pos").value !== "auto") {
+    o.cam_pos = $("#o_cam_pos").value;
+  }
+  if ($("#o_cam_fallback")?.value) {
+    o.cam_fallback = $("#o_cam_fallback").value;
+  }
+  if (window.composerSplitRatio != null) {
+    o.split_ratio = window.composerSplitRatio;
+  }
+  if (window.composerCamSwap != null) {
+    o.cam_swap = window.composerCamSwap;
+  }
+  if (window.composerCapAnchor) {
+    o.cap_anchor = window.composerCapAnchor;
+  }
+  if (window.composerCamMode === "manual" && window.manualCropCoords) {
+    o.facecam = [
+      window.manualCropCoords.x,
+      window.manualCropCoords.y,
+      window.manualCropCoords.w,
+      window.manualCropCoords.h
+    ];
+  }
+  const isCustom = $("#rangeModeCustom")?.getAttribute("aria-pressed") === "true";
+  if (isCustom) {
+    const fromSec = parseTime($("#o_from")?.value);
+    const toSec = parseTime($("#o_to")?.value);
+    if (fromSec !== null) o.range_start = fromSec;
+    if (toSec !== null) o.range_end = toSec;
+  }
   return o;
 }
 /* ---------- attachments: nothing starts until Make clips is pressed.
@@ -1495,11 +2292,15 @@ function drawAtt() {
   h += A.links.map(l => {
     if (l.state === "wait") return `<div class="lp wait" data-row="${l.id}"><div class="th"></div><div class="tx"><span class="sk" style="width:62%"></span><span class="sk" style="width:34%"></span></div>
       ${A.busy ? "" : `<button type="button" class="rm" data-rm="link" data-id="${l.id}" aria-label="Remove link">${ic("x")}</button>`}</div>`;
-    if (l.state === "bad") return `<div class="lp bad" data-row="${l.id}">${ic("warn")}<span><b>${esc(l.url)}</b>${esc(l.msg)}</span>
+    if (l.state === "bad") {
+      const isYt = /youtube\.com|youtu\.be/i.test(l.url) || (l.msg && l.msg.includes("YouTube"));
+      return `<div class="lp bad" data-row="${l.id}">${ic("warn")}<span><b>${esc(l.url)}</b>${esc(l.msg)}${isYt ? `<span class="yt-actions" style="display:flex;gap:8px;margin-top:6px"><button type="button" class="btn sm" data-act="ytretry" data-url="${esc(l.url)}">${ic("refresh")}Retry YouTube now</button><a href="${pathFor("settings", "youtube")}" class="btn sm ghost">${ic("play")}Add YouTube Cookies</a></span>` : ""}</span>
       ${A.busy ? "" : `<button type="button" class="rm" data-rm="link" data-id="${l.id}" aria-label="Remove link">${ic("x")}</button>`}</div>`;
+    }
     const i = l.info;
+    const rb = i?.clip_rule ? " " + ruleBadge(i.clip_rule) : "";
     return rowHtml(A, {id: l.id, kind: "link", thumb: i.thumb ? `<img src="${i.thumb}" alt="">` : "", len: i.duration && !i.is_live ? fmtLen(i.duration) : "",
-      title: i.title, sub: esc(i.uploader || "Video link"),
+      title: i.title, sub: esc(i.uploader || "Video link") + rb,
       side: l.sending ? `<span class="ok up">Sending</span>` : i.is_live ? `<span class="ok live"><i></i>Live now</span>` : `<span class="ok">${ic("check")}Ready</span>`});
   }).join("");
   h += A.files.map(f => rowHtml(A, {id: f.id, kind: "file", thumb: `<video src="${f.src}#t=1" muted preload="metadata" playsinline></video>`,
@@ -1560,8 +2361,50 @@ function onLink(input) {
   if (fullLink(u)) return takeLink(A, u, input);
   linkTimer = setTimeout(() => { if (input.value.trim() === u) takeLink(A, u, input); }, 900);   // other link shapes: take it once typing stops
 }
-document.addEventListener("input", e => { if (e.target.id === "url") onLink(e.target);
-  if (e.target.closest?.("#cform") && e.target.dataset.k && !/checkbox|radio/.test(e.target.type)) dirty(true); });
+document.addEventListener("input", e => {
+  if (e.target.id === "url") onLink(e.target);
+  if (e.target.closest?.("#cform") && e.target.dataset.k && !/checkbox|radio/.test(e.target.type)) dirty(true);
+  if (e.target.classList.contains("lt-slider")) {
+    const jid = e.target.dataset.j;
+    const minEl = document.getElementById("ltMin_" + jid);
+    const maxEl = document.getElementById("ltMax_" + jid);
+    if (minEl && maxEl) {
+      let s = Number(minEl.value), en = Number(maxEl.value);
+      const minBound = Number(minEl.min), maxBound = Number(maxEl.max);
+      if (e.target === minEl) {
+        if (s > en - 3) { s = Math.max(minBound, en - 3); minEl.value = s; }
+        minEl.style.zIndex = "4"; maxEl.style.zIndex = "3";
+      } else {
+        if (en < s + 3) { en = Math.min(maxBound, s + 3); maxEl.value = en; }
+        maxEl.style.zIndex = "4"; minEl.style.zIndex = "3";
+      }
+      S.liveRanges = S.liveRanges || {};
+      S.liveRanges[jid] = {start: s, end: en};
+      const span = Math.max(1, maxBound - minBound);
+      const pctS = Math.max(0, Math.min(100, ((s - minBound) / span) * 100));
+      const pctE = Math.max(0, Math.min(100, ((en - minBound) / span) * 100));
+      const selBar = document.getElementById("ltSelBar_" + jid);
+      if (selBar) {
+        selBar.style.left = pctS + "%";
+        selBar.style.width = Math.max(1, pctE - pctS) + "%";
+      }
+      const sTxt = document.getElementById("ltStartTxt_" + jid);
+      const eTxt = document.getElementById("ltEndTxt_" + jid);
+      const durBadge = document.getElementById("ltDurBadge_" + jid);
+      const makeBtn = document.getElementById("ltMakeBtn_" + jid);
+      if (sTxt) sTxt.textContent = fmt(s);
+      if (eTxt) eTxt.textContent = fmt(en);
+      const dur = en - s;
+      if (durBadge) {
+        durBadge.textContent = fmt(dur) + (dur > 180 ? " · max 180s per clip" : "");
+        durBadge.classList.toggle("warn", dur > 180);
+      }
+      if (makeBtn) {
+        makeBtn.innerHTML = `${ic("scissors")}Make clip from range (${fmt(s)} → ${fmt(en)})`;
+      }
+    }
+  }
+});
 document.addEventListener("keydown", e => { if (e.target.id === "url" && e.key === "Enter" && e.target.value.trim() && looksLink(e.target.value.trim())) { e.preventDefault(); clearTimeout(linkTimer); takeLink(att(), e.target.value.trim(), e.target); } });
 document.addEventListener("click", e => {
   const r = e.target.closest("[data-rm]"), A = att(); if (!r || A.busy) return;
@@ -1679,13 +2522,38 @@ function postPills(c) {
 }
 function clipHtml(j, c) {
   const m = `/media/${j.id}/`, a = `data-j="${j.id}" data-c="${esc(c.id)}"`;
-  const body = c.status === "done" ? `<img src="${m}${esc(c.cover)}?v=${c.version}" alt="" loading="lazy"><span class="veil"><span>${ic("play")}</span></span>`
-    : c.status === "error" ? `<span class="making" style="animation:none;color:var(--bad);background:var(--bad-soft)">Could not make this clip. Open it to try again.</span>`
-    : `<span class="making">${c.status === "rendering" ? "Making this clip…" : "Waiting its turn…"}</span>`;
-  const key = `c:${j.id}:${c.id}`, busyClip = c.status === "queued" || c.status === "rendering";
+  let body = "";
+  if (c.status === "done") {
+    body = `<img src="${m}${esc(c.cover)}?v=${c.version || 1}" alt="" loading="lazy"><span class="veil"><span>${ic("play")}</span></span>`;
+  } else if (c.status === "awaiting_review") {
+    body = `<img src="${m}${esc(c.cover || (c.id + '.jpg'))}?v=${c.version || 1}" alt="" loading="lazy"><span class="veil" style="opacity:1"><span style="background:var(--brand);color:#fff;font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;width:auto;height:auto">Review</span></span>`;
+  } else if (c.status === "approved") {
+    body = `<img src="${m}${esc(c.cover || (c.id + '.jpg'))}?v=${c.version || 1}" alt="" loading="lazy"><span class="veil" style="opacity:1"><span style="background:#10B981;color:#fff;font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;width:auto;height:auto">Approved</span></span>`;
+  } else if (c.status === "rendering_final") {
+    body = `<span class="making">Rendering final…</span>`;
+  } else if (c.status === "drafting") {
+    body = `<span class="making">Generating draft…</span>`;
+  } else if (c.status === "qc_flagged") {
+    body = `<img src="${m}${esc(c.cover || (c.id + '.jpg'))}?v=${c.version || 1}" alt="" loading="lazy"><span class="veil" style="opacity:1"><span style="background:#EF4444;color:#fff;font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;width:auto;height:auto">QC Flagged</span></span>`;
+  } else if (c.status === "failed" || c.status === "error") {
+    body = `<span class="making" style="animation:none;color:var(--bad);background:var(--bad-soft)">${esc(c.error || "Could not make this clip. Open to retry.")}</span>`;
+  } else {
+    body = `<span class="making">${c.status === "rendering" ? "Making this clip…" : "Waiting its turn…"}</span>`;
+  }
+
+  const key = `c:${j.id}:${c.id}`;
+  const busyClip = c.status === "queued" || c.status === "rendering" || c.status === "drafting" || c.status === "rendering_final";
+  
+  let stBadge = "";
+  if (c.status === "awaiting_review") stBadge = `<span class="badge" style="top:auto;bottom:10px;left:10px;background:#F59E0B;color:#fff;font-size:10px;font-weight:700">Needs review</span>`;
+  else if (c.status === "approved") stBadge = `<span class="badge" style="top:auto;bottom:10px;left:10px;background:#10B981;color:#fff;font-size:10px;font-weight:700">Approved</span>`;
+  else if (c.status === "rendering_final") stBadge = `<span class="badge" style="top:auto;bottom:10px;left:10px;background:#3B82F6;color:#fff;font-size:10px;font-weight:700">Rendering</span>`;
+  else if (c.status === "qc_flagged") stBadge = `<span class="badge" style="top:auto;bottom:10px;left:10px;background:#EF4444;color:#fff;font-size:10px;font-weight:700" title="${esc(c.error || '')}">QC Flagged</span>`;
+  else if (c.qc) stBadge = `<span class="badge ${c.qc.status === 'PASS' ? 'qc-pass' : c.qc.status === 'WARN' ? 'qc-warn' : 'qc-fail'}" style="top:auto;bottom:10px;left:10px;font-size:10px" title="${esc((c.qc.notes || []).join(' · ') || c.qc.status)}">QC: ${esc(c.qc.status)}</span>`;
+
   return `<article class="clip ${sel().has(key) ? "picked" : ""}">
     <button class="shot" data-act="openclip" ${a} aria-label="Open clip: ${esc(c.title || c.hook)}">${body}
-      <span class="badge l ${scoreCls(c.score)}" title="AI score">${c.score || "Hand"}</span><span class="badge r">${fmt(c.end - c.start)}</span></button>
+      <span class="badge l ${scoreCls(c.score)}" title="AI score">${c.score || "Hand"}</span><span class="badge r">${fmt(c.end - c.start)}</span>${stBadge}</button>
     <div class="clip-body">
       <div class="hook">${esc(c.hook || "Untitled clip")}</div>
       <div class="ttl">${esc(c.title)}</div>
@@ -1696,6 +2564,7 @@ function clipHtml(j, c) {
         <button class="btn sm icon ghost" data-act="copy" ${a} title="Copy post text" aria-label="Copy post text">${ic("copy")}</button>
         ${busyClip ? "" : `<button class="btn sm icon ghost" data-act="delclip" ${a} title="Delete this clip" aria-label="Delete this clip">${ic("trash")}</button>`}
         <span class="grow"></span>
+        ${c.status === "awaiting_review" || c.status === "qc_flagged" ? `<button class="btn sm primary" data-act="openclip" ${a} style="background:var(--brand);color:#fff">Review</button><button class="btn sm" data-act="approveclipquick" ${a} style="background:#10B981;color:#fff;border:0" title="Quick Approve">✓</button>` : ""}
         ${c.status === "done" ? `<button class="btn sm" data-act="openclip" ${a}>${ic("send")}Post</button>` : ""}
       </div>
     </div></article>`;
@@ -1710,16 +2579,177 @@ function everyPick(cid, v) {
 }
 function liveHtml(j) {
   const L = j.live || {elapsed:0, lines:[], level:[], chat:null, checks:0, buffer_sec:0, pending_clips:0};
+  const elapsed = L.elapsed || 0;
+  const bufStart = L.buffer_start || 0;
+  const bufEnd = L.buffer_end || elapsed;
+  const chk = L.last_checkpoint || 0;
+  const curLay = L.layout || j.options?.layout || "gameplay";
+  const curStyle = L.style || j.options?.style || "bold_stroke";
+  const curCaps = L.captions ?? j.options?.captions ?? true;
+
+  // Slider bounds and values
+  const minT = Math.floor(bufStart);
+  const maxT = Math.ceil(Math.max(bufStart + 10, bufEnd));
+  S.liveRanges = S.liveRanges || {};
+  let curR = S.liveRanges[j.id];
+  if (!curR || curR.start < minT || curR.end > maxT + 5 || curR.end <= curR.start) {
+    if (chk > minT && chk < maxT - 5) {
+      curR = { start: chk, end: Math.min(maxT, chk + 60) };
+    } else {
+      curR = { start: Math.max(minT, maxT - 60), end: maxT };
+    }
+    S.liveRanges[j.id] = curR;
+  }
+  const sVal = Math.max(minT, Math.min(maxT - 3, curR.start));
+  const eVal = Math.min(maxT, Math.max(sVal + 3, curR.end));
+  const spanT = Math.max(1, maxT - minT);
+  const pctS = Math.max(0, Math.min(100, ((sVal - minT) / spanT) * 100));
+  const pctE = Math.max(0, Math.min(100, ((eVal - minT) / spanT) * 100));
+  const durVal = eVal - sVal;
+
+  const isFirst = !chk || chk <= 0;
+  const seqFrom = isFirst ? 0 : chk;
+  const seqTo = elapsed;
+  const seqDur = Math.max(0, seqTo - seqFrom);
+
+  const LAY_OPTS = [
+    {id:"gameplay", name:"Gameplay + Corner Cam", desc:"Full video with streamer facecam in corner"},
+    {id:"stack", name:"Split Screen", desc:"Streamer facecam on top, gameplay below"},
+    {id:"crop", name:"Fill screen", desc:"Centre crop into 9:16 vertical"},
+    {id:"blur", name:"Blurred fill", desc:"Full widescreen with blurred background"},
+    {id:"zoom", name:"Zoomed in", desc:"Zoomed view with blurred background"}
+  ];
+  const curCamDelay = Number(L.cam_delay ?? j.options?.cam_delay ?? 0.0);
+  const CAM_DELAY_OPTS = [[-0.5, "-500ms"], [-0.2, "-200ms"], [0.0, "Perfect (0ms)"], [0.2, "+200ms"], [0.5, "+500ms"]];
+
+  const STYLE_OPTS = Object.entries(S.status.styles || {bold_stroke:"Bold stroke", clean_box:"Clean box", cinema:"Cinema", headline:"Headline", karaoke:"Karaoke", minimal:"Minimal"});
+
   return `<div class="livecard">
-    <div class="lc-head"><div class="lc-title"><span class="pill live"><span class="dot"></span>Live</span>
-        <h3>${esc(j.title || j.source.name)}</h3><p class="sub">${esc(j.uploader)}${j.uploader ? " · " : ""}${esc(j.stage)}</p></div>
-      <div class="lc-acts"><button class="btn primary" data-act="clipnow" data-j="${j.id}" data-s="30">${ic("scissors")}Clip last 30s</button>
-        <button class="btn" data-act="clipnow" data-j="${j.id}" data-s="60">Last 60s</button>
-        <button class="btn danger" data-act="stoplive" data-j="${j.id}">${ic("stop")}Stop</button></div></div>
-    <div class="stats"><div class="stat"><b>${fmt(L.elapsed)}</b><span>Recorded</span></div><div class="stat"><b>${Math.round(L.buffer_sec / 60)} min</b><span>Kept in buffer</span></div>
+    <div class="lc-head">
+      <div class="lc-title">
+        <span class="pill live"><span class="dot"></span>Live</span>
+        <h3>${esc(j.title || j.source.name)}</h3>
+        <p class="sub">${esc(j.uploader)}${j.uploader ? " · " : ""}${esc(j.stage)}</p>
+      </div>
+      <div class="lc-acts">
+        <button class="btn primary" data-act="clipnow" data-j="${j.id}" data-s="30" title="Clip last 30 seconds">${ic("scissors")}30s</button>
+        <button class="btn" data-act="clipnow" data-j="${j.id}" data-s="60" title="Clip last 60 seconds">60s</button>
+        <button class="btn" data-act="clipnow" data-j="${j.id}" data-s="90" title="Clip last 90 seconds">90s</button>
+        <button class="btn" data-act="clipnow" data-j="${j.id}" data-s="120" title="Clip last 2 minutes">2m</button>
+        <button class="btn danger" data-act="stoplive" data-j="${j.id}">${ic("stop")}Stop</button>
+      </div>
+    </div>
+
+    <!-- Sequential clipping banner: continuous from last clip checkpoint -->
+    <div class="lc-seq-banner">
+      <div class="lc-seq-info">
+        <div class="lc-seq-title">${ic("scissors")}${isFirst ? "Sequential clipping · Start checkpoint" : "Sequential clipping · Next segment"}</div>
+        <div class="lc-seq-desc">
+          ${isFirst 
+            ? `No clips recorded yet. Next clip will record from the beginning <b>(0:00)</b> up to current stream live <b>(${fmt(elapsed)})</b>.` 
+            : `Last clip ended at <b>${fmt(chk)}</b>. Next clip starts at <b>${fmt(chk)}</b> up to now <b>(${fmt(elapsed)})</b> (${fmt(seqDur)}), seamlessly continuing with zero duplicate or missed moments.`}
+        </div>
+      </div>
+      <button class="btn primary" data-act="clipsincelast" data-j="${j.id}">
+        ${ic("scissors")}${isFirst ? `Clip from start to now (0:00 → ${fmt(elapsed)})` : `Clip since last clip (${fmt(chk)} → ${fmt(elapsed)})`}
+      </button>
+    </div>
+
+    <!-- Clip Layout & Facecam options -->
+    <div class="lc-section">
+      <div class="lc-section-head">
+        <h4>Clip Layout &amp; Camera</h4>
+        <span class="sub">Applied to all new clips generated from this live session</span>
+      </div>
+      <div class="live-layouts">
+        ${LAY_OPTS.map(l => `
+          <button type="button" class="live-lay-btn ${curLay === l.id ? 'on' : ''}" data-act="livelayout" data-j="${j.id}" data-lay="${l.id}" aria-pressed="${curLay === l.id}">
+            <div class="live-lay-icon ${l.id}">
+              ${l.id === 'gameplay' ? '<span class="cam"></span>' : ''}
+            </div>
+            <div class="live-lay-info">
+              <b>${l.name}</b>
+              <small>${l.desc}</small>
+            </div>
+            ${curLay === l.id ? ic("check").replace("<svg", '<svg class="tick"') : ''}
+          </button>
+        `).join("")}
+      </div>
+
+      <!-- Caption options -->
+      <div class="live-subopts">
+        <span>Captions:</span>
+        <button type="button" class="live-pill ${curCaps ? 'on' : ''}" data-act="livetogglecaptions" data-j="${j.id}">
+          ${curCaps ? ic("check").replace("<svg", '<svg style="width:12px;height:12px;vertical-align:-1px;margin-right:3px"') + "Captions ON" : "Captions OFF"}
+        </button>
+        <span style="margin-left:8px">Style:</span>
+        <div class="live-pills">
+          ${STYLE_OPTS.map(([k, label]) => `
+            <button type="button" class="live-pill ${curStyle === k ? 'on' : ''}" data-act="livestyle" data-j="${j.id}" data-style="${k}">${esc(label)}</button>
+          `).join("")}
+        </div>
+      </div>
+
+      <!-- Facecam camera sync options -->
+      <div class="live-subopts" style="margin-top:-6px">
+        <span>Facecam Sync:</span>
+        <div class="live-pills">
+          ${CAM_DELAY_OPTS.map(([v, lbl]) => `
+            <button type="button" class="live-pill ${Math.abs(curCamDelay - v) < 0.05 ? 'on' : ''}" data-act="livecamdelay" data-j="${j.id}" data-delay="${v}" title="Fine-tune facecam timing relative to video and captions">${lbl}</button>
+          `).join("")}
+        </div>
+        <small style="color:var(--dim);margin-left:4px">Fixes streamer camera delay or lip-sync mismatch</small>
+      </div>
+    </div>
+    </div>
+
+    <!-- Dual-Handle Timeline Slider Bar UI -->
+    <div class="lt-box" id="ltBox_${j.id}">
+      <div class="lt-header">
+        <div class="lt-times">
+          <span>From: <b id="ltStartTxt_${j.id}">${fmt(sVal)}</b></span>
+          <span>To: <b id="ltEndTxt_${j.id}">${fmt(eVal)}</b></span>
+          <span class="lt-dur ${durVal > 180 ? 'warn' : ''}" id="ltDurBadge_${j.id}">${fmt(durVal)}${durVal > 180 ? ' · max 180s per clip' : ''}</span>
+        </div>
+        <div class="sub">Live Buffer: ${fmt(bufStart)} — ${fmt(bufEnd)} (total ${fmt(L.buffer_sec || (bufEnd - bufStart))})</div>
+      </div>
+
+      <div class="lt-slider-box">
+        <div class="lt-track"></div>
+        <div class="lt-sel-bar" id="ltSelBar_${j.id}" style="left:${pctS}%;width:${Math.max(1, pctE - pctS)}%;"></div>
+        ${chk > minT && chk < maxT ? `<div class="lt-chk-line" style="left:${((chk - minT) / spanT) * 100}%;"><span class="lt-chk-badge">Last clip: ${fmt(chk)}</span></div>` : ''}
+        <input type="range" class="lt-slider lt-slider-min" id="ltMin_${j.id}" data-j="${j.id}" min="${minT}" max="${maxT}" step="1" value="${sVal}" aria-label="Clip start time">
+        <input type="range" class="lt-slider lt-slider-max" id="ltMax_${j.id}" data-j="${j.id}" min="${minT}" max="${maxT}" step="1" value="${eVal}" aria-label="Clip end time">
+      </div>
+
+      <div class="lt-presets-row">
+        <div class="lt-presets">
+          <span class="sub" style="font-size:11px;font-weight:600;margin-right:2px">PRESETS:</span>
+          <button type="button" class="btn sm ghost" data-act="ltpreset" data-j="${j.id}" data-p="30">Last 30s</button>
+          <button type="button" class="btn sm ghost" data-act="ltpreset" data-j="${j.id}" data-p="60">Last 60s</button>
+          <button type="button" class="btn sm ghost" data-act="ltpreset" data-j="${j.id}" data-p="90">Last 90s</button>
+          <button type="button" class="btn sm ghost" data-act="ltpreset" data-j="${j.id}" data-p="120">Last 2m</button>
+          <button type="button" class="btn sm ghost" data-act="ltpreset" data-j="${j.id}" data-p="sincelast">Since last clip</button>
+          <button type="button" class="btn sm ghost" data-act="ltpreset" data-j="${j.id}" data-p="whole">Whole buffer</button>
+        </div>
+        <div class="lt-action">
+          <button class="btn primary" id="ltMakeBtn_${j.id}" data-act="cliprange" data-j="${j.id}">
+            ${ic("scissors")}Make clip from range (${fmt(sVal)} → ${fmt(eVal)})
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><b>${fmt(L.elapsed)}</b><span>Recorded</span></div>
+      <div class="stat"><b>${Math.round(L.buffer_sec / 60)} min</b><span>Kept in buffer</span></div>
       <div class="stat">${everyPick(j.creator, L.every_min ?? 3)}<span>${L.every_min === 0 ? (L.auto?.warming ? "AI checks: learning the stream" : L.auto?.waiting ? "AI checks: jump spotted, checking soon" : `AI checks on jumps · ${L.auto?.spikes || 0} so far`) : "AI checks every"}</span></div>
-      <div class="stat"><b>${L.checks}</b><span>AI calls${L.skipped ? ` · ${L.skipped} skipped` : ""}${L.rejected ? ` · ${L.rejected} turned down` : ""}</span></div><div class="stat"><b>${j.clips.length}</b><span>Clips so far</span></div>
-      ${L.pending_clips ? `<div class="stat"><b>${L.pending_clips}</b><span>Hand clip being prepared</span></div>` : ""}</div>
+      <div class="stat"><b>${L.checks}</b><span>AI calls${L.skipped ? ` · ${L.skipped} skipped` : ""}${L.rejected ? ` · ${L.rejected} turned down` : ""}</span></div>
+      <div class="stat"><b>${chk > 0 ? fmt(chk) : "None yet"}</b><span>Last clip checkpoint</span></div>
+      <div class="stat"><b>${j.clips.length}</b><span>Clips so far</span></div>
+      ${L.pending_clips ? `<div class="stat"><b>${L.pending_clips}</b><span>Hand clip being prepared</span></div>` : ""}
+    </div>
+
     <div class="meters">
       <div class="meter"><h4>Loudness, last minute</h4>${spark(L.level, "", -55, -8)}</div>
       ${L.chat ? `<div class="meter"><h4>Chat messages per second</h4>${spark(L.chat, "chat", 0, Math.max(4, ...L.chat))}</div>` : ""}
@@ -1731,19 +2761,53 @@ function liveHtml(j) {
 function jobHtml(j) {
   if (j.status === "live") return liveHtml(j);
   const busy = j.status === "queued" || j.status === "running";
+  const paused = j.status === "paused";
   const who = !creatorId() && j.creator ? S.creators.find(c => c.id === j.creator)?.name : "";
-  const meta = [who, j.uploader, j.duration ? fmt(j.duration) + " long" : "", j.clips.length ? j.clips.length + (j.clips.length === 1 ? " clip" : " clips") : "",
+  const rPart = (j.options?.range_start || j.options?.range_end) ? "part " + fmt(j.options.range_start || 0) + " to " + (j.options.range_end ? fmt(j.options.range_end) : "end") : "";
+  const meta = [who, j.uploader, j.duration ? fmt(j.duration) + " long" : "", rPart, j.clips.length ? j.clips.length + (j.clips.length === 1 ? " clip" : " clips") : "",
                 j.took ? "made in " + fmt(j.took) : "", j.kind === "live" ? "recording, " + j.stage.toLowerCase() : ""].filter(Boolean).map(esc).join(" · ");
   const pic = j.thumb ? `<img src="/media/${esc(j.id)}/thumb.jpg" alt="" loading="lazy">` : ic(j.source?.type === "file" ? "film" : "link");
+  const curFilter = (S.clipFilter = S.clipFilter || {})[j.id] || "all";
+  const nAwaiting = j.clips.filter(c => c.status === "awaiting_review").length;
+  const nApproved = j.clips.filter(c => c.status === "approved" || c.status === "rendering_final").length;
+  const nDone = j.clips.filter(c => c.status === "done").length;
+  const nQc = j.clips.filter(c => c.status === "qc_flagged").length;
+  const showFilters = j.clips.length > 0 && (nAwaiting > 0 || nApproved > 0 || nQc > 0);
+
+  let filterBar = "";
+  if (showFilters) {
+    filterBar = `<div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0;flex-wrap:wrap;gap:8px">
+      <div class="seg sm" role="group">
+        <button type="button" class="${curFilter==='all'?'active':''}" data-act="clipfilter" data-j="${j.id}" data-v="all">All (${j.clips.length})</button>
+        ${nAwaiting ? `<button type="button" class="${curFilter==='review'?'active':''}" data-act="clipfilter" data-j="${j.id}" data-v="review" style="color:#D97706;font-weight:700">Needs Review (${nAwaiting})</button>` : ''}
+        ${nApproved ? `<button type="button" class="${curFilter==='approved'?'active':''}" data-act="clipfilter" data-j="${j.id}" data-v="approved">Approved (${nApproved})</button>` : ''}
+        ${nDone ? `<button type="button" class="${curFilter==='done'?'active':''}" data-act="clipfilter" data-j="${j.id}" data-v="done">Done (${nDone})</button>` : ''}
+        ${nQc ? `<button type="button" class="${curFilter==='qc'?'active':''}" data-act="clipfilter" data-j="${j.id}" data-v="qc" style="color:#DC2626;font-weight:700">QC Flagged (${nQc})</button>` : ''}
+      </div>
+      ${nAwaiting ? `<button type="button" class="btn sm" data-act="approvealljob" data-j="${j.id}" style="background:#10B981;color:#fff;border:0;font-weight:700">✓ Approve all (${nAwaiting})</button>` : ''}
+    </div>`;
+  }
+
+  const visibleClips = curFilter === "review" ? j.clips.filter(c => c.status === "awaiting_review")
+    : curFilter === "approved" ? j.clips.filter(c => c.status === "approved" || c.status === "rendering_final")
+    : curFilter === "done" ? j.clips.filter(c => c.status === "done")
+    : curFilter === "qc" ? j.clips.filter(c => c.status === "qc_flagged")
+    : j.clips;
+
   return `<div class="job-head"><div class="jt"><span class="jthumb">${pic}${j.duration ? `<span class="du">${fmt(j.duration)}</span>` : ""}</span><div style="min-width:0"><h3>${esc(j.title || j.source.name)}</h3><p class="sub">${meta}</p></div></div>
-      <div class="row" style="flex-wrap:nowrap;gap:4px">${busy ? "" : `
+      <div class="row" style="flex-wrap:nowrap;gap:4px">
+        ${busy ? `<button class="btn sm icon ghost" data-act="pausejob" data-j="${j.id}" title="Pause" aria-label="Pause processing this video">${ic("pause")}</button>` : ""}
+        ${paused ? `<button class="btn sm icon ghost" data-act="resumejob" data-j="${j.id}" title="Resume" aria-label="Resume processing this video">${ic("play")}</button>` : ""}
+        ${busy ? "" : `
         ${j.clips.some(c => c.status === "done") ? `<button class="btn sm icon ghost" data-act="dlall" data-j="${j.id}" title="Download all clips of this video" aria-label="Download all clips of this video">${ic("down")}</button>` : ""}
         <button class="btn sm icon ghost" data-act="deljob" data-j="${j.id}" title="Delete" aria-label="Delete this video and its clips">${ic("trash")}</button>
         <label class="selck" title="Select this video and its clips"><input type="checkbox" data-sel="j:${j.id}" ${sel().has("j:" + j.id) ? "checked" : ""} aria-label="Select this video"></label>`}</div></div>
     ${busy ? `<div class="bar"><i style="width:${Math.round(j.progress * 100)}%"></i></div><p class="sub">${esc(j.stage)} · ${Math.round(j.progress * 100)}%</p>` : ""}
+    ${paused ? `<div class="bar" style="opacity:0.5"><i style="width:${Math.round(j.progress * 100)}%"></i></div><p class="sub"><span class="pill warn" style="margin-right:6px">Paused</span>${esc(j.stage)} · ${Math.round(j.progress * 100)}%</p>` : ""}
     ${j.status === "done" && !j.clips.length ? `<p class="sub">${esc(j.stage)}</p>` : ""}
     ${j.error ? `<div class="err">${esc(j.error)}<button class="rep" data-act="report" data-ctx="${esc("Video failed: " + (j.title || j.source.name || "") + " | " + j.error)}">Report this</button></div>` : ""}${j.ai?.note ? `<p class="sub">${esc(j.ai.note)}</p>` : ""}
-    ${j.clips.length ? `<div class="grid">${j.clips.map(c => clipHtml(j, c)).join("")}</div>` : ""}`;
+    ${filterBar}
+    ${visibleClips.length ? `<div class="grid">${visibleClips.map(c => clipHtml(j, c)).join("")}</div>` : (j.clips.length ? '<p class="sub" style="margin:16px 0">No clips match this filter.</p>' : '')}`;
 }
 /* ---- selecting several videos and clips: delete or download them together */
 const sel = () => (S.sel = S.sel || new Set());
@@ -1797,7 +2861,8 @@ function drawJobs() {
   let list = cid ? S.jobs.filter(j => j.creator === cid) : S.jobs;
   const liveBox = $("#live");
   if (liveBox) { const lj = list.find(j => j.status === "live");
-    if (!liveBox.querySelector(".pick.open")) put(liveBox, lj ? liveHtml(lj) : "");  // don't redraw under an open menu
+    const activeSlider = liveBox.querySelector(".lt-slider:active, .lt-slider:focus");
+    if (!liveBox.querySelector(".pick.open") && !activeSlider) put(liveBox, lj ? liveHtml(lj) : "");  // don't redraw under an open menu or active slider
     list = list.filter(j => j.status !== "live"); }
   if (!list.length) {
     root.querySelectorAll("section").forEach(e => e.remove());
@@ -1842,7 +2907,7 @@ async function saveChannels(chs, main) {
 function drawCreatorForm() {
   const c = creator(), box = $("#cform"); if (!c || !box) return;
   const A = S.accounts;
-  box.innerHTML = `<div class="card"><h2>Their stream</h2><p class="help">Where to record from, and whether to start by itself.</p>
+  box.innerHTML = `<div class="card"><h2>Their stream ${ruleBadge(c.clip_rule)}</h2><p class="help">Where to record from, and whether to start by itself.${c.clip_rule?.note ? `<br><small style="color:var(--dim)">Permission rule: ${esc(c.clip_rule.note)}</small>` : ""}</p>
       <div class="chans">${channelRows(c)}</div>
       <div class="fields" style="margin-top:14px"><label class="sw span"><input type="checkbox" data-k="auto_watch" ${c.auto_watch ? "checked" : ""}><span>Record automatically when they go live<small>Checks straight away, then every two minutes.</small></span></label></div></div>
     <div class="card"><h2>How the AI decides</h2><p class="help">Two separate AI checks. The words judge reads only what was said. The reaction judge sees only how loud the streamer got and how busy chat was, never the words.</p>
@@ -2004,6 +3069,8 @@ const setTabs = () => [
   ...(S.status.accounts === false ? [] : [["profile", "Profile", "user", "Your name, email and how you sign in"],
                                           ["security", "Security", "lock", "Password and signing out"]]),
   ["apps", "Connected apps", "plug", "Where your clips get posted"],
+  ["youtube", "YouTube & Cookies", "play", "Fix bot checks, sign-in & rate limits"],
+  ...(S.status.user?.is_admin ? [["hardware", "Hardware & GPU", "bolt", "GPU acceleration and rendering options"]] : []),
   ...(S.status.user?.is_admin ? [["storage", "Storage", "folder", "Where videos and clips are kept"]] : [])];
 function aiHints() {
   const k = S.ai, sel = $("#ai_provider"); if (!k || !sel) return;
@@ -2123,35 +3190,503 @@ async function drawSettings() {
           ${card("tiktok", "TikTok", tt, "#000", "Post clips straight to your TikTok.")}
         </div></section>`;
     }
+    if (tab === "youtube") {
+      const yt = await api("/api/youtube/status");
+      const paused = yt.paused;
+      const hasCookies = yt.has_cookies;
+      const admin = me.is_admin;
+      body.innerHTML = `<section class="set-sec"><h2>YouTube & Cookies</h2>
+        <p class="help">YouTube periodically tests automated tools with bot challenges or rate limits. Adding your YouTube cookies or using mobile player fallbacks ensures videos and streams download smoothly without interruption.</p>
+        <div class="ai-state" style="margin-bottom:16px">
+          ${paused ? `<span class="pill warn">${ic("warn")}Temporarily Paused</span><span class="sub">Paused for ${yt.pause_seconds_left}s due to YouTube bot verification.</span>`
+            : `<span class="pill ok">${ic("check")}Ready</span><span class="sub">YouTube downloads are active and ready.</span>`}
+          ${paused ? `<button class="btn sm primary" data-act="ytunpause" style="margin-left:auto">${ic("refresh")}Retry / Unpause Now</button>` : ""}
+        </div>
+        <div class="card" style="margin-bottom:20px"><div class="card-head"><div><h3>Cookie Authentication</h3><p class="sub">Upload a <code>cookies.txt</code> file exported from your browser so PeakCut can download age-restricted, member-only, or bot-checked videos.</p></div></div>
+          <div style="padding:16px 20px">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+              ${hasCookies ? `<span class="pill ok">${ic("check")}Cookies Active</span><b>${esc(yt.file_name)}</b><span class="sub">(${Math.round(yt.size_bytes / 1024)} KB)</span>
+                ${admin ? `<button class="btn sm ghost" data-act="ytrmcookies" style="margin-left:auto">${ic("trash")}Remove Cookies</button>` : ""}`
+              : `<span class="pill">No cookies configured</span><span class="sub">Using mobile/desktop player client fallbacks.</span>`}
+            </div>
+            ${admin ? `<div class="fields">
+              <label class="f">Upload cookies.txt file<input type="file" id="yt_cookie_file" accept=".txt"></label>
+              <label class="f">Or paste Netscape Cookie text<textarea id="yt_cookie_text" rows="4" placeholder="# Netscape HTTP Cookie File&#10;.youtube.com\tTRUE\t/\tTRUE\t..."></textarea><span class="hint">Export cookies from Chrome, Firefox, or Edge using an extension like "Get cookies.txt LOCALLY".</span></label>
+              <div class="row" style="margin-top:14px"><button class="btn primary" data-act="ytsavecookies">${ic("check")}Save Cookies</button></div>
+            </div>` : `<p class="sub">Only server administrators can update YouTube cookies.</p>`}
+          </div>
+        </div>
+        <div class="card"><div class="card-head"><div><h3>Test YouTube Connection</h3><p class="sub">Check whether YouTube videos can be read and downloaded right now.</p></div></div>
+          <div style="padding:16px 20px">
+            <div class="row"><button class="btn" data-act="yttest">${ic("bolt")}Test Connection Now</button><span id="yt_test_res" class="sub" style="margin-left:12px"></span></div>
+          </div>
+        </div></section>`;
+    }
+    if (tab === "hardware") {
+      const g = S.status.gpu || {supported: false, enabled: false, name: "CPU (libx264)"};
+      body.innerHTML = `<section class="set-sec"><h2>Hardware & GPU Acceleration</h2>
+        <p class="help">Hardware acceleration offloads video rendering, scaling, aspect ratio conversion (9:16), and subtitle burning to your graphics card. On supported NVIDIA GPUs (NVENC), this cuts rendering time by 3x–8x and keeps your CPU cool.</p>
+        <div class="ai-state" style="margin-bottom:16px">
+          ${g.enabled && g.supported ? `<span class="pill ok">${ic("check")}GPU Acceleration Active</span><span class="sub">${esc(g.name)}</span>`
+            : g.supported ? `<span class="pill warn">${ic("pause")}GPU Acceleration Off</span><span class="sub">Currently using CPU mode (libx264). Hardware detected: ${esc(g.name)}</span>`
+            : `<span class="pill">${ic("warn")}No GPU Encoder Detected</span><span class="sub">Using multi-core CPU encoder (libx264).</span>`}
+        </div>
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-head">
+            <div>
+              <h3>NVIDIA NVENC Video Encoding</h3>
+              <p class="sub">Toggle hardware acceleration for clip video rendering.</p>
+            </div>
+          </div>
+          <div style="padding:16px 20px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+              <div>
+                <b>GPU Acceleration</b>
+                <p class="sub" style="margin-top:4px">${g.enabled && g.supported ? `Enabled: Rendering utilizes <b>${esc(g.name)}</b>.` : "Disabled: Rendering utilizes CPU multi-threaded libx264 encoder."}</p>
+              </div>
+              <div>
+                <button class="btn ${g.enabled && g.supported ? "danger" : "primary"}" data-act="gputoggle" ${g.supported ? "" : "disabled"}>
+                  ${g.enabled && g.supported ? ic("x") + " Turn GPU Off" : ic("bolt") + " Turn GPU On"}
+                </button>
+              </div>
+            </div>
+            ${!g.supported ? `<p class="warnline" style="margin-top:12px">No supported NVENC hardware encoder was found. Standard multi-core CPU encoding is used.</p>` : ""}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h3>How Processing is Handled</h3>
+              <p class="sub">Hardware distribution for PeakCut workflows</p>
+            </div>
+          </div>
+          <div style="padding:16px 20px">
+            <ul style="padding-left:18px;margin:0;line-height:1.8" class="sub">
+              <li><b>Video Rendering & Encoding:</b> Offloaded to NVIDIA Turing NVENC (GeForce GTX 1650) with high quality preset. Very fast, low CPU load.</li>
+              <li><b>Speech-to-Text Transcription:</b> Run locally on multi-threaded CPU INT8 quantization for optimal numerical stability.</li>
+              <li><b>Analysis & Moment Detection:</b> Analyzed by LLM prompts and silence/scene detection.</li>
+            </ul>
+          </div>
+        </div></section>`;
+    }
   } catch (e) { body.innerHTML = `<div class="set-load">${esc(e.message)}</div>`; }
 }
 async function saveSettings() { const d = {}; $$("#sform [data-s]").forEach(i => d[i.dataset.s] = i.value); await send("/api/settings", d, "PUT"); }
 
 /* ============================================================ clip editor */
-function openClip(jid, cid) { D.jid = jid; D.cid = cid; D.sig = ""; drawClipDlg(true); $("#clipdlg").showModal(); }
+function openClip(jid, cid) {
+  D.jid = jid; D.cid = cid; D.sig = ""; D.edit = null;
+  drawClipDlg(true);
+  $("#clipdlg").showModal();
+  api(`/api/clips/${encodeURIComponent(cid)}/edit`).then(ed => {
+    D.edit = ed;
+    drawClipDlg(true);
+  }).catch(() => {});
+}
+
+function collectClipEdit() {
+  const hookEnabled = $("#dlg_hook_enabled") ? $("#dlg_hook_enabled").checked : true;
+  const hookText = $("#dlg_hook_text") ? $("#dlg_hook_text").value.trim() : "";
+  const hookSize = $("#dlg_hook_size") ? Number($("#dlg_hook_size").value) : 96;
+  const hookY = $("#dlg_hook_y") ? Number($("#dlg_hook_y").value) : 300;
+  const hookStyle = $("#dlg_hook_style") ? $("#dlg_hook_style").value : "default";
+
+  const capEnabled = $("#dlg_cap_enabled") ? $("#dlg_cap_enabled").checked : true;
+  const capStyle = $("#dlg_cap_style") ? $("#dlg_cap_style").value : "bounce";
+  const capSize = $("#dlg_cap_size") ? Number($("#dlg_cap_size").value) : 132;
+  const capY = $("#dlg_cap_y") ? Number($("#dlg_cap_y").value) : 1630;
+
+  const layout = $("#dlg_layout") ? $("#dlg_layout").value : "blur";
+  const splitRatio = $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.40;
+
+  const memeVal = $("#dlg_meme") ? $("#dlg_meme").value : "";
+  const musicVal = $("#dlg_music") ? $("#dlg_music").value : "";
+
+  const start = $("#dlg_start") ? Number($("#dlg_start").value) : 0;
+  const end = $("#dlg_end") ? Number($("#dlg_end").value) : 30;
+
+  const wPills = $$("#dlgWordsBox [data-widx]");
+  let words = D.edit?.caption?.words || [];
+  if (wPills.length) {
+    words = words.map((w, idx) => {
+      const pill = wPills.find(p => p.dataset.widx === String(idx));
+      const txt = pill ? pill.textContent.trim() : (w.text || w.w);
+      return {text: txt, start: Number(w.start ?? w.s ?? 0), end: Number(w.end ?? w.e ?? 0)};
+    });
+  }
+
+  return {
+    start,
+    end,
+    layout,
+    split_ratio: splitRatio,
+    facecam: D.edit?.facecam || null,
+    caption: {
+      enabled: capEnabled,
+      style: capStyle,
+      font_size: capSize,
+      y_pos: capY,
+      words: words
+    },
+    hook: {
+      enabled: hookEnabled,
+      text: hookText,
+      font_size: hookSize,
+      y_pos: hookY,
+      style: hookStyle
+    },
+    audio: {
+      meme: memeVal !== "" && memeVal !== "none",
+      music: musicVal !== "" && musicVal !== "none",
+      meme_mood: memeVal || "none",
+      music_bed: musicVal || "none"
+    },
+    version: D.edit?.version || 1
+  };
+}
+
+function collectGlobalPatch() {
+  const ed = collectClipEdit();
+  return {
+    layout: ed.layout,
+    split_ratio: ed.split_ratio,
+    caption: {
+      enabled: ed.caption.enabled,
+      style: ed.caption.style,
+      font_size: ed.caption.font_size,
+      y_pos: ed.caption.y_pos
+    },
+    hook: {
+      enabled: ed.hook.enabled,
+      font_size: ed.hook.font_size,
+      y_pos: ed.hook.y_pos,
+      style: ed.hook.style
+    },
+    audio: ed.audio,
+    facecam: ed.facecam
+  };
+}
+
+function syncLiveOverlay() {
+  const vwrap = $("#vwrap"), hookBox = $("#liveHookBox"), capBox = $("#liveCapBox");
+  if (!vwrap || !hookBox) return;
+
+  const width = vwrap.clientWidth || 320;
+  const scale = width / 1080;
+
+  const hookEnabled = $("#dlg_hook_enabled") ? $("#dlg_hook_enabled").checked : true;
+  const hookText = $("#dlg_hook_text") ? $("#dlg_hook_text").value.trim() : "";
+  const hookSize = $("#dlg_hook_size") ? Number($("#dlg_hook_size").value) : 96;
+  const hookY = $("#dlg_hook_y") ? Number($("#dlg_hook_y").value) : 300;
+  const hookStyle = $("#dlg_hook_style") ? $("#dlg_hook_style").value : "default";
+
+  if ($("#hookSizeVal")) $("#hookSizeVal").textContent = hookSize + "px";
+  if ($("#hookYVal")) $("#hookYVal").textContent = Math.round(hookY) + "px";
+
+  hookBox.style.display = hookEnabled ? "block" : "none";
+  hookBox.textContent = hookText || (hookEnabled ? "BIG TEXT PREVIEW" : "");
+  hookBox.style.fontSize = Math.max(12, Math.round(hookSize * scale * 2.2)) + "px";
+  hookBox.style.top = ((hookY / 1920) * 100) + "%";
+  hookBox.classList.toggle("nobox", hookStyle === "nobox");
+
+  if (capBox) {
+    const capEnabled = $("#dlg_cap_enabled") ? $("#dlg_cap_enabled").checked : true;
+    const capSize = $("#dlg_cap_size") ? Number($("#dlg_cap_size").value) : 132;
+    const capY = $("#dlg_cap_y") ? Number($("#dlg_cap_y").value) : 1630;
+
+    if ($("#capSizeVal")) $("#capSizeVal").textContent = capSize + "px";
+    if ($("#capYVal")) $("#capYVal").textContent = Math.round(capY) + "px";
+
+    capBox.style.display = capEnabled ? "block" : "none";
+    capBox.style.fontSize = Math.max(11, Math.round(capSize * scale * 2.2)) + "px";
+    capBox.style.top = ((capY / 1920) * 100) + "%";
+  }
+}
+
+function setupOverlayDraggables() {
+  const vwrap = $("#vwrap"), hookBox = $("#liveHookBox"), capBox = $("#liveCapBox");
+  if (!vwrap) return;
+
+  function makeDraggable(el, ySliderId, minY, maxY) {
+    if (!el) return;
+    let dragging = false;
+    const onStart = e => {
+      e.preventDefault();
+      dragging = true;
+      const onMove = ev => {
+        if (!dragging) return;
+        const rect = vwrap.getBoundingClientRect();
+        if (!rect.height) return;
+        const relY = (ev.clientY - rect.top) / rect.height;
+        const y1920 = Math.round(Math.max(minY, Math.min(maxY, relY * 1920)));
+        const slider = $(ySliderId);
+        if (slider) { slider.value = y1920; syncLiveOverlay(); }
+      };
+      const onEnd = () => {
+        dragging = false;
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onEnd);
+      };
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onEnd);
+    };
+    el.addEventListener("pointerdown", onStart);
+  }
+
+  makeDraggable(hookBox, "#dlg_hook_y", 80, 1750);
+  makeDraggable(capBox, "#dlg_cap_y", 150, 1800);
+}
+
 function drawClipDlg(full) {
   const j = jobOf(D.jid), c = j?.clips.find(x => x.id === D.cid), dlg = $("#clipdlg");
   if (!c) { if (dlg.open) dlg.close(); return; }
-  const m = `/media/${j.id}/`, sig = c.status + c.version;
-  const stage = c.status === "done" ? `<video src="${m}${esc(c.file)}?v=${c.version}" poster="${m}${esc(c.cover)}?v=${c.version}" controls autoplay playsinline></video>`
-    : c.status === "error" ? `<div class="err" style="padding:20px;text-align:center">${esc(c.error || "Could not make this clip.")}</div>`
-    : `<span class="making">${c.status === "rendering" ? "Making this clip…" : "Waiting its turn…"}</span>`;
+  const m = `/media/${j.id}/`, sig = c.status + (c.version || 0) + (D.edit ? "_" + D.edit.version : "");
+
+  const idx = j.clips.findIndex(x => x.id === c.id);
+  const prevC = idx > 0 ? j.clips[idx - 1] : null;
+  const nextC = idx < j.clips.length - 1 ? j.clips[idx + 1] : null;
+
+  const ed = D.edit || {};
+  const hk = ed.hook || { enabled: !!c.hook, text: c.hook || "", font_size: 96, y_pos: 300, style: "default" };
+  const cap = ed.caption || { enabled: c.captions !== false, style: c.style || "bounce", font_size: 132, y_pos: 1630, words: c.words || [] };
+  const layout = ed.layout || c.layout || "blur";
+  const splitRatio = ed.split_ratio != null ? ed.split_ratio : (c.split_ratio || 0.40);
+  const memeVal = ed.audio ? (ed.audio.meme_mood || (ed.audio.meme ? "horn" : "")) : (c.meme || "");
+  const musicVal = ed.audio ? (ed.audio.music_bed || (ed.audio.music ? "upbeat" : "")) : (c.music || "");
+  const startVal = ed.start != null ? ed.start : c.start;
+  const endVal = ed.end != null ? ed.end : c.end;
+
+  const statusBadge = c.status === "awaiting_review" ? `<span class="badge st-review">⏳ Needs Review</span>`
+    : c.status === "approved" ? `<span class="badge st-approved">✓ Approved</span>`
+    : c.status === "rendering_final" ? `<span class="badge st-rendering">⚡ Rendering Final</span>`
+    : c.status === "done" ? `<span class="badge qc-pass">✓ Done</span>`
+    : c.status === "qc_flagged" ? `<span class="badge qc-fail">⚠ QC Flagged</span>`
+    : `<span class="badge">${esc(c.status)}</span>`;
+
+  const videoFile = c.file ? `${m}${esc(c.file)}?v=${c.version || 0}` : "";
+  const posterFile = c.cover ? `${m}${esc(c.cover)}?v=${c.version || 0}` : "";
+
+  let stageHtml = "";
+  if (c.status === "error" || c.status === "failed") {
+    stageHtml = `<div class="err" style="padding:20px;text-align:center">${esc(c.error || "Could not make this clip.")}</div>`;
+  } else if (c.status === "drafting") {
+    stageHtml = `<div class="making">⚡ Rendering fast draft preview…</div>`;
+  } else if (c.status === "rendering_final") {
+    stageHtml = `<div class="making">🚀 Rendering final high-quality 1080p clip…</div>`;
+  } else if (c.file) {
+    stageHtml = `<div class="video-preview-wrap" id="vwrap">
+      <video id="dlgVideo" src="${videoFile}" poster="${posterFile}" controls playsinline preload="metadata"></video>
+      <div class="live-overlay-container" id="liveOverlay">
+        <div id="liveHookBox" class="live-hook-box ${hk.style === 'nobox' ? 'nobox' : ''}" style="top:${(hk.y_pos/1920)*100}%;display:${hk.enabled !== false ? 'block' : 'none'}">
+          ${esc(hk.text || "BIG TEXT PREVIEW")}
+        </div>
+        <div id="liveCapBox" class="live-cap-box" style="top:${(cap.y_pos/1920)*100}%;display:${cap.enabled !== false ? 'block' : 'none'}">
+          <span class="cap-word-hl">LIVE</span> CAPTION PREVIEW
+        </div>
+      </div>
+    </div>`;
+  } else {
+    stageHtml = `<div class="making">Waiting for draft…</div>`;
+  }
+
   if (full) {
-    dlg.innerHTML = `<div class="editor"><div class="stage" id="stage">${stage}</div>
+    dlg.innerHTML = `<div class="editor"><div class="stage" id="stage">${stageHtml}</div>
       <div class="panel">
-        <div class="job-head" style="margin:0"><div><span class="badge ${scoreCls(c.score)}" style="position:static">${c.judges ? "Words " + c.judges.words + (c.judges.reaction ? " · Reaction " + c.judges.reaction : "") : c.score ? "Score " + c.score : "Clipped by hand"}</span>
-          <p class="sub" style="margin-top:8px">${esc(c.reason || "")}</p></div><button class="btn icon ghost" data-act="closedlg" aria-label="Close">${ic("x")}</button></div>
-        <h3>On the video</h3>
-        <label class="f">Big text<input data-f="hook" value="${esc(c.hook)}"></label>
-        <label class="sw"><input type="checkbox" data-f="captions" data-caption-toggle ${c.captions === false ? "" : "checked"}>Generate captions</label>
-        <div class="two"><label class="f">Caption style<select data-f="style" data-caption-style ${c.captions === false ? "disabled" : ""}>${opts(S.status.styles, c.style)}</select></label>
-          <label class="f">Layout<select data-f="layout">${opts(S.status.layouts, c.layout)}</select></label></div>
-        <div class="two"><label class="f">Start (seconds)<input data-f="start" type="number" step="0.5" value="${c.start}"></label>
-          <label class="f">End (seconds)<input data-f="end" type="number" step="0.5" value="${c.end}"></label></div>
-        <h3>Post text</h3>
-        <label class="f">Title<input data-f="title" value="${esc(c.title)}"></label>
-        <label class="f">Description<textarea data-f="description" rows="2">${esc(c.description)}</textarea></label>
-        <button class="btn" data-act="remake">${ic("scissors")}Save and re-make clip</button>
+        <!-- Top Nav & Status -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <div style="display:flex;gap:6px;align-items:center">
+            <button type="button" class="btn sm ghost" data-act="prevclip" ${prevC ? '' : 'disabled'} title="Previous Clip (Left Arrow)">← Prev</button>
+            <span style="font-size:12px;font-weight:700;color:var(--dim)">Clip ${idx + 1} of ${j.clips.length}</span>
+            <button type="button" class="btn sm ghost" data-act="nextclip" ${nextC ? '' : 'disabled'} title="Next Clip (Right Arrow)">Next →</button>
+          </div>
+          <button class="btn icon ghost" data-act="closedlg" aria-label="Close">${ic("x")}</button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          ${statusBadge}
+          <span class="badge ${scoreCls(c.score)}" style="position:static">${c.judges ? "Words " + c.judges.words + (c.judges.reaction ? " · Reaction " + c.judges.reaction : "") : c.score ? "Score " + c.score : "Clipped by hand"}</span>
+          ${c.qc ? `<span class="badge ${c.qc.status === 'PASS' ? 'qc-pass' : c.qc.status === 'WARN' ? 'qc-warn' : 'qc-fail'}" style="position:static" title="${esc((c.qc.notes || []).join(' · ') || c.qc.status)}">QC: ${esc(c.qc.status)}</span>` : ""}
+        </div>
+        ${c.reason ? `<p class="sub" style="margin-top:2px;font-size:12px">${esc(c.reason)}</p>` : ""}
+        ${c.qc && c.qc.notes?.length ? `<div style="font-size:11px;color:var(--dim);background:var(--muted);padding:4px 8px;border-radius:4px">QC Notes: ${esc(c.qc.notes.join(' · '))}${c.qc.lufs != null ? ` (${c.qc.lufs} LUFS)` : ''}</div>` : ''}
+
+        <!-- 1. BIG TEXT (HOOK) CONTROLS -->
+        <div style="padding:10px;background:var(--muted);border-radius:8px;border:1px solid var(--line);margin-top:4px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <label class="sw" style="margin:0;font-weight:700;font-size:12px">
+              <input type="checkbox" id="dlg_hook_enabled" ${hk.enabled !== false ? "checked" : ""}>
+              Big Text (Hook)
+            </label>
+            <button type="button" class="btn sm ghost" data-act="applyhookall" style="padding:2px 8px;font-size:11px" title="Apply Big Text style, size and position to all clips">
+              ⚡ Apply to all
+            </button>
+          </div>
+          <label class="f" style="margin-bottom:6px">Text
+            <input id="dlg_hook_text" value="${esc(hk.text || '')}" placeholder="HOOK / HEADLINE TEXT">
+          </label>
+          <div style="margin-bottom:6px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
+              <span>Font Size: <b id="hookSizeVal" style="color:var(--brand-ink)">${hk.font_size || 96}px</b></span>
+              <div style="display:flex;gap:4px">
+                <button type="button" class="btn xs ghost" data-hook-size="64">Small</button>
+                <button type="button" class="btn xs ghost" data-hook-size="96">Normal</button>
+                <button type="button" class="btn xs ghost" data-hook-size="128">Huge</button>
+              </div>
+            </div>
+            <input type="range" id="dlg_hook_size" min="36" max="150" step="2" value="${hk.font_size || 96}" style="width:100%">
+          </div>
+          <div style="margin-bottom:6px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
+              <span>Vertical Position (Y): <b id="hookYVal" style="color:var(--brand-ink)">${hk.y_pos || 300}px</b></span>
+            </div>
+            <input type="range" id="dlg_hook_y" min="80" max="1750" step="10" value="${hk.y_pos || 300}" style="width:100%">
+            <div style="display:flex;gap:4px;margin-top:4px">
+              <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 220) < 50 ? 'active' : ''}" data-hook-pos="220">Top</button>
+              <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 400) < 50 ? 'active' : ''}" data-hook-pos="400">Upper</button>
+              <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 960) < 50 ? 'active' : ''}" data-hook-pos="960">Middle</button>
+              <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 1300) < 50 ? 'active' : ''}" data-hook-pos="1300">Above Captions</button>
+            </div>
+          </div>
+          <label class="f" style="margin:0">Style
+            <select id="dlg_hook_style">
+              <option value="default" ${(hk.style||'default')==='default'?'selected':''}>Dark Boxed Backing</option>
+              <option value="nobox" ${(hk.style||'default')==='nobox'?'selected':''}>Clean Text with Black Outline</option>
+            </select>
+          </label>
+        </div>
+
+        <!-- 2. CAPTIONS CONTROLS -->
+        <div style="padding:10px;background:var(--muted);border-radius:8px;border:1px solid var(--line);margin-top:6px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <label class="sw" style="margin:0;font-weight:700;font-size:12px">
+              <input type="checkbox" id="dlg_cap_enabled" ${cap.enabled !== false ? "checked" : ""}>
+              Generate Captions
+            </label>
+            <button type="button" class="btn sm ghost" data-act="applycapall" style="padding:2px 8px;font-size:11px" title="Apply caption style, size and position to all clips">
+              ⚡ Apply to all
+            </button>
+          </div>
+          <label class="f" style="margin-bottom:6px">Caption Style
+            <select id="dlg_cap_style">${opts(S.status.styles, cap.style || 'bounce')}</select>
+          </label>
+          <div style="margin-bottom:6px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
+              <span>Caption Size: <b id="capSizeVal" style="color:var(--brand-ink)">${cap.font_size || 132}px</b></span>
+              <div style="display:flex;gap:4px">
+                <button type="button" class="btn xs ghost" data-cap-size="100">Compact</button>
+                <button type="button" class="btn xs ghost" data-cap-size="132">Standard</button>
+                <button type="button" class="btn xs ghost" data-cap-size="160">Large</button>
+              </div>
+            </div>
+            <input type="range" id="dlg_cap_size" min="40" max="220" step="2" value="${cap.font_size || 132}" style="width:100%">
+          </div>
+          <div style="margin-bottom:6px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
+              <span>Caption Position (Y): <b id="capYVal" style="color:var(--brand-ink)">${cap.y_pos || 1630}px</b></span>
+            </div>
+            <input type="range" id="dlg_cap_y" min="150" max="1800" step="10" value="${cap.y_pos || 1630}" style="width:100%">
+            <div style="display:flex;gap:4px;margin-top:4px">
+              <button type="button" class="cap-anchor-btn ${Math.abs((cap.y_pos||1630) - 250) < 50 ? 'active' : ''}" data-cap-pos="250">Top (250)</button>
+              <button type="button" class="cap-anchor-btn ${Math.abs((cap.y_pos||1630) - 960) < 50 ? 'active' : ''}" data-cap-pos="960">On Seam (960)</button>
+              <button type="button" class="cap-anchor-btn ${Math.abs((cap.y_pos||1630) - 1630) < 50 ? 'active' : ''}" data-cap-pos="1630">Safe Bottom (1630)</button>
+            </div>
+          </div>
+          <!-- Word pills editor -->
+          ${(cap.words && cap.words.length) ? `
+          <div style="margin-top:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <span style="font-size:11px;font-weight:700;color:var(--brand-ink)">Words (${cap.words.length}):</span>
+              <span style="font-size:10px;color:var(--faint)">Click word to fix typo</span>
+            </div>
+            <div id="dlgWordsBox" style="display:flex;flex-wrap:wrap;gap:4px;max-height:90px;overflow-y:auto;padding:6px;background:#fff;border:1px solid var(--line);border-radius:6px">
+              ${cap.words.map((w, idx) => `<span class="word-pill" contenteditable="true" data-widx="${idx}" title="${fmtLen(w.start ?? w.s ?? 0)} - ${fmtLen(w.end ?? w.e ?? 0)}">${esc(w.text || w.w || '')}</span>`).join("")}
+            </div>
+          </div>` : ""}
+        </div>
+
+        <!-- 3. LAYOUT & FRAMING -->
+        <div style="padding:10px;background:var(--muted);border-radius:8px;border:1px solid var(--line);margin-top:6px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:12px;font-weight:700;color:var(--brand-ink)">Layout &amp; Framing</span>
+            <button type="button" class="btn sm ghost" data-act="applylayoutall" style="padding:2px 8px;font-size:11px" title="Apply layout to all clips">
+              ⚡ Apply to all
+            </button>
+          </div>
+          <div class="two">
+            <label class="f">Layout<select id="dlg_layout">${opts(S.status.layouts, layout)}</select></label>
+            <div id="dlgStackControls" style="display:${layout === 'stack' ? 'block' : 'none'}">
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
+                <span>Split: <b id="dlgSplitRatioText" style="color:var(--brand)">${Math.round(splitRatio*100)}% / ${Math.round((1-splitRatio)*100)}%</b></span>
+              </div>
+              <div style="display:flex;gap:4px">
+                <button type="button" class="split-preset-btn ${splitRatio === 0.35 ? 'active' : ''}" data-dlg-ratio="0.35">35/65</button>
+                <button type="button" class="split-preset-btn ${splitRatio === 0.40 ? 'active' : ''}" data-dlg-ratio="0.40">40/60</button>
+                <button type="button" class="split-preset-btn ${splitRatio === 0.50 ? 'active' : ''}" data-dlg-ratio="0.50">50/50</button>
+              </div>
+              <input type="hidden" id="dlg_split_ratio" value="${splitRatio}">
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. AUDIO -->
+        <div style="padding:10px;background:var(--muted);border-radius:8px;border:1px solid var(--line);margin-top:6px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:12px;font-weight:700;color:var(--brand-ink)">Audio</span>
+            <button type="button" class="btn sm ghost" data-act="applyaudioall" style="padding:2px 8px;font-size:11px" title="Apply audio settings to all clips">
+              ⚡ Apply to all
+            </button>
+          </div>
+          <div class="two">
+            <label class="f">Viral Meme Sound<select id="dlg_meme"><option value="">None</option>${opts(S.status.memes || {}, memeVal)}</select></label>
+            <label class="f">Music Bed<select id="dlg_music"><option value="">None</option>${opts(S.status.music_beds || {}, musicVal)}</select></label>
+          </div>
+        </div>
+
+        <!-- 5. TRIM & POST TEXT -->
+        <div class="two" style="margin-top:4px">
+          <label class="f">Start (seconds)<input id="dlg_start" type="number" step="0.5" value="${startVal}"></label>
+          <label class="f">End (seconds)<input id="dlg_end" type="number" step="0.5" value="${endVal}"></label>
+        </div>
+        <label class="f">Title<input data-f="title" value="${esc(c.title || '')}"></label>
+        <label class="f">Description<textarea data-f="description" rows="2">${esc(c.description || '')}</textarea></label>
+
+        <!-- 6. REVIEW ACTIONS & APPROVAL -->
+        <div class="review-actions-bar">
+          ${(c.status === "awaiting_review" || c.status === "drafting" || c.status === "qc_flagged" || c.status === "failed") ? `
+          <div style="display:flex;gap:6px">
+            <button type="button" class="btn" data-act="savedraft" style="flex:1" title="Save edits and re-render draft preview">
+              💾 Save Draft
+            </button>
+            <button type="button" class="btn primary" data-act="approveclip" style="flex:2;background:linear-gradient(135deg, #1F7A4D, #166534);border:0;color:#fff;font-weight:700" title="Render final 1080p clip with LUFS &amp; QC (Enter)">
+              ✓ Approve (Final Render)
+            </button>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button type="button" class="btn ghost" data-act="approveapplyall" style="flex:1;font-size:11px" title="Apply global style to all clips, and approve this clip">
+              ⚡ Approve + Apply to all
+            </button>
+            <button type="button" class="btn ghost" data-act="approvealljob" style="flex:1;font-size:11px" title="Approve all clips waiting for review in this video">
+              Approve all remaining
+            </button>
+          </div>
+          ` : (c.status === "approved" || c.status === "rendering_final") ? `
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:12px;color:var(--brand);font-weight:600">Rendering final 1080p video with LUFS &amp; QC…</span>
+            <button type="button" class="btn sm ghost" data-act="resetreview">Reset to Review</button>
+          </div>
+          ` : `
+          <div style="display:flex;gap:6px">
+            <button type="button" class="btn primary" data-act="fastremake" style="flex:1;background:linear-gradient(135deg, #FF6600, #E04400);border:0;color:#fff;font-weight:700" title="Re-burns captions onto existing video in 2–4s">
+              ⚡ Fast Remake (2-4s)
+            </button>
+            <button type="button" class="btn" data-act="remake" style="font-size:12px" title="Full re-render from source video">
+              Full Remake
+            </button>
+          </div>
+          `}
+        </div>
+
+        <!-- Social Posting -->
         <h3>Post it</h3>
         <div id="dposts" class="row" style="gap:4px"></div>
         ${S.accounts.length ? `<div class="row">${S.accounts.map(a => `<label class="ck"><input type="checkbox" data-pacc value="${esc(a.id)}">${esc(a.label)} · ${esc(a.name)}</label>`).join("")}</div>
@@ -2159,13 +3694,58 @@ function drawClipDlg(full) {
           : `<p class="help">No accounts connected yet. Connect one in Settings.</p>`}
         <div class="row" style="margin-top:auto;padding-top:8px;border-top:1px solid var(--line)">
           ${c.status === "done" ? `<a class="btn" href="${m}${esc(c.file)}?download=1">${ic("down")}Download</a>` : ""}
-          <button class="btn" data-act="copy" data-j="${j.id}" data-c="${esc(c.id)}">${ic("copy")}Copy post text</button></div>
+          <button class="btn" data-act="copy" data-j="${j.id}" data-c="${esc(c.id)}">${ic("copy")}Copy post text</button>
+        </div>
       </div></div>`;
-  } else if (D.sig !== sig) $("#stage").innerHTML = stage;
+
+    // Live sync bindings
+    $("#dlg_hook_enabled")?.addEventListener("change", syncLiveOverlay);
+    $("#dlg_hook_text")?.addEventListener("input", syncLiveOverlay);
+    $("#dlg_hook_size")?.addEventListener("input", syncLiveOverlay);
+    $("#dlg_hook_y")?.addEventListener("input", syncLiveOverlay);
+    $("#dlg_hook_style")?.addEventListener("change", syncLiveOverlay);
+
+    $("#dlg_cap_enabled")?.addEventListener("change", syncLiveOverlay);
+    $("#dlg_cap_size")?.addEventListener("input", syncLiveOverlay);
+    $("#dlg_cap_y")?.addEventListener("input", syncLiveOverlay);
+
+    // Preset buttons
+    $$("#clipdlg [data-hook-size]").forEach(b => b.addEventListener("click", () => {
+      if ($("#dlg_hook_size")) { $("#dlg_hook_size").value = b.dataset.hookSize; syncLiveOverlay(); }
+    }));
+    $$("#clipdlg [data-hook-pos]").forEach(b => b.addEventListener("click", () => {
+      $$("#clipdlg [data-hook-pos]").forEach(x => x.classList.toggle("active", x === b));
+      if ($("#dlg_hook_y")) { $("#dlg_hook_y").value = b.dataset.hookPos; syncLiveOverlay(); }
+    }));
+    $$("#clipdlg [data-cap-size]").forEach(b => b.addEventListener("click", () => {
+      if ($("#dlg_cap_size")) { $("#dlg_cap_size").value = b.dataset.capSize; syncLiveOverlay(); }
+    }));
+    $$("#clipdlg [data-cap-pos]").forEach(b => b.addEventListener("click", () => {
+      $$("#clipdlg [data-cap-pos]").forEach(x => x.classList.toggle("active", x === b));
+      if ($("#dlg_cap_y")) { $("#dlg_cap_y").value = b.dataset.capPos; syncLiveOverlay(); }
+    }));
+    $$("#clipdlg [data-dlg-ratio]").forEach(b => b.addEventListener("click", () => {
+      $$("#clipdlg [data-dlg-ratio]").forEach(x => x.classList.toggle("active", x === b));
+      const r = Number(b.dataset.dlgRatio);
+      if ($("#dlg_split_ratio")) $("#dlg_split_ratio").value = r;
+      if ($("#dlgSplitRatioText")) $("#dlgSplitRatioText").textContent = Math.round(r * 100) + "% / " + Math.round((1 - r) * 100) + "%";
+    }));
+    $("#dlg_layout")?.addEventListener("change", e => {
+      const isStack = e.target.value === "stack";
+      if ($("#dlgStackControls")) $("#dlgStackControls").style.display = isStack ? "block" : "none";
+    });
+
+    setupOverlayDraggables();
+    syncLiveOverlay();
+  } else if (D.sig !== sig) {
+    $("#stage").innerHTML = stageHtml;
+    setupOverlayDraggables();
+    syncLiveOverlay();
+  }
   D.sig = sig;
   put($("#dposts"), postPills(c));
 }
-$("#clipdlg").addEventListener("close", () => { $("#clipdlg").innerHTML = ""; D.jid = null; });
+$("#clipdlg").addEventListener("close", () => { $("#clipdlg").innerHTML = ""; D.jid = null; D.edit = null; });
 $("#clipdlg").addEventListener("click", e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 
 /* ============================================================ render + polling */
@@ -2188,7 +3768,7 @@ async function tick() {
     // a server from before multi-channel support sends only `channel`: show it as that platform's channel
     creators.forEach(c => { if (!c.channels) { const u = c.channel || "", k = /youtu/i.test(u) ? "youtube" : /twitch/i.test(u) ? "twitch" : /kick/i.test(u) ? "kick" : ""; c.channels = k ? {[k]: u} : {}; } });
     S.jobs = jobs; S.creators = creators; S.accounts = accounts;
-    if (got.ai) S.status.ai = got.ai;
+    if (got.ai) { S.status.ai = got.ai; window.updateAiBanner?.(); }
     if (got.unread != null) S.status.unread = got.unread;
     if (S.view === "overview") { S.overview = await api("/api/overview"); S.ovAt = Date.now(); }
     if (creatorId() && !creator()) return go("overview");
@@ -2208,6 +3788,22 @@ document.addEventListener("visibilitychange", () => {
   hiddenAt = 0;
 });
 window.addEventListener("focus", () => { if (!document.hidden) tick(); });
+document.addEventListener("keydown", e => {
+  const dlg = $("#clipdlg");
+  if (!dlg || !dlg.open) return;
+  const tag = (document.activeElement?.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "textarea" || document.activeElement?.isContentEditable) return;
+  if (e.key === "ArrowLeft") {
+    e.preventDefault();
+    $('[data-act="prevclip"]')?.click();
+  } else if (e.key === "ArrowRight") {
+    e.preventDefault();
+    $('[data-act="nextclip"]')?.click();
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    $('[data-act="approveclip"]')?.click();
+  }
+});
 function loop() {
   const active = S.jobs.some(j => ["queued", "running", "live"].includes(j.status) || j.clips.some(c => c.status === "queued" || c.status === "rendering"));
   // quick while something is being made, relaxed otherwise, and slow when the tab is in the background
@@ -2223,6 +3819,7 @@ document.addEventListener("dragleave", () => $(".composer")?.classList.remove("o
 document.addEventListener("drop", e => { const a = $(".composer"); if (a) { e.preventDefault(); a.classList.remove("over"); attach(e.dataTransfer.files); } });
 function syncCaptionStyle(toggle) {
   toggle.closest("#addform, #cform, #clipdlg").querySelectorAll("[data-caption-style]").forEach(i => i.disabled = !toggle.checked);
+  window.updateOptsBadges?.();
 }
 document.addEventListener("change", async e => {
   const t = e.target;
@@ -2286,7 +3883,17 @@ document.addEventListener("click", async e => {
     }
     if (a === "menu") return $("#app").classList.toggle("open");
     if (a === "collapse") { const m = $("#app").classList.toggle("mini"); try { localStorage.setItem("mini", m ? "1" : ""); } catch {} return; }
-    if (a === "toggleopts") { const p = $(".composer-opts"), open = !p.classList.contains("open"); p.classList.toggle("open", open); p.inert = !open; b.classList.toggle("on", open); b.setAttribute("aria-expanded", String(open)); return; }
+    if (a === "toggleopts") {
+      const p = $(".composer-opts"); if (!p) return;
+      const open = !p.classList.contains("open");
+      p.classList.toggle("open", open);
+      p.inert = !open;
+      $$('[data-act="toggleopts"]').forEach(btn => {
+        btn.setAttribute("aria-expanded", String(open));
+        if (btn.id === "optsChip") btn.classList.toggle("on", open);
+      });
+      return;
+    }
     if (a === "focusurl") return $("#url")?.focus();
     if (a === "step") {
       const t = d.to;
@@ -2303,10 +3910,28 @@ document.addEventListener("click", async e => {
     if (a === "newcreator") {
       const dlg = $("#formdlg");
       dlg.innerHTML = `<form method="dialog" class="dlg"><h2>New creator</h2><p class="help">Each creator gets their own workspace, folder, settings and accounts.</p>
+        <div style="margin-bottom:12px"><span style="font-size:12px;font-weight:600;color:var(--dim)">Popular GTA 6 Streamers (1-click quick add):</span>
+          <div class="streamer-shelf" id="nc_shelf"><span class="sub" style="font-size:11px">Loading catalog…</span></div></div>
         <label class="f">Channel link<input id="nc_chan" placeholder="https://www.youtube.com/@name, twitch.tv/name or kick.com/name" autofocus></label>
         <div id="nc_prev"></div>
         <label class="f">Name<input id="nc_name" placeholder="Filled in from the channel, or type one" required></label>
         <div class="dlg-foot"><button class="btn" value="no" formnovalidate>Cancel</button><button class="btn primary" value="yes">Create workspace</button></div></form>`;
+      api("/api/creators/catalog").then(cat => {
+        const shelf = $("#nc_shelf");
+        if (!shelf) return;
+        const top = (cat || []).slice(0, 10);
+        shelf.innerHTML = top.map(s => {
+          const u = s.platform === "youtube" ? `https://www.youtube.com/${s.handle}` : s.platform === "twitch" ? `https://twitch.tv/${s.handle}` : `https://kick.com/${s.handle}`;
+          return `<button type="button" class="streamer-chip" data-chan="${esc(u)}" data-name="${esc(s.name)}"><b>${esc(s.name)}</b><span class="plat">${esc(s.platform)}</span>${ruleBadge(s.rule)}</button>`;
+        }).join("");
+        shelf.querySelectorAll(".streamer-chip").forEach(b => {
+          b.addEventListener("click", () => {
+            $("#nc_chan").value = b.dataset.chan;
+            $("#nc_name").value = b.dataset.name;
+            $("#nc_chan").dispatchEvent(new Event("input"));
+          });
+        });
+      }).catch(() => {});
       dlg.onclose = async () => {
         if (dlg.returnValue !== "yes") return;
         try { const c = await send("/api/creators", {name:$("#nc_name").value, channel:$("#nc_chan").value}); await tick(); go("c:" + c.id, c.channel ? "clips" : "setup"); toast("Workspace created", "ok"); }
@@ -2320,7 +3945,9 @@ document.addEventListener("click", async e => {
         timer = setTimeout(async () => {
           try {
             const p = await api("/api/channel-preview?url=" + encodeURIComponent(u)); if (me !== seq) return;
-            box.innerHTML = `<div class="chprev">${p.pic ? `<img src="${p.pic}" alt="">` : `<span class="ph"></span>`}<div><b>${esc(p.name)}</b><span>${esc([p.platform, p.followers].filter(Boolean).join(" · "))}</span></div></div>`;
+            const rb = p.clip_rule ? " " + ruleBadge(p.clip_rule) : "";
+            const warnNo = p.clip_rule?.rule === "no" ? `<div class="vb" style="margin-top:8px" role="alert">${ic("warn")}<span><b>Warning:</b> This creator has requested no clipping.</span></div>` : "";
+            box.innerHTML = `<div class="chprev">${p.pic ? `<img src="${p.pic}" alt="">` : `<span class="ph"></span>`}<div><b>${esc(p.name)}</b>${rb}<span>${esc([p.platform, p.followers].filter(Boolean).join(" · "))}</span>${p.clip_rule?.note ? `<small style="display:block;color:var(--dim);margin-top:2px">${esc(p.clip_rule.note)}</small>` : ""}</div></div>${warnNo}`;
             const n = $("#nc_name"); if (!n.value.trim() || n.value === auto) { n.value = auto = p.name; }
           } catch (err) { if (me === seq) box.innerHTML = `<div class="chprev bad">${esc(err.message)}</div>`; }
         }, 400);
@@ -2373,6 +4000,30 @@ document.addEventListener("click", async e => {
       await send("/api/account/delete", {confirm: typed});
       location.href = "/"; return;
     }
+    if (a === "pausejob") {
+      b.disabled = true;
+      try {
+        await api(`/api/jobs/${d.j}/pause`, {method:"POST"});
+        const j = jobOf(d.j);
+        if (j) { j.status = "paused"; j.stage = "Paused by you"; }
+        render();
+        toast("Video paused", "ok");
+      } catch (e) { toast(e.message, "bad"); }
+      finally { b.disabled = false; }
+      return tick();
+    }
+    if (a === "resumejob") {
+      b.disabled = true;
+      try {
+        await api(`/api/jobs/${d.j}/resume`, {method:"POST"});
+        const j = jobOf(d.j);
+        if (j) { j.status = "queued"; j.stage = "Picking up where it stopped"; }
+        render();
+        toast("Resuming video…", "ok");
+      } catch (e) { toast(e.message, "bad"); }
+      finally { b.disabled = false; }
+      return tick();
+    }
     if (a === "deljob") {
       if (!await ask("Delete this video?", "The video and all of its clips are permanently deleted. This cannot be undone.", "Delete", true)) return;
       await api(`/api/jobs/${d.j}`, {method:"DELETE"}); toast("Deleted"); return tick();
@@ -2408,7 +4059,125 @@ document.addEventListener("click", async e => {
       toast("Recording stopped. Clips already made are kept.", "ok");
       api(`/api/live/${d.j}/stop`, {method:"POST"}).catch(e => toast(e.message, "bad")).finally(tick); return;
     }
-    if (a === "clipnow") { await send(`/api/live/${d.j}/clip`, {seconds:Number(d.s)}); return toast(`Clipping the last ${d.s} seconds…`, "ok"); }
+    if (a === "clipnow") {
+      const lj = jobOf(d.j);
+      const curLay = lj?.live?.layout || lj?.options?.layout || "gameplay";
+      const curStyle = lj?.live?.style || lj?.options?.style || "bold_stroke";
+      const curCaps = lj?.live?.captions ?? lj?.options?.captions ?? true;
+      const curCamDelay = Number(lj?.live?.cam_delay ?? lj?.options?.cam_delay ?? 0.0);
+      await send(`/api/live/${d.j}/clip`, {seconds:Number(d.s), layout:curLay, style:curStyle, captions:curCaps, cam_delay:curCamDelay});
+      return toast(`Clipping the last ${d.s} seconds (${LAYOUT_SHORT[curLay] || curLay})…`, "ok");
+    }
+    if (a === "clipsincelast") {
+      const lj = jobOf(d.j);
+      const curLay = lj?.live?.layout || lj?.options?.layout || "gameplay";
+      const curStyle = lj?.live?.style || lj?.options?.style || "bold_stroke";
+      const curCaps = lj?.live?.captions ?? lj?.options?.captions ?? true;
+      const curCamDelay = Number(lj?.live?.cam_delay ?? lj?.options?.cam_delay ?? 0.0);
+      b.disabled = true;
+      try {
+        await send(`/api/live/${d.j}/clip`, {since_last: true, layout:curLay, style:curStyle, captions:curCaps, cam_delay:curCamDelay});
+        toast("Sequential clip started from last checkpoint…", "ok");
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; tick(); }
+      return;
+    }
+    if (a === "cliprange") {
+      const jid = d.j, lj = jobOf(jid);
+      const minEl = document.getElementById("ltMin_" + jid);
+      const maxEl = document.getElementById("ltMax_" + jid);
+      const r = (S.liveRanges && S.liveRanges[jid]) || {};
+      const start = minEl ? Number(minEl.value) : (r.start ?? 0);
+      const end = maxEl ? Number(maxEl.value) : (r.end ?? 0);
+      const curLay = lj?.live?.layout || lj?.options?.layout || "gameplay";
+      const curStyle = lj?.live?.style || lj?.options?.style || "bold_stroke";
+      const curCaps = lj?.live?.captions ?? lj?.options?.captions ?? true;
+      const curCamDelay = Number(lj?.live?.cam_delay ?? lj?.options?.cam_delay ?? 0.0);
+      b.disabled = true;
+      try {
+        await send(`/api/live/${jid}/clip`, {start, end, layout:curLay, style:curStyle, captions:curCaps, cam_delay:curCamDelay});
+        toast(`Clipping range ${fmt(start)} → ${fmt(end)} (${LAYOUT_SHORT[curLay] || curLay})…`, "ok");
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; tick(); }
+      return;
+    }
+    if (a === "ltpreset") {
+      const jid = d.j, lj = jobOf(jid), L = lj?.live || {};
+      const bufStart = L.buffer_start || 0, bufEnd = L.buffer_end || L.elapsed || 0, chk = L.last_checkpoint || 0;
+      let s = bufStart, en = bufEnd;
+      if (d.p === "sincelast") {
+        s = Math.max(bufStart, chk);
+        en = Math.min(bufEnd, s + 180);
+        if (en - s < 3) en = Math.min(bufEnd, s + 30);
+      } else if (d.p === "whole") {
+        s = bufStart;
+        en = Math.min(bufEnd, s + 180);
+      } else {
+        const sec = Number(d.p);
+        en = bufEnd;
+        s = Math.max(bufStart, en - sec);
+      }
+      S.liveRanges = S.liveRanges || {};
+      S.liveRanges[jid] = {start: s, end: en};
+      const minEl = document.getElementById("ltMin_" + jid);
+      const maxEl = document.getElementById("ltMax_" + jid);
+      if (minEl && maxEl) {
+        minEl.value = s; maxEl.value = en;
+        minEl.dispatchEvent(new Event("input", {bubbles: true}));
+      }
+      return;
+    }
+    if (a === "livelayout") {
+      const jid = d.j, lay = d.lay, lj = jobOf(jid);
+      if (lj) {
+        lj.live = lj.live || {};
+        lj.live.layout = lay;
+        lj.options = lj.options || {};
+        lj.options.layout = lay;
+      }
+      await send(`/api/live/${jid}/settings`, {layout: lay});
+      render();
+      return toast(`Live layout set to ${LAYOUT_SHORT[lay] || lay}`, "ok");
+    }
+    if (a === "livecamdelay") {
+      const jid = d.j, delay = Number(d.delay || 0), lj = jobOf(jid);
+      if (lj) {
+        lj.live = lj.live || {};
+        lj.live.cam_delay = delay;
+        lj.options = lj.options || {};
+        lj.options.cam_delay = delay;
+      }
+      await send(`/api/live/${jid}/settings`, {cam_delay: delay});
+      render();
+      const lbl = delay > 0 ? `+${Math.round(delay * 1000)}ms` : delay < 0 ? `${Math.round(delay * 1000)}ms` : "0ms (Perfect sync)";
+      return toast(`Facecam sync set to ${lbl}`, "ok");
+    }
+    if (a === "livestyle") {
+      const jid = d.j, st = d.style, lj = jobOf(jid);
+      if (lj) {
+        lj.live = lj.live || {};
+        lj.live.style = st;
+        lj.options = lj.options || {};
+        lj.options.style = st;
+      }
+      await send(`/api/live/${jid}/settings`, {style: st});
+      render();
+      return toast(`Caption style set to ${st}`, "ok");
+    }
+    if (a === "livetogglecaptions") {
+      const jid = d.j, lj = jobOf(jid);
+      const cur = lj?.live?.captions ?? lj?.options?.captions ?? true;
+      const next = !cur;
+      if (lj) {
+        lj.live = lj.live || {};
+        lj.live.captions = next;
+        lj.options = lj.options || {};
+        lj.options.captions = next;
+      }
+      await send(`/api/live/${jid}/settings`, {captions: next});
+      render();
+      return toast(`Captions turned ${next ? "on" : "off"} for live clips`, "ok");
+    }
     if (a === "resendverify") {
       b.disabled = true;
       try { const r = await send("/api/auth/resend-verification"); if (r.verified) { S.status = await api("/api/status"); drawShell(); return toast("Your email is already confirmed.", "ok"); }
@@ -2458,11 +4227,179 @@ document.addEventListener("click", async e => {
       if (!await ask("Disconnect this account?", "Posts still waiting for it will fail.", "Disconnect", true)) return;
       await api(`/api/accounts/${d.id}`, {method:"DELETE"}); await tick(); return drawSettings();
     }
-    if (a === "remake") {
+    if (a === "savedraft") {
+      b.disabled = true;
+      try {
+        const ed = collectClipEdit();
+        const updated = await send(`/api/clips/${encodeURIComponent(D.cid)}/edit`, ed, "PUT");
+        D.edit = updated;
+        const j = jobOf(D.jid), c = j?.clips.find(x => x.id === D.cid);
+        if (c) c.status = "drafting";
+        toast("Draft saved. Updating preview…", "ok");
+        drawClipDlg(true);
+        await tick();
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
+      return;
+    }
+    if (a === "approveclip") {
+      b.disabled = true;
+      try {
+        const ed = collectClipEdit();
+        await send(`/api/clips/${encodeURIComponent(D.cid)}/edit`, ed, "PUT");
+        await send(`/api/clips/${encodeURIComponent(D.cid)}/approve`, {}, "POST");
+        const j = jobOf(D.jid), c = j?.clips.find(x => x.id === D.cid);
+        if (c) c.status = "approved";
+        toast("Clip approved! Final high-quality render queued.", "ok");
+        const idx = j?.clips.findIndex(x => x.id === D.cid);
+        const nextC = (idx != null && idx >= 0 && idx < j.clips.length - 1) ? j.clips[idx + 1] : null;
+        if (nextC && (nextC.status === "awaiting_review" || nextC.status === "qc_flagged" || nextC.status === "failed")) {
+          openClip(D.jid, nextC.id);
+        } else {
+          drawClipDlg(true);
+        }
+        await tick();
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
+      return;
+    }
+    if (a === "approveapplyall") {
+      b.disabled = true;
+      try {
+        const ed = collectClipEdit();
+        await send(`/api/clips/${encodeURIComponent(D.cid)}/edit`, ed, "PUT");
+        await send(`/api/jobs/${encodeURIComponent(D.jid)}/apply-to-all`, collectGlobalPatch(), "POST");
+        await send(`/api/clips/${encodeURIComponent(D.cid)}/approve`, {}, "POST");
+        const j = jobOf(D.jid), c = j?.clips.find(x => x.id === D.cid);
+        if (c) c.status = "approved";
+        toast("Applied style to all clips and approved this clip!", "ok");
+        drawClipDlg(true);
+        await tick();
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
+      return;
+    }
+    if (a === "approvealljob") {
+      b.disabled = true;
+      try {
+        const res = await send(`/api/jobs/${encodeURIComponent(D.jid)}/approve-all`, {}, "POST");
+        toast(`Approved ${res.count || "all"} remaining clip${res.count === 1 ? "" : "s"} for final render!`, "ok");
+        drawClipDlg(true);
+        await tick();
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
+      return;
+    }
+    if (a === "applyhookall") {
+      b.disabled = true;
+      try {
+        const patch = {
+          hook: {
+            enabled: $("#dlg_hook_enabled").checked,
+            font_size: Number($("#dlg_hook_size").value),
+            y_pos: Number($("#dlg_hook_y").value),
+            style: $("#dlg_hook_style").value
+          }
+        };
+        await send(`/api/jobs/${encodeURIComponent(D.jid)}/apply-to-all`, patch, "POST");
+        toast("Big text settings applied to all clips in this video", "ok");
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
+      return;
+    }
+    if (a === "applycapall") {
+      b.disabled = true;
+      try {
+        const patch = {
+          caption: {
+            enabled: $("#dlg_cap_enabled").checked,
+            style: $("#dlg_cap_style").value,
+            font_size: Number($("#dlg_cap_size").value),
+            y_pos: Number($("#dlg_cap_y").value)
+          }
+        };
+        await send(`/api/jobs/${encodeURIComponent(D.jid)}/apply-to-all`, patch, "POST");
+        toast("Caption settings applied to all clips in this video", "ok");
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
+      return;
+    }
+    if (a === "applylayoutall") {
+      b.disabled = true;
+      try {
+        const patch = {
+          layout: $("#dlg_layout").value,
+          split_ratio: Number($("#dlg_split_ratio")?.value || 0.40)
+        };
+        await send(`/api/jobs/${encodeURIComponent(D.jid)}/apply-to-all`, patch, "POST");
+        toast("Layout settings applied to all clips in this video", "ok");
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
+      return;
+    }
+    if (a === "applyaudioall") {
+      b.disabled = true;
+      try {
+        const memeVal = $("#dlg_meme").value;
+        const musicVal = $("#dlg_music").value;
+        const patch = {
+          audio: {
+            meme: memeVal !== "" && memeVal !== "none",
+            music: musicVal !== "" && musicVal !== "none",
+            meme_mood: memeVal || "none",
+            music_bed: musicVal || "none"
+          }
+        };
+        await send(`/api/jobs/${encodeURIComponent(D.jid)}/apply-to-all`, patch, "POST");
+        toast("Audio settings applied to all clips in this video", "ok");
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
+      return;
+    }
+    if (a === "resetreview") {
+      b.disabled = true;
+      try {
+        const ed = collectClipEdit();
+        await send(`/api/clips/${encodeURIComponent(D.cid)}/edit`, ed, "PUT");
+        toast("Clip reset to review", "ok");
+        drawClipDlg(true);
+        await tick();
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
+      return;
+    }
+    if (a === "prevclip") {
+      const j = jobOf(D.jid);
+      const idx = j?.clips.findIndex(x => x.id === D.cid);
+      if (idx != null && idx > 0) openClip(D.jid, j.clips[idx - 1].id);
+      return;
+    }
+    if (a === "nextclip") {
+      const j = jobOf(D.jid);
+      const idx = j?.clips.findIndex(x => x.id === D.cid);
+      if (idx != null && idx < j.clips.length - 1) openClip(D.jid, j.clips[idx + 1].id);
+      return;
+    }
+    if (a === "remake" || a === "fastremake") {
       const body = {}; $$("#clipdlg [data-f]").forEach(i => {
         body[i.dataset.f] = i.type === "checkbox" ? i.checked : i.type === "number" ? Number(i.value) : i.value;
       });
-      await send(`/api/jobs/${D.jid}/clips/${D.cid}/render`, body); toast("Re-making the clip…", "ok"); return tick();
+      const j = jobOf(D.jid), c = j?.clips.find(x => x.id === D.cid);
+      const wPills = $$("#dlgWordsBox [data-widx]");
+      if (wPills.length && c?.words) {
+        body.words = c.words.map((w, idx) => {
+          const pill = wPills.find(p => p.dataset.widx === String(idx));
+          const txt = pill ? pill.textContent.trim() : w.w;
+          return {...w, w: txt};
+        });
+      }
+      if ($("#dlg_cap_anchor")) body.cap_anchor = $("#dlg_cap_anchor").value;
+      if ($("#dlg_split_ratio")) body.split_ratio = Number($("#dlg_split_ratio").value);
+      if ($("#dlg_cam_swap")) body.cam_swap = $("#dlg_cam_swap").value === "true";
+
+      await send(`/api/jobs/${D.jid}/clips/${D.cid}/render`, body);
+      toast(a === "fastremake" ? "Fast re-burning captions (2-4s)…" : "Re-making the clip…", "ok");
+      return tick();
     }
     if (a === "postnow" || a === "postqueue") {
       const accs = $$("#clipdlg [data-pacc]:checked").map(i => i.value);
@@ -2470,6 +4407,92 @@ document.addEventListener("click", async e => {
       if (a === "postnow" && !await ask("Post now?", `This clip goes to ${accs.length} account${accs.length > 1 ? "s" : ""} straight away.`, "Post now")) return;
       await send("/api/posts", {job:D.jid, clip:D.cid, accounts:accs, now:a === "postnow"});
       toast(a === "postnow" ? "Posting now" : "Added to the queue", "ok"); return tick();
+    }
+    if (a === "ytretry") {
+      b.disabled = true;
+      try {
+        await send("/api/youtube/unpause", {}, "POST");
+        const u = d.url, A = att();
+        const l = A.links.find(x => x.url === u);
+        if (l) {
+          l.state = "wait"; l.msg = null; drawAtt();
+          lookUp(u).then(info => { l.state = "ok"; l.info = info; }, e => { l.state = "bad"; l.msg = e.message; }).then(() => {
+            drawAtt();
+            if (l.state === "ok") toast("YouTube unpaused and link connected!", "ok");
+            else toast("Could not connect to YouTube: " + l.msg, "bad");
+          });
+        } else {
+          toast("YouTube unpaused. You can paste your link again now.", "ok");
+        }
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
+      return;
+    }
+    if (a === "ytunpause") {
+      b.disabled = true;
+      try {
+        await send("/api/youtube/unpause", {}, "POST");
+        toast("YouTube unpaused.", "ok");
+        return drawSettings();
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
+      return;
+    }
+    if (a === "ytsavecookies") {
+      b.disabled = true;
+      try {
+        const fileInput = $("#yt_cookie_file");
+        let txt = ($("#yt_cookie_text")?.value || "").trim();
+        if (fileInput?.files?.[0]) {
+          txt = await fileInput.files[0].text();
+        }
+        if (!txt) {
+          b.disabled = false;
+          return toast("Upload a cookies.txt file or paste cookie text first.", "bad");
+        }
+        await send("/api/youtube/cookies", {cookies: txt}, "POST");
+        toast("YouTube cookies saved! YouTube downloads are active.", "ok");
+        return drawSettings();
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
+      return;
+    }
+    if (a === "ytrmcookies") {
+      if (!await ask("Remove YouTube cookies?", "PeakCut will go back to standard client fallbacks without cookies.", "Remove cookies", true)) return;
+      await api("/api/youtube/cookies", {method: "DELETE"});
+      toast("YouTube cookies removed.", "ok");
+      return drawSettings();
+    }
+    if (a === "yttest") {
+      b.disabled = true;
+      const out = $("#yt_test_res");
+      if (out) out.innerHTML = "Testing connection…";
+      try {
+        const res = await send("/api/youtube/test", {}, "POST");
+        if (res.ok) {
+          if (out) out.innerHTML = `<span class="pill ok">${ic("check")}Working</span> Connected: <b>${esc(res.title)}</b>`;
+          toast("YouTube connection is working!", "ok");
+        } else {
+          if (out) out.innerHTML = `<span class="pill warn">${ic("warn")}Failed</span> ${esc(res.error || "")}`;
+          toast("YouTube test failed: " + (res.error || "Unknown error"), "bad");
+        }
+      } catch (err) {
+        if (out) out.innerHTML = `<span class="pill warn">${ic("warn")}Error</span> ${esc(err.message)}`;
+        toast(err.message, "bad");
+      } finally { b.disabled = false; }
+      return;
+    }
+    if (a === "gputoggle") {
+      b.disabled = true;
+      try {
+        const cur = S.status.gpu?.enabled ?? true;
+        const res = await send("/api/gpu/toggle", {enabled: !cur}, "POST");
+        S.status = await api("/api/status");
+        toast(res.gpu_enabled ? "GPU acceleration turned ON (NVENC active)!" : "GPU acceleration turned OFF (CPU mode active).", "ok");
+        return drawSettings();
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
+      return;
     }
   } catch (err) { b.disabled = false; toast(err.message, "bad"); }
 });

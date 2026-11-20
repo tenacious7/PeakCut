@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from . import config, roman
+from . import config, edit, roman
 from .media import NO_WINDOW, run
 
 W, H = config.OUT_W, config.OUT_H
@@ -18,10 +18,26 @@ STYLES = {
              "strong": "00D7FF", "outline": 7, "pop": 114, "upper": True, "per": 2},
     "clean": {"label": "Clean", "font": "Poppins ExtraBold", "size": 100, "base": "FFFFFF", "active": "6BD7FF",
               "strong": "FFFFFF", "outline": 5, "pop": 106, "upper": False, "per": 4},
+    "beast": {"label": "Beast (Viral)", "font": "Anton", "size": 160, "base": "FFFFFF", "active": "00D4FF",
+              "strong": "FFD400", "outline": 8, "pop": 115, "upper": True, "per": 2},
+    "word": {"label": "One Word (Speed)", "font": "Anton", "size": 190, "base": "FFFFFF", "active": "00E5FF",
+             "strong": "FFE500", "outline": 9, "pop": 120, "upper": True, "per": 1},
+    "pop": {"label": "Gaming Pop", "font": "Lilita One", "size": 130, "base": "FFFFFF", "active": "0AD6FF",
+            "strong": "FFD60A", "outline": 7, "pop": 110, "upper": True, "per": 3},
+    "neon": {"label": "Neon Cyan", "font": "Poppins ExtraBold", "size": 130, "base": "FFFFFF", "active": "EED322",
+             "strong": "22D3EE", "outline": 7, "pop": 110, "upper": False, "per": 3},
 }
 HOOK = {"font": "Poppins ExtraBold", "size": 96, "ink": "14100E", "box": "FFFFFF", "pad_x": 36, "pad_y": 22, "radius": 26,
         "max_w": 900}
-FONT_FILES = {"Poppins ExtraBold": "Poppins-ExtraBold.ttf", "Anton": "Anton-Regular.ttf", "Archivo Black": "ArchivoBlack-Regular.ttf"}
+FONT_FILES = {
+    "Poppins ExtraBold": "Poppins-ExtraBold.ttf",
+    "Anton": "Anton-Regular.ttf",
+    "Archivo Black": "ArchivoBlack-Regular.ttf",
+    "Lilita One": "LilitaOne-Regular.ttf",
+    "Montserrat": "Montserrat-ExtraBold.ttf",
+    "Bebas Neue": "BebasNeue-Regular.ttf",
+    "Righteous": "Righteous-Regular.ttf"
+}
 CAP_MAX_W = 960   # captions never run wider than this, whatever is said
 
 
@@ -79,7 +95,8 @@ def install_fonts():
 
 
 LAYOUTS = {"blur": "Full frame + blurred fill", "zoom": "Zoomed in + blurred fill", "crop": "Fill the screen (centre crop)",
-           "gameplay": "Gameplay fills the screen, facecam in the corner"}
+           "gameplay": "Gameplay fills the screen, facecam in the corner",
+           "stack": "Split screen: Facecam on top, gameplay below"}
 
 
 def _ts(t):
@@ -111,12 +128,14 @@ def _groups(words, per):
 
 def geometry(src_w, src_h, layout):
     """Where the video sits in the 1080x1920 frame, and where hook and captions go."""
-    if src_h >= src_w and layout != "crop":
+    if src_h >= src_w and layout not in ("crop", "gameplay", "stack"):
         layout = "crop"  # already vertical or square: nothing to gain from a blurred fill
     if layout == "blur":
         fg_h = min(H, int(round(W * src_h / src_w / 2)) * 2)
     elif layout == "zoom":
         fg_h = 1000
+    elif layout == "stack":
+        return layout, H, 330, 890
     else:
         fg_h = H
     top = (H - fg_h) // 2
@@ -125,9 +144,12 @@ def geometry(src_w, src_h, layout):
     return layout, fg_h, max(230, top - 190), min(1640, top + fg_h + 180)
 
 
-def _hook_events(hook, dur, y):
+def _hook_events(hook, dur, y, font_size=None, style=None, enabled=True):
     """The heading: dark text in a white rounded box that fits it, on one line or two balanced ones."""
-    f, size = _Font.get(HOOK["font"]), HOOK["size"]
+    if not enabled or not hook:
+        return []
+    f = _Font.get(HOOK["font"])
+    size = int(font_size) if font_size else HOOK["size"]
     words = hook.split()
     if not words:
         return []
@@ -137,7 +159,7 @@ def _hook_events(hook, dur, y):
         lines = [" ".join(words[:cut]), " ".join(words[cut:])]
     widest = max(f.width(l, size) for l in lines)
     if widest > HOOK["max_w"]:
-        size = max(40, int(size * HOOK["max_w"] / widest))
+        size = max(36, int(size * HOOK["max_w"] / widest))
         widest = max(f.width(l, size) for l in lines)
     line_h = f.em(size) * 1.16
     bw, bh = widest + 2 * HOOK["pad_x"], line_h * len(lines) + 2 * HOOK["pad_y"]
@@ -149,16 +171,30 @@ def _hook_events(hook, dur, y):
            f"l {n(x0 + r)} {n(y1)} b {n(x0)} {n(y1)} {n(x0)} {n(y1)} {n(x0)} {n(y1 - r)} "
            f"l {n(x0)} {n(y0 + r)} b {n(x0)} {n(y0)} {n(x0)} {n(y0)} {n(x0 + r)} {n(y0)}")
     span = f"{_ts(0)},{_ts(dur)}"
-    ev = [f"Dialogue: 3,{span},Hook,,0,0,0,,{{\\an7\\pos(0,0)\\fad(160,0)\\c&H{HOOK['box']}&\\p1}}{box}{{\\p0}}"]
+    ev = []
+    if style != "nobox":
+        ev.append(f"Dialogue: 3,{span},Hook,,0,0,0,,{{\\an7\\pos(0,0)\\fad(160,0)\\c&H{HOOK['box']}&\\p1}}{box}{{\\p0}}")
     for i, line in enumerate(lines):
         cy = y - line_h * (len(lines) - 1) / 2 + i * line_h - f.cap_shift(size)
-        ev.append(f"Dialogue: 4,{span},Hook,,0,0,0,,{{\\an5\\pos({W // 2},{cy:.0f})\\fad(160,0)\\fs{size}}}{line}")
+        ink = HOOK['ink'] if style != "nobox" else "FFFFFF"
+        extra = f"\\c&H{ink}&" if style == "nobox" else ""
+        ev.append(f"Dialogue: 4,{span},Hook,,0,0,0,,{{\\an5\\pos({W // 2},{cy:.0f})\\fad(160,0)\\fs{size}{extra}}}{line}")
     return ev
 
 
-def build_ass(words, start, end, hook, style_name, highlight, hook_y, cap_y) -> str:
+def build_ass(words, start, end, hook, style_name, highlight, hook_y, cap_y,
+              cap_font_size=None, hook_font_size=None, hook_style=None,
+              hook_enabled=True, cap_enabled=True) -> str:
     st = STYLES.get(style_name, STYLES["bounce"])
-    words = [dict(w, s=w["s"] - CAPTION_LEAD, e=w["e"] - CAPTION_LEAD) for w in words]
+    cap_sz = int(cap_font_size) if cap_font_size else st['size']
+    hk_sz = int(hook_font_size) if hook_font_size else HOOK['size']
+    norm_words = []
+    for w in words:
+        txt = str(w.get("w") if "w" in w else w.get("text", ""))
+        s = float(w["s"] if "s" in w else w.get("start", 0.0))
+        e = float(w["e"] if "e" in w else w.get("end", s + 0.3))
+        norm_words.append({"w": txt, "s": s - CAPTION_LEAD, "e": e - CAPTION_LEAD})
+    words = norm_words
     strong = {_key(h) for h in highlight if _key(h)}
     head = f"""[Script Info]
 ScriptType: v4.00+
@@ -169,14 +205,16 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Cap,{st['font']},{st['size']},&H00{st['base']},&H00{st['base']},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,{st['outline']},0,5,0,0,0,1
-Style: Hook,{HOOK['font']},{HOOK['size']},&H00{HOOK['ink']},&H00{HOOK['ink']},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
+Style: Cap,{st['font']},{cap_sz},&H00{st['base']},&H00{st['base']},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,{st['outline']},0,5,0,0,0,1
+Style: Hook,{HOOK['font']},{hk_sz},&H00{HOOK['ink']},&H00{HOOK['ink']},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     dur = end - start
-    ev = _hook_events(_clean(hook), dur, hook_y)
+    ev = _hook_events(_clean(hook), dur, hook_y, font_size=hk_sz, style=hook_style, enabled=hook_enabled)
+    if not cap_enabled:
+        return head + "\n".join(ev)
     f = _Font.get(st["font"])
     inside = [dict(w, w=_clean(w["w"])) for w in words if w["s"] >= start - 0.05 and w["s"] < end]
     inside = sorted((w for w in inside if w["w"]), key=lambda w: w["s"])
@@ -232,24 +270,50 @@ PIP_W = 380            # how wide the facecam is in the 1080-wide frame
 PIP_MARGIN = 26
 
 
-def _filter(layout, fg_h, facecam=None):
+def _filter(layout, fg_h, facecam=None, cam_delay=0.0, split_ratio=0.4, cam_swap=False):
+    delay_f = ""
+    if cam_delay and abs(cam_delay) >= 0.02:
+        if cam_delay > 0:
+            delay_f = f"tpad=start_duration={cam_delay:.3f}:start_mode=clone,"
+        else:
+            delay_f = f"trim=start={-cam_delay:.3f},"
+
     if layout == "gameplay" and facecam:
         # The game fills the screen, and the webcam sits in the top corner of it, so a viewer sees
-        # the play and the face at the same time.
+        # the play and the face at the same time. Both branches use setpts=PTS-STARTPTS to guarantee
+        # perfect timestamp synchronization and zero frame delay in overlay.
         fx, fy, fw, fh = (int(v) for v in facecam)
         if fw > 8 and fh > 8:
-            pip_h = max(2, int(round(PIP_W * fh / fw)))
-            return (f"[0:v]fps={config.OUT_FPS},split=2[base][fc];"
-                    f"[base]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1[b];"
-                    f"[fc]crop={fw}:{fh}:{fx}:{fy},scale={PIP_W}:{pip_h},setsar=1[p];"
-                    f"[b][p]overlay={W - PIP_W - PIP_MARGIN}:{PIP_MARGIN}[v0];")
-    if layout == "crop" or (layout == "gameplay" and not facecam):
-        return f"[0:v]fps={config.OUT_FPS},scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1[v0];"
-    return (f"[0:v]fps={config.OUT_FPS},split=2[a][b];"
+            pip_h = max(2, int(round(PIP_W * fh / fw / 2)) * 2)
+            return (f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},split=2[base][fc];"
+                    f"[base]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,setpts=PTS-STARTPTS[b];"
+                    f"[fc]crop={fw}:{fh}:{fx}:{fy},scale={PIP_W}:{pip_h},setsar=1,{delay_f}setpts=PTS-STARTPTS[p];"
+                    f"[b][p]overlay={W - PIP_W - PIP_MARGIN}:{PIP_MARGIN}:eof_action=repeat:shortest=1,setpts=PTS-STARTPTS[v0];")
+
+    if layout == "stack" and facecam:
+        fx, fy, fw, fh = (int(v) for v in facecam)
+        if fw > 8 and fh > 8:
+            ratio = max(0.2, min(0.8, float(split_ratio or 0.4)))
+            top_h = int(round(H * ratio / 2)) * 2
+            bot_h = H - top_h
+            if cam_swap:
+                return (f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},split=2[top][bot];"
+                        f"[top]scale={W}:{top_h}:force_original_aspect_ratio=increase,crop={W}:{top_h},setsar=1,setpts=PTS-STARTPTS[t];"
+                        f"[bot]crop={fw}:{fh}:{fx}:{fy},scale={W}:{bot_h}:force_original_aspect_ratio=increase,crop={W}:{bot_h},setsar=1,{delay_f}setpts=PTS-STARTPTS[b];"
+                        f"[t][b]vstack,setsar=1,setpts=PTS-STARTPTS[v0];")
+            else:
+                return (f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},split=2[bot][top];"
+                        f"[top]crop={fw}:{fh}:{fx}:{fy},scale={W}:{top_h}:force_original_aspect_ratio=increase,crop={W}:{top_h},setsar=1,{delay_f}setpts=PTS-STARTPTS[t];"
+                        f"[bot]scale={W}:{bot_h}:force_original_aspect_ratio=increase,crop={W}:{bot_h},setsar=1,setpts=PTS-STARTPTS[b];"
+                        f"[t][b]vstack,setsar=1,setpts=PTS-STARTPTS[v0];")
+
+    if layout == "crop" or (layout in ("gameplay", "stack") and not facecam):
+        return f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,setpts=PTS-STARTPTS[v0];"
+    return (f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},split=2[a][b];"
             f"[a]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,boxblur=6:2,"
-            f"scale={W}:{H},eq=brightness=-0.14:saturation=1.15[bg];"
-            f"[b]scale={W}:{fg_h}:force_original_aspect_ratio=increase,crop={W}:{fg_h}[fg];"
-            f"[bg][fg]overlay=0:(H-h)/2,setsar=1[v0];")
+            f"scale={W}:{H},eq=brightness=-0.14:saturation=1.15,setpts=PTS-STARTPTS[bg];"
+            f"[b]scale={W}:{fg_h}:force_original_aspect_ratio=increase,crop={W}:{fg_h},setpts=PTS-STARTPTS[fg];"
+            f"[bg][fg]overlay=0:(H-h)/2:eof_action=repeat:shortest=1,setsar=1,setpts=PTS-STARTPTS[v0];")
 
 
 def _hook_y(layout, hook_y, facecam=None):
@@ -257,65 +321,318 @@ def _hook_y(layout, hook_y, facecam=None):
     across the top would run under it: it goes just below the picture instead."""
     if layout == "gameplay" and facecam and len(facecam) == 4 and facecam[2] > 8:
         return PIP_MARGIN + int(round(PIP_W * facecam[3] / facecam[2])) + 32
+    if layout == "stack":
+        return 330
     return hook_y
 
 
+_nvenc_ok = None
 _qsv_ok = None
+_amf_ok = None
 RENDER_SECONDS = 600      # one clip's video encode; far beyond normal, so a frozen encoder is stopped, not waited on
 
 
-def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, src_w: int, src_h: int) -> dict:
-    """Writes <name>.mp4, <name>.jpg and <name>.ass into out_dir. Returns file names."""
+def check_nvenc() -> bool:
+    """Checks whether NVIDIA NVENC hardware encoder is available on this system."""
+    global _nvenc_ok
+    if _nvenc_ok is None:
+        try:
+            r = subprocess.run(
+                ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.04", "-c:v", "h264_nvenc", "-f", "null", "-"],
+                capture_output=True, timeout=5, creationflags=NO_WINDOW
+            )
+            _nvenc_ok = (r.returncode == 0)
+        except Exception:
+            _nvenc_ok = False
+    return bool(_nvenc_ok)
+
+
+def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, src_w: int, src_h: int, quality: str = "final") -> dict:
+    """Writes <name>.mp4 (or <name>_draft.mp4), <name>.jpg, <name>.ass, etc. into out_dir. Returns file names."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    start, end = clip["start"], clip["end"]
-    layout, fg_h, hook_y, cap_y = geometry(src_w, src_h, clip.get("layout", "blur"))
-    face = clip.get("facecam")
-    if layout == "gameplay" and not (face and len(face) == 4):
-        layout = "crop"     # no webcam found: the game fills the screen, which is still the right shape
-    hook_y = _hook_y(layout, hook_y, face)
-    ass = build_ass(words if clip.get("captions", True) else [], start, end, clip.get("hook", ""), clip.get("style", "bounce"),
-                    clip.get("highlight_words", []), hook_y, cap_y)
-    # The clip is made in a short work folder and moved into place afterwards. The caption step of ffmpeg cannot
-    # open files whose full path is longer than 260 characters on Windows, which a data folder deep inside other
-    # folders easily reaches. Inside the work folder every name is short and relative (a drive colon would also
-    # break the filter syntax).
+    edit_file = out_dir / f"{name}_edit.json"
+    ed = edit.load_edit(edit_file) if edit_file.is_file() else None
+
+    if ed:
+        start = float(ed["start"])
+        end = float(ed["end"])
+        layout = ed.get("layout", "blur")
+        split_ratio = float(ed.get("split_ratio", 0.40) or 0.40)
+        face = [ed["facecam"]["x"], ed["facecam"]["y"], ed["facecam"]["w"], ed["facecam"]["h"]] if ed.get("facecam") else None
+        cap_conf = ed.get("caption") or {}
+        cap_enabled = bool(clip.get("captions", cap_conf.get("enabled", True)))
+        cap_style = str(cap_conf.get("style", "bounce"))
+        cap_font_size = int(cap_conf.get("font_size", 132))
+        cap_y = float(cap_conf.get("y_pos", 1630.0))
+        words_to_use = cap_conf.get("words") if cap_conf.get("words") else words
+        hook_conf = ed.get("hook") or {}
+        hook_enabled = bool(hook_conf.get("enabled", True))
+        hook_text = str(hook_conf.get("text", "")).strip()
+        hook_font_size = int(hook_conf.get("font_size", 96))
+        hook_y = float(hook_conf.get("y_pos", 300.0))
+        hook_style = str(hook_conf.get("style", "default"))
+        audio_conf = ed.get("audio") or {}
+        audio_opts = {
+            "meme": bool(audio_conf.get("meme", False)),
+            "music": bool(audio_conf.get("music", False)),
+            "meme_mood": str(audio_conf.get("meme_mood", "none")),
+            "music_bed": str(audio_conf.get("music_bed", "none")),
+            "meme_vol": float(audio_conf.get("meme_vol", 0.0)),
+            "music_db": float(audio_conf.get("music_db", -18.0)),
+        }
+    else:
+        start, end = float(clip["start"]), float(clip["end"])
+        layout = clip.get("layout", "blur")
+        split_ratio = float(clip.get("split_ratio", 0.40) or 0.40)
+        face = clip.get("facecam")
+        cap_enabled = bool(clip.get("captions", True))
+        cap_style = clip.get("style", "bounce")
+        cap_font_size = 132
+        cap_y = clip.get("cap_y")
+        words_to_use = words
+        hook_text = str(clip.get("hook", "")).strip()
+        hook_enabled = bool(hook_text)
+        hook_font_size = int(clip.get("hook_font_size") or 96)
+        hook_y = clip.get("hook_y")
+        hook_style = str(clip.get("hook_style") or "default")
+        audio_opts = {
+            "meme": bool(clip.get("meme") and clip.get("meme") != "none"),
+            "music": bool(clip.get("music") and clip.get("music") != "none"),
+            "meme_mood": str(clip.get("meme") or "none"),
+            "music_bed": str(clip.get("music") or "none"),
+            "meme_vol": float(clip.get("meme_vol") or 0.0),
+            "music_db": float(clip.get("music_db") or -18.0),
+        }
+
+    layout, fg_h, def_hook_y, def_cap_y = geometry(src_w, src_h, layout)
+    if face and len(face) == 4 and src_w > 0 and src_h > 0:
+        if all(isinstance(v, (int, float)) and 0.0 <= float(v) <= 1.0 for v in face) and (float(face[2]) > 0 or float(face[3]) > 0):
+            fx = int(round(float(face[0]) * src_w))
+            fy = int(round(float(face[1]) * src_h))
+            fw = int(round(float(face[2]) * src_w))
+            fh = int(round(float(face[3]) * src_h))
+        else:
+            fx, fy, fw, fh = (int(v) for v in face)
+        fx = max(0, min(fx, src_w - 10))
+        fy = max(0, min(fy, src_h - 10))
+        fw = max(10, min(fw, src_w - fx))
+        fh = max(10, min(fh, src_h - fy))
+        face = [fx, fy, fw, fh]
+    if layout in ("gameplay", "stack") and not (face and len(face) == 4):
+        fb = clip.get("cam_fallback") or "blur"
+        layout = fb if fb in ("blur", "zoom") else "blur"
+        layout, fg_h, def_hook_y, def_cap_y = geometry(src_w, src_h, layout)
+
+    cap_anchor = clip.get("cap_anchor")
+    if cap_y is not None:
+        try:
+            cap_y = float(cap_y)
+        except (ValueError, TypeError):
+            cap_y = float(def_cap_y)
+    elif cap_anchor == "safe_bottom":
+        cap_y = 1630.0
+    elif cap_anchor == "seam" and layout == "stack":
+        top_h = int(round(H * split_ratio / 2)) * 2
+        cap_y = float(top_h + (50 if not clip.get("cam_swap") else -50))
+    elif cap_anchor == "top":
+        cap_y = 420.0
+    else:
+        cap_y = float(def_cap_y)
+
+    if hook_y is not None:
+        try:
+            hook_y = float(hook_y)
+        except (ValueError, TypeError):
+            hook_y = _hook_y(layout, def_hook_y, face)
+    else:
+        hook_y = _hook_y(layout, def_hook_y, face)
+
+    ass = build_ass(words_to_use if cap_enabled else [], start, end, hook_text, cap_style,
+                    clip.get("highlight_words", []), hook_y, cap_y,
+                    cap_font_size=cap_font_size, hook_font_size=hook_font_size,
+                    hook_style=hook_style, hook_enabled=hook_enabled, cap_enabled=cap_enabled)
+    # The clip is made in a short work folder and moved into place afterwards.
     work = Path(tempfile.mkdtemp(prefix="pk"))
     try:
-        return _render_in(work, src, out_dir, name, start, end, layout, fg_h, ass, face=face)
+        return _render_in(work, src, out_dir, name, start, end, layout, fg_h, ass,
+                          face=face, clip=clip, words=words_to_use, hook_y=hook_y, cap_y=cap_y,
+                          quality=quality, audio_opts=audio_opts, split_ratio=split_ratio)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
 
-def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layout, fg_h, ass: str, face=None) -> dict:
-    global _qsv_ok
+def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layout, fg_h, ass: str,
+               face=None, clip=None, words=None, hook_y=300, cap_y=1380, quality="final",
+               audio_opts=None, split_ratio=0.40) -> dict:
+    global _nvenc_ok, _qsv_ok, _amf_ok
     (work / f"{name}.ass").write_text(ass, encoding="utf-8")
     (work / "f").mkdir()
     for f in config.FONTS_DIR.glob("*.ttf"):
         shutil.copyfile(f, work / "f" / f.name)
-    fc = _filter(layout, fg_h, face) + f"[v0]ass={name}.ass:fontsdir=f[v]"
-    base = ["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
-            "-filter_complex", fc, "-map", "[v]", "-map", "0:a:0", "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
-            "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", "-pix_fmt"]
+
     encoders = []
-    if _qsv_ok is not False:
+    gpu_enabled = getattr(config, "USE_GPU", True)
+    try:
+        from . import accounts
+        if not accounts.settings().get("gpu_enabled", True):
+            gpu_enabled = False
+    except Exception:
+        pass
+    if gpu_enabled and _nvenc_ok is not False:
+        encoders.append(("nvenc", ["yuv420p", "-c:v", "h264_nvenc", "-cq", "21", "-preset", "p4"]))
+    if gpu_enabled and _qsv_ok is not False:
         encoders.append(("qsv", ["nv12", "-c:v", "h264_qsv", "-global_quality", "23", "-preset", "fast"]))
+    if gpu_enabled and _amf_ok is not False:
+        encoders.append(("amf", ["yuv420p", "-c:v", "h264_amf", "-rc", "cqp", "-qp_p", "21", "-qp_i", "21"]))
     encoders.append(("x264", ["yuv420p", "-c:v", "libx264", "-crf", "21", "-preset", "veryfast"]))
-    err = None
-    for label, enc in encoders:
-        p = subprocess.run(base + enc + [f"{name}.mp4"], cwd=work, capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", creationflags=NO_WINDOW, timeout=RENDER_SECONDS)
-        if p.returncode == 0:
-            if label == "qsv":
-                _qsv_ok = True
-            break
-        err = p.stderr[-1200:]
-        if label == "qsv":
-            _qsv_ok = False
+
+    cam_delay = float((clip or {}).get("cam_delay", 0.0) or 0.0)
+    cam_swap = bool((clip or {}).get("cam_swap", False))
+
+    if quality == "draft":
+        fc = _filter(layout, fg_h, face, cam_delay=cam_delay, split_ratio=split_ratio, cam_swap=cam_swap)
+        fc_draft = f"{fc};[v0]scale=540:960,ass={name}.ass:fontsdir=f[vdraft]"
+        base_draft = ["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
+                      "-filter_complex", fc_draft, "-map", "[vdraft]", "-map", "0:a:0",
+                      "-af", "asetpts=PTS-STARTPTS",
+                      "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", "-pix_fmt"]
+        draft_encoders = []
+        if gpu_enabled and _nvenc_ok is not False:
+            draft_encoders.append(("nvenc", ["yuv420p", "-c:v", "h264_nvenc", "-preset", "p1", "-cq", "28"]))
+        if gpu_enabled and _qsv_ok is not False:
+            draft_encoders.append(("qsv", ["nv12", "-c:v", "h264_qsv", "-preset", "veryfast", "-global_quality", "28"]))
+        if gpu_enabled and _amf_ok is not False:
+            draft_encoders.append(("amf", ["yuv420p", "-c:v", "h264_amf", "-rc", "cqp", "-qp_p", "28", "-qp_i", "28"]))
+        draft_encoders.append(("x264", ["yuv420p", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28"]))
+
+        err = None
+        for label, enc in draft_encoders:
+            p = subprocess.run(base_draft + enc + [f"{name}_draft.mp4"], cwd=work, capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", creationflags=NO_WINDOW, timeout=RENDER_SECONDS)
+            if p.returncode == 0:
+                if label == "nvenc": _nvenc_ok = True
+                elif label == "qsv": _qsv_ok = True
+                elif label == "amf": _amf_ok = True
+                break
+            err = p.stderr[-1200:]
+        else:
+            raise RuntimeError(f"Draft render failed: {err}")
+
+        cover_t = min(1.2, (end - start) / 2)
+        run(["ffmpeg", "-y", "-v", "error", "-ss", f"{cover_t:.2f}", "-i", f"{name}_draft.mp4", "-frames:v", "1",
+             "-q:v", "3", f"{name}.jpg"], cwd=work)
+        for ext in ("mp4", "jpg", "ass"):
+            fpath = work / f"{name}_draft.mp4" if ext == "mp4" else work / f"{name}.{ext}"
+            if fpath.is_file():
+                dest = out_dir / fpath.name
+                shutil.move(str(fpath), str(dest))
+        return {"file": f"{name}_draft.mp4", "cover": f"{name}.jpg", "layout": layout, "draft": True}
+
+    # Final Render
+    raw_file = work / f"{name}_raw.mp4"
+    existing_raw = out_dir / f"{name}_raw.mp4"
+    fast_caption = bool(clip and clip.get("_fast_caption_only") and existing_raw.is_file())
+
+    if fast_caption:
+        shutil.copyfile(existing_raw, raw_file)
     else:
-        raise RuntimeError(f"Render failed: {err}")
+        fc = _filter(layout, fg_h, face, cam_delay=cam_delay, split_ratio=split_ratio, cam_swap=cam_swap)
+        base_raw = ["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
+                    "-filter_complex", fc, "-map", "[v0]", "-map", "0:a:0",
+                    "-af", "asetpts=PTS-STARTPTS,aresample=48000,loudnorm=I=-14:TP=-1.5:LRA=11",
+                    "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", "-pix_fmt"]
+        err = None
+        for label, enc in encoders:
+            p = subprocess.run(base_raw + enc + [f"{name}_raw.mp4"], cwd=work, capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", creationflags=NO_WINDOW, timeout=RENDER_SECONDS)
+            if p.returncode == 0:
+                if label == "nvenc": _nvenc_ok = True
+                elif label == "qsv": _qsv_ok = True
+                elif label == "amf": _amf_ok = True
+                break
+            err = p.stderr[-1200:]
+            if label == "nvenc": _nvenc_ok = False
+            elif label == "qsv": _qsv_ok = False
+            elif label == "amf": _amf_ok = False
+        else:
+            raise RuntimeError(f"Render failed: {err}")
+
+    # Burn captions onto raw_file to produce {name}.mp4
+    if ass:
+        burn_base = ["ffmpeg", "-y", "-v", "error", "-i", str(raw_file),
+                     "-vf", f"ass={name}.ass:fontsdir=f",
+                     "-c:a", "copy", "-pix_fmt"]
+        for label, enc in encoders:
+            p = subprocess.run(burn_base + enc + [f"{name}.mp4"], cwd=work, capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", creationflags=NO_WINDOW, timeout=60)
+            if p.returncode == 0:
+                break
+        else:
+            shutil.copyfile(raw_file, work / f"{name}.mp4")
+    else:
+        shutil.copyfile(raw_file, work / f"{name}.mp4")
+
+    # Save captions.json with word timestamps, style, and offsets
+    cap_data = {
+        "words": words or [],
+        "hook": clip.get("hook", "") if clip else "",
+        "style": clip.get("style", "bounce") if clip else "bounce",
+        "hook_y": hook_y,
+        "cap_y": cap_y,
+        "cap_anchor": clip.get("cap_anchor", "bottom") if clip else "bottom",
+        "split_ratio": split_ratio,
+        "cam_swap": cam_swap,
+    }
+    try:
+        (work / f"{name}_captions.json").write_text(json.dumps(cap_data, indent=1), encoding="utf-8")
+    except Exception:
+        pass
+
+    mp4_file = work / f"{name}.mp4"
+    aopts = audio_opts or {}
+    meme_mood = aopts.get("meme_mood") if aopts.get("meme") else None
+    if meme_mood and meme_mood != "none":
+        try:
+            from . import meme
+            vol = aopts.get("meme_vol")
+            meme.apply_meme_effect(mp4_file, meme_mood, out=mp4_file, vol=vol)
+        except Exception:
+            pass
+    music_mood = aopts.get("music_bed") if aopts.get("music") else None
+    if music_mood and music_mood != "none":
+        try:
+            from . import meme
+            db = aopts.get("music_db")
+            if db is not None:
+                meme.apply_music_bed(mp4_file, music_mood, out=mp4_file, db=float(db))
+            else:
+                meme.apply_music_bed(mp4_file, music_mood, out=mp4_file)
+        except Exception:
+            pass
+
     cover_t = min(1.2, (end - start) / 2)
     run(["ffmpeg", "-y", "-v", "error", "-ss", f"{cover_t:.2f}", "-i", f"{name}.mp4", "-frames:v", "1",
          "-q:v", "3", f"{name}.jpg"], cwd=work)
     for ext in ("mp4", "jpg", "ass"):
         shutil.move(str(work / f"{name}.{ext}"), str(out_dir / f"{name}.{ext}"))
-    return {"file": f"{name}.mp4", "cover": f"{name}.jpg", "layout": layout}
+    if (work / f"{name}_raw.mp4").is_file():
+        shutil.move(str(work / f"{name}_raw.mp4"), str(out_dir / f"{name}_raw.mp4"))
+    if (work / f"{name}_captions.json").is_file():
+        shutil.move(str(work / f"{name}_captions.json"), str(out_dir / f"{name}_captions.json"))
+
+    # Cleanup draft file if present
+    draft_file = out_dir / f"{name}_draft.mp4"
+    if draft_file.is_file():
+        draft_file.unlink(missing_ok=True)
+
+    qc_res = None
+    try:
+        from . import qc
+        qc_res = qc.check_clip(out_dir / f"{name}.mp4")
+    except Exception:
+        pass
+
+    out_res = {"file": f"{name}.mp4", "cover": f"{name}.jpg", "layout": layout, "raw": f"{name}_raw.mp4", "captions_file": f"{name}_captions.json"}
+    if qc_res:
+        out_res["qc"] = qc_res
+    return out_res

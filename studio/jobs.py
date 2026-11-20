@@ -11,7 +11,9 @@ import traceback
 import uuid
 from pathlib import Path
 
-from . import brain, config, creators, ctx, facecam, games, load, media, quality, render, roman, safe, transcribe, usage
+import numpy as np
+
+from . import brain, config, creators, ctx, edit, facecam, games, load, media, meme, quality, render, roman, rules, safe, transcribe, usage
 
 class _FairQueue:
     """Whose video is next. Each person has their own line and the lines take turns, so someone who adds ten
@@ -31,6 +33,8 @@ class _FairQueue:
     def _room(self) -> bool:
         """May one more video start? One always may. More only while the machine has room, and a few seconds
         after the last one started, so its weight is already showing in the measurements."""
+        if getattr(load, "_force", None) is None and (getattr(config, "BYPASS_QUEUE_HOLD", True) or not config.ACCOUNTS):
+            return self.running < max(1, config.JOB_WORKERS)
         if self.running == 0:
             return True
         return self.running < config.JOB_WORKERS and time.time() - self.last_start > 6 and not load.busy()
@@ -108,10 +112,43 @@ _lock = threading.RLock()
 on_clip_ready: list = []   # callbacks (job, clip), run once when a clip first finishes
 
 DEFAULTS = {"max_clips": 6, "min_len": 15, "max_len": 60, "style": "bounce", "layout": "blur", "quality": 720,
-            "range_start": None, "range_end": None, "captions": True}
+            "range_start": None, "range_end": None, "captions": True, "meme": "none", "music": "none", "format": "moment", "cam_delay": 0.0,
+            "meme_vol": None, "music_db": None, "cam_pos": "auto",
+            "split_ratio": 0.4, "cam_swap": False, "cap_anchor": "safe_bottom", "cam_fallback": "blur", "facecam": None, "cap_y": None,
+            "review_mode": "auto"}
 
 
 LIMITS = {"max_clips": (1, 20), "min_len": (5, 120), "max_len": (10, 180), "quality": (360, 1080)}
+
+
+def _parse_time_sec(val):
+    if val is None or val == "":
+        return None
+    if isinstance(val, (int, float)):
+        return float(val)
+    s = str(val).strip().lower()
+    if s in ("start", "end", "none", "full"):
+        return None
+    if ":" in s:
+        parts = [float(x) for x in s.split(":")]
+        if len(parts) == 3:
+            return parts[0] * 3600 + parts[1] * 60 + parts[2]
+        if len(parts) == 2:
+            return parts[0] * 60 + parts[1]
+    import re
+    h = re.search(r"(\d+(?:\.\d+)?)\s*h", s)
+    m = re.search(r"(\d+(?:\.\d+)?)\s*m", s)
+    sec = re.search(r"(\d+(?:\.\d+)?)\s*s", s)
+    if h or m or sec:
+        tot = 0.0
+        if h: tot += float(h.group(1)) * 3600
+        if m: tot += float(m.group(1)) * 60
+        if sec: tot += float(sec.group(1))
+        return tot
+    try:
+        return float(s)
+    except ValueError:
+        return None
 
 
 def clean_options(options) -> dict:
@@ -130,12 +167,79 @@ def clean_options(options) -> dict:
             v = max(lo, min(hi, int(float(v))))
         elif k == "style":
             v = v if v in render.STYLES else DEFAULTS["style"]
+        elif k == "review_mode":
+            v = v if v in ("auto", "review", "review_first") else "auto"
         elif k == "layout":
             v = v if v in render.LAYOUTS else DEFAULTS["layout"]
-        else:                                    # range_start, range_end: seconds into the video
-            v = float(v)
-            if not math.isfinite(v) or v < 0:
+        elif k == "cam_delay":
+            try:
+                v = round(max(-3.0, min(3.0, float(v))), 2)
+            except (ValueError, TypeError):
+                v = 0.0
+        elif k == "meme":
+            v = v if v in meme.MEME_MOODS else "none"
+        elif k == "music":
+            v = v if v in meme.MUSIC_BEDS else "none"
+        elif k == "meme_vol":
+            try:
+                out[k] = round(max(-30.0, min(10.0, float(v))), 1)
+            except (ValueError, TypeError):
+                pass
+            continue
+        elif k == "music_db":
+            try:
+                out[k] = round(max(-40.0, min(0.0, float(v))), 1)
+            except (ValueError, TypeError):
+                pass
+            continue
+        elif k == "cam_pos":
+            out[k] = v if v in ("auto", "top-right", "top-left", "bottom-right", "bottom-left") else "auto"
+            continue
+        elif k == "split_ratio":
+            try:
+                out[k] = round(max(0.2, min(0.8, float(v))), 2)
+            except (ValueError, TypeError):
+                pass
+            continue
+        elif k == "cam_swap":
+            out[k] = bool(v)
+            continue
+        elif k == "cap_anchor":
+            out[k] = v if v in ("safe_bottom", "seam", "top") else "safe_bottom"
+            continue
+        elif k == "cam_fallback":
+            out[k] = v if v in ("blur", "zoom") else "blur"
+            continue
+        elif k == "cap_y":
+            try:
+                out[k] = int(float(v)) if v is not None else None
+            except (ValueError, TypeError):
+                pass
+            continue
+        elif k == "facecam":
+            if isinstance(v, (list, tuple)) and len(v) == 4:
+                try:
+                    out[k] = [round(max(0.0, min(1.0, float(x))), 4) for x in v]
+                except (ValueError, TypeError):
+                    pass
+            elif isinstance(v, dict) and all(axis in v for axis in ("x", "y", "w", "h")):
+                try:
+                    out[k] = [
+                        round(max(0.0, min(1.0, float(v["x"]))), 4),
+                        round(max(0.0, min(1.0, float(v["y"]))), 4),
+                        round(max(0.01, min(1.0, float(v["w"]))), 4),
+                        round(max(0.01, min(1.0, float(v["h"]))), 4),
+                    ]
+                except (ValueError, TypeError):
+                    pass
+            continue
+        elif k == "format":
+            v = v if v in ("moment", "callback", "waitforit", "reveal") else "moment"
+        elif k in ("range_start", "range_end"):
+            sec = _parse_time_sec(v)
+            if sec is None or not math.isfinite(sec) or sec < 0:
                 raise ValueError("That part of the video isn't valid.")
+            v = round(sec, 2)
         out[k] = v
     if out.get("range_end") is not None and out["range_end"] <= out.get("range_start", 0):
         raise ValueError("The end of the chosen part must be after its start.")
@@ -161,8 +265,8 @@ def public(job) -> dict:
         if n:
             out["stage"] = (f"High demand right now: {n} video{'s' if n != 1 else ''} ahead of yours" if _q.held else
                             f"Waiting in line: {n} video{'s' if n != 1 else ''} ahead of yours")
-        elif n == 0 and _q.held:
-            out["stage"] = "High demand right now: yours is next"
+        elif n == 0:
+            out["stage"] = "High demand right now: yours is next" if _q.held else "Starting download..."
     return out
 
 
@@ -214,6 +318,8 @@ def _load_file(f: Path, uid: str):
     if job.get("status") in ("queued", "running") and job.get("kind") != "live":
         # Picked up again as soon as the server is back (jobs.start), from the last finished part of the transcript.
         job.update(status="queued", stage="Picking up where it stopped", error=None, resume=True)
+    elif job.get("status") == "paused":
+        job["stage"] = "Paused by you"
     if job.get("status") == "live":
         job.update(status="done", stage="Recording paused by a server update", was_live=True)
     buffered = job.get("kind") == "live" and any((f.parent / "buffer").glob("*.ts"))
@@ -257,7 +363,7 @@ def all_jobs() -> list:
 def list_jobs():
     u = ctx.uid()
     with _lock:
-        return sorted((dict(j) for j in _by_user.get(u, {}).values()), key=lambda j: -j["created"])
+        return sorted((dict(j) for j in _by_user.get(u, {}).values()), key=lambda j: -j.get("created", 0))
 
 
 def get(jid):
@@ -331,7 +437,40 @@ def _live_worker():
             traceback.print_exc()
 
 
+_paused = set()
+
+
+def is_paused(jid: str) -> bool:
+    return jid in _paused
+
+
+def pause(jid: str) -> dict:
+    job = get(jid)
+    if not job:
+        raise ValueError("No such video")
+    if job.get("status") == "paused":
+        return job
+    if job.get("status") in ("done", "error"):
+        raise ValueError("This video is already finished or has stopped.")
+    _paused.add(jid)
+    _set(job, status="paused", stage="Paused by you")
+    return job
+
+
+def resume(jid: str) -> dict:
+    job = get(jid)
+    if not job:
+        raise ValueError("No such video")
+    if job.get("status") != "paused":
+        raise ValueError("This video is not paused.")
+    _paused.discard(jid)
+    _set(job, status="queued", stage="Picking up where it stopped", resume=True, error=None)
+    _q.put(("job", job["id"], None), user=job["user"])
+    return job
+
+
 def delete(jid):
+    _paused.discard(jid)
     with _lock:
         job = _jobs.pop(jid, None)
         if job:
@@ -358,21 +497,104 @@ def request_render(jid, cid, changes: dict):
         raise ValueError("Those times aren't valid.")
     if not 3 <= new["end"] - new["start"] <= 180:
         raise ValueError("A clip can be 3 to 180 seconds long.")
-    for k in ("hook", "title", "description", "style", "layout"):
+    for k in ("hook", "title", "description", "style", "layout", "meme", "music", "format", "cap_anchor", "cam_fallback"):
         if k in changes:
-            new[k] = str(changes[k])[:{"hook": 60, "title": 100, "description": 2000}.get(k, 20)]
+            new[k] = str(changes[k])[:{"hook": 60, "title": 100, "description": 2000}.get(k, 30)]
+    if "split_ratio" in changes:
+        try:
+            new["split_ratio"] = round(max(0.2, min(0.8, float(changes["split_ratio"]))), 2)
+        except (ValueError, TypeError):
+            pass
+    if "cam_swap" in changes:
+        new["cam_swap"] = bool(changes["cam_swap"])
+    if "cap_y" in changes:
+        try:
+            new["cap_y"] = int(float(changes["cap_y"])) if changes["cap_y"] is not None else None
+        except (ValueError, TypeError):
+            pass
+    if "hook_y" in changes:
+        try:
+            new["hook_y"] = int(float(changes["hook_y"])) if changes["hook_y"] is not None else None
+        except (ValueError, TypeError):
+            pass
+    if "meme_vol" in changes:
+        try:
+            new["meme_vol"] = round(max(-30.0, min(10.0, float(changes["meme_vol"]))), 1)
+        except (ValueError, TypeError):
+            pass
+    if "music_db" in changes:
+        try:
+            new["music_db"] = round(max(-40.0, min(0.0, float(changes["music_db"]))), 1)
+        except (ValueError, TypeError):
+            pass
+    if "facecam" in changes:
+        fc = changes["facecam"]
+        if isinstance(fc, (list, tuple)) and len(fc) == 4:
+            new["facecam"] = [round(max(0.0, min(1.0, float(x))), 4) for x in fc]
+        elif isinstance(fc, dict) and all(k in fc for k in ("x", "y", "w", "h")):
+            new["facecam"] = [round(max(0.0, min(1.0, float(fc["x"]))), 4),
+                              round(max(0.0, min(1.0, float(fc["y"]))), 4),
+                              round(max(0.01, min(1.0, float(fc["w"]))), 4),
+                              round(max(0.01, min(1.0, float(fc["h"]))), 4)]
+        elif fc is None:
+            new["facecam"] = None
+    if "words" in changes and isinstance(changes["words"], list):
+        valid_words = []
+        for w in changes["words"]:
+            if isinstance(w, dict) and "w" in w:
+                valid_words.append({
+                    "w": str(w["w"]),
+                    "s": round(float(w.get("s", 0.0)), 2),
+                    "e": round(float(w.get("e", 0.0)), 2)
+                })
+        new["words"] = valid_words
     if new.get("style") not in render.STYLES:
         new["style"] = DEFAULTS["style"]
     if new.get("layout") not in render.LAYOUTS:
         new["layout"] = DEFAULTS["layout"]
+    if new.get("meme") not in meme.MEME_MOODS:
+        new["meme"] = "none"
+    if new.get("music") not in meme.MUSIC_BEDS:
+        new["music"] = "none"
+    if new.get("layout") in ("gameplay", "stack") and not new.get("facecam"):
+        if job.get("facecam"):
+            new["facecam"] = job["facecam"]
+        else:
+            face = _facecam(job, src=clip.get("src"))
+            if face:
+                new["facecam"] = face
+
+    raw_file = Path(job["dir"]) / "clips" / f"{cid}_raw.mp4"
+    if raw_file.is_file():
+        time_changed = (new.get("start") != clip.get("start") or new.get("end") != clip.get("end"))
+        layout_changed = (
+            new.get("layout") != clip.get("layout") or
+            new.get("split_ratio") != clip.get("split_ratio") or
+            new.get("cam_swap") != clip.get("cam_swap") or
+            new.get("facecam") != clip.get("facecam") or
+            new.get("cam_fallback") != clip.get("cam_fallback")
+        )
+        audio_changed = (
+            new.get("meme") != clip.get("meme") or
+            new.get("music") != clip.get("music") or
+            new.get("meme_vol") != clip.get("meme_vol") or
+            new.get("music_db") != clip.get("music_db")
+        )
+        new["_fast_caption_only"] = not (time_changed or layout_changed or audio_changed)
+    else:
+        new["_fast_caption_only"] = False
+
     clip.update(new, status="queued")
     save(job)
     _q.put(("clip", jid, cid))
 
 
-def render_one(job, clip, words):
+def render_one(job, clip, words, quality="final"):
     d = Path(job["dir"])
-    clip["status"] = "rendering"
+    if quality == "draft":
+        clip["status"] = "drafting"
+    else:
+        clip["status"] = "rendering_final"
     save(job)
     try:
         if not clip.get("src") and not job.get("source_path"):
@@ -381,25 +603,206 @@ def render_one(job, clip, words):
         src = Path(clip["src"]) if clip.get("src") else Path(job["source_path"])
         if not clip.get("src"):
             clip["end"] = min(clip["end"], job["duration"])
-        local = dict(clip, start=clip["start"] - off, end=clip["end"] - off, hook=roman.to_roman(clip.get("hook") or ""))
-        near = _caption_words(job, clip, words, off) if clip.get("captions", True) else []
-        out = render.render_clip(src, d / "clips", clip["id"], local, near, job["width"], job["height"])
-        clip.update(out, status="done", version=clip.get("version", 0) + 1, error=None)
-        post = {k: clip[k] for k in ("title", "description", "hashtags", "hook", "start", "end", "score")}
-        (d / "clips" / f"{clip['id']}.json").write_text(json.dumps(post, indent=1), encoding="utf-8")
-        if clip["version"] == 1:
-            clip.setdefault("made_at", time.time())
-            creators.log(job["creator"], f"Clip ready (score {clip['score']}): {clip['title'] or clip['hook']}")
-            save(job)
-            for fn in on_clip_ready:
+        if clip.get("layout") in ("gameplay", "stack") and not clip.get("facecam"):
+            face = job.get("facecam") or _facecam(job, src=src)
+            if face:
+                clip["facecam"] = face
+        local = dict(clip, start=clip["start"] - off, end=clip["end"] - off,
+                     hook=roman.to_roman(clip.get("hook") or ""),
+                     cam_delay=float(clip.get("cam_delay", 0.0) or 0.0))
+        if clip.get("captions", True):
+            if clip.get("words"):
+                near = [dict(w, s=float(w["s"]), e=float(w["e"])) for w in clip["words"]]
+            elif clip.get("src_words"):
+                raw = [dict(w) for w in clip["src_words"] if local["start"] - 0.5 <= w["s"] <= local["end"] + 0.5]
                 try:
-                    fn(job, clip)
-                except Exception:  # noqa: BLE001
-                    traceback.print_exc()
+                    raw = brain.fix_caption_words(raw, job.get("title") or "", job.get("lang") or "")
+                except Exception:
+                    pass
+                near = [dict(w, s=w["s"], e=w["e"]) for w in roman.words(raw)]
+            else:
+                near = _caption_words(job, clip, words, off)
+        else:
+            near = []
+
+        # Ensure {cid}_edit.json exists
+        edit_file = d / "clips" / f"{clip['id']}_edit.json"
+        if not edit_file.is_file():
+            ed = edit.init_edit(job, clip, near, clip.get("facecam"))
+            edit.save_edit(edit_file, ed)
+        else:
+            ed = edit.load_edit(edit_file)
+            if ed and "captions" in clip:
+                ed["caption"]["enabled"] = bool(clip["captions"])
+                edit.save_edit(edit_file, ed)
+
+        out = render.render_clip(src, d / "clips", clip["id"], local, near, job["width"], job["height"], quality=quality)
+        if quality == "draft":
+            clip.update(out, status="awaiting_review", error=None)
+            clip["words"] = near
+        else:
+            final_status = "done"
+            if out.get("qc") and out["qc"].get("status") == "FAIL":
+                final_status = "qc_flagged"
+                issues = out["qc"].get("issues", [])
+                clip["error"] = ", ".join(issues) if issues else "Quality control check failed"
+            clip.update(out, status=final_status, version=clip.get("version", 0) + 1, error=None if final_status == "done" else clip.get("error"))
+            clip["words"] = near
+            post = {k: clip[k] for k in ("title", "description", "hashtags", "hook", "start", "end", "score") if k in clip}
+            (d / "clips" / f"{clip['id']}.json").write_text(json.dumps(post, indent=1), encoding="utf-8")
+            if clip["version"] == 1 and final_status == "done":
+                clip.setdefault("made_at", time.time())
+                creators.log(job["creator"], f"Clip ready (score {clip['score']}): {clip.get('title') or clip.get('hook')}")
+                save(job)
+                for fn in on_clip_ready:
+                    try:
+                        fn(job, clip)
+                    except Exception:  # noqa: BLE001
+                        traceback.print_exc()
     except Exception as e:  # noqa: BLE001
-        clip.update(status="error", error=safe.friendly(e, 400))
+        clip.update(status="failed" if quality == "draft" else "error", error=safe.friendly(e, 400))
         creators.log(job["creator"], f"Clip failed: {safe.friendly(e, 200)}")
     save(job)
+
+
+def approve_clip(jid: str, cid: str) -> dict:
+    job = _jobs.get(jid)
+    if not job or job.get("user") != ctx.uid():
+        raise ValueError("No such video")
+    clip = next((c for c in job["clips"] if c["id"] == cid), None)
+    if not clip:
+        raise ValueError("No such clip")
+    if clip.get("status") == "rendering_final":
+        raise ValueError("Clip is currently rendering")
+
+    clip["status"] = "approved"
+    save(job)
+    _q.put(("clip_final", jid, cid))
+
+    if (job.get("options") or {}).get("review_mode") == "review_first":
+        edit_file = Path(job["dir"]) / "clips" / f"{cid}_edit.json"
+        if edit_file.is_file():
+            ed = edit.load_edit(edit_file)
+            if ed:
+                patch = {
+                    "layout": ed.get("layout"),
+                    "split_ratio": ed.get("split_ratio"),
+                    "caption": {
+                        "style": ed.get("caption", {}).get("style"),
+                        "font_size": ed.get("caption", {}).get("font_size"),
+                        "y_pos": ed.get("caption", {}).get("y_pos"),
+                        "enabled": ed.get("caption", {}).get("enabled", True),
+                    },
+                    "hook": {
+                        "enabled": ed.get("hook", {}).get("enabled", True),
+                        "font_size": ed.get("hook", {}).get("font_size"),
+                        "y_pos": ed.get("hook", {}).get("y_pos"),
+                        "style": ed.get("hook", {}).get("style"),
+                    },
+                    "audio": ed.get("audio", {}),
+                    "facecam": ed.get("facecam")
+                }
+                for other in job["clips"]:
+                    if other["id"] != cid and other.get("status") not in ("approved", "rendering_final", "done"):
+                        other_ef = Path(job["dir"]) / "clips" / f"{other['id']}_edit.json"
+                        other_ed = edit.load_edit(other_ef) if other_ef.is_file() else edit.init_edit(job, other, None, other.get("facecam"))
+                        merged = edit.deep_merge_global(other_ed, patch)
+                        edit.save_edit(other_ef, merged)
+                        other["status"] = "approved"
+                        _q.put(("clip_final", jid, other["id"]))
+                save(job)
+    return clip
+
+
+def approve_all(jid: str) -> list:
+    job = _jobs.get(jid)
+    if not job or job.get("user") != ctx.uid():
+        raise ValueError("No such video")
+    approved = []
+    for c in job["clips"]:
+        if c.get("status") in ("awaiting_review", "qc_flagged", "failed", "error", "drafting"):
+            c["status"] = "approved"
+            _q.put(("clip_final", jid, c["id"]))
+            approved.append(c)
+    if approved:
+        save(job)
+    return approved
+
+
+def apply_to_all(jid: str, patch: dict) -> list:
+    job = _jobs.get(jid)
+    if not job or job.get("user") != ctx.uid():
+        raise ValueError("No such video")
+    d = Path(job["dir"])
+    updated = []
+    for c in job["clips"]:
+        if c.get("status") in ("approved", "rendering_final", "done"):
+            continue
+        cid = c["id"]
+        ef = d / "clips" / f"{cid}_edit.json"
+        ed = edit.load_edit(ef) if ef.is_file() else edit.init_edit(job, c, None, c.get("facecam"))
+        merged = edit.deep_merge_global(ed, patch)
+        edit.save_edit(ef, merged)
+        if "layout" in merged:
+            c["layout"] = merged["layout"]
+        if "split_ratio" in merged:
+            c["split_ratio"] = merged["split_ratio"]
+        if "facecam" in merged and not merged.get("facecam_override"):
+            fc = merged["facecam"]
+            c["facecam"] = [fc["x"], fc["y"], fc["w"], fc["h"]] if fc else None
+        c["status"] = "drafting"
+        _q.put(("clip_draft", jid, cid))
+        updated.append(c)
+    if updated:
+        save(job)
+    return updated
+
+
+def set_job_facecam(jid: str, facecam: dict | list) -> dict:
+    job = _jobs.get(jid)
+    if not job or job.get("user") != ctx.uid():
+        raise ValueError("No such video")
+    sw = job.get("width") or 1920
+    sh = job.get("height") or 1080
+    fc_dict = None
+    if isinstance(facecam, dict) and all(k in facecam for k in ("x", "y", "w", "h")):
+        fc_dict = {
+            "x": max(0, min(sw - 20, int(facecam["x"]))),
+            "y": max(0, min(sh - 20, int(facecam["y"]))),
+            "w": max(20, min(sw, int(facecam["w"]))),
+            "h": max(20, min(sh, int(facecam["h"]))),
+        }
+    elif isinstance(facecam, (list, tuple)) and len(facecam) == 4:
+        if all(0.0 <= float(v) <= 1.0 for v in facecam):
+            fc_dict = {
+                "x": max(0, min(sw - 20, int(float(facecam[0]) * sw))),
+                "y": max(0, min(sh - 20, int(float(facecam[1]) * sh))),
+                "w": max(20, min(sw, int(float(facecam[2]) * sw))),
+                "h": max(20, min(sh, int(float(facecam[3]) * sh))),
+            }
+        else:
+            fc_dict = {
+                "x": max(0, min(sw - 20, int(facecam[0]))),
+                "y": max(0, min(sh - 20, int(facecam[1]))),
+                "w": max(20, min(sw, int(facecam[2]))),
+                "h": max(20, min(sh, int(facecam[3]))),
+            }
+    job["facecam"] = [fc_dict["x"], fc_dict["y"], fc_dict["w"], fc_dict["h"]] if fc_dict else None
+    job["facecam_override"] = job["facecam"]
+    d = Path(job["dir"])
+    for c in job["clips"]:
+        if c.get("status") in ("approved", "rendering_final", "done"):
+            continue
+        ef = d / "clips" / f"{c['id']}_edit.json"
+        ed = edit.load_edit(ef) if ef.is_file() else edit.init_edit(job, c, None, job["facecam"])
+        if not ed.get("facecam_override"):
+            ed["facecam"] = fc_dict
+            edit.save_edit(ef, ed)
+            c["facecam"] = job["facecam"]
+            c["status"] = "drafting"
+            _q.put(("clip_draft", jid, c["id"]))
+    save(job)
+    return {"ok": True, "facecam": job["facecam"]}
 
 
 def _caption_words(job, clip, words, off):
@@ -430,6 +833,8 @@ def _wait_for_clips(job, futures, began, workers):
     left, given_up = list(futures), 0
     late = "This clip took too long and was stopped. Open it and press Save and re-make to try again."
     while left:
+        if is_paused(job["id"]):
+            raise media.JobPaused("Job paused by user")
         still = []
         for f, clip in left:
             if f.done():
@@ -464,7 +869,7 @@ def _english_part(job, clip):
     return [w for w in en if clip["start"] - 0.5 <= w["s"] <= clip["end"] + 0.5]
 
 
-LONG_VIDEO = 40 * 60   # above this, fetch only the pieces that become clips
+LONG_VIDEO = getattr(config, "LONG_VIDEO", 12 * 60)   # above this, fetch only the pieces that become clips
 PAD = 8                # seconds kept either side of a fetched piece, so clips can be re-trimmed
 
 
@@ -523,21 +928,45 @@ def _covers(words: list, start: float, end: float) -> bool:
     return len(inside) >= 25 * minutes and inside[-1]["s"] >= start + 0.85 * (end - start)
 
 
-def _facecam(job) -> list | None:
+def _facecam(job, src=None) -> list | None:
     """Where the webcam is in the source: once for the whole video, for every clip of it.
 
     Only a sure answer is used. A box that is a scoreboard drawn over the game would
     put a picture of a scoreboard in the corner of the clip. One frame is also shown to
     the AI, which tells a person from a game character better than any measurement can;
     what it says is measured again on the picture, so it cannot do any harm."""
-    path = job.get("source_path")
+    if job.get("facecam"):
+        return job["facecam"]
+    path = src or job.get("source_path")
+    cam_pos = (job.get("options") or {}).get("cam_pos", "auto")
+    if cam_pos and cam_pos != "auto":
+        src_w, src_h = 1920, 1080
+        if path and Path(path).is_file():
+            try:
+                info = media.probe(path)
+                src_w, src_h = info.get("w") or 1920, info.get("h") or 1080
+            except Exception:
+                pass
+        bw, bh = int(src_w * 0.25), int(src_h * 0.28)
+        margin = int(src_w * 0.02)
+        if cam_pos == "top-left":
+            box = [margin, margin, bw, bh]
+        elif cam_pos == "bottom-right":
+            box = [src_w - bw - margin, src_h - bh - margin, bw, bh]
+        elif cam_pos == "bottom-left":
+            box = [margin, src_h - bh - margin, bw, bh]
+        else:
+            box = [src_w - bw - margin, margin, bw, bh]
+        job["facecam"] = box
+        return job["facecam"]
+
     if not path or not Path(path).is_file():
         return None
     try:
         box = facecam.detect(path, ask=brain.look_for_facecam)
     except Exception:  # noqa: BLE001 - a missing facecam is not a failure
         return None
-    if not box or box.get("conf") != "high":
+    if not box or box.get("conf") == "none":
         return None
     job["facecam"] = [box["x"], box["y"], box["w"], box["h"]]
     return job["facecam"]
@@ -569,7 +998,9 @@ def _run_job(job):
     if resuming:   # after a restart: keep the transcript parts, clips and AI answers already made, and carry on
         _set(job, status="running", stage="Picking up where it stopped", error=None)
     else:
-        _set(job, status="running", stage="Getting the audio", progress=0.03, error=None, clips=[], ai={}, done_blocks=0)
+        part_audio = any(d.glob("audio_src.*.part")) or any(d.glob("audio_src.*.ytdl"))
+        init_p = job.get("progress") if (part_audio and job.get("progress")) else 0.03
+        _set(job, status="running", stage="Getting the audio", progress=init_p, error=None, clips=job.get("clips", []), ai=job.get("ai", {}), done_blocks=job.get("done_blocks", 0))
     if not transcribe.model_ready() and not transcribe.REMOTE:
         from . import fetch_model
         _set(job, stage="Getting the speech model (one time, about 480 MB)")
@@ -591,10 +1022,46 @@ def _run_job(job):
             _set(job, thumb=True)
         usage.set_context(job["creator"], meta["title"])
         span = (o["range_end"] or meta["duration"]) - (o["range_start"] or 0)
-        pieces = span > LONG_VIDEO or meta["duration"] <= 0
+        pieces = span > LONG_VIDEO or meta["duration"] <= 0 or bool(o.get("range_start")) or bool(o.get("range_end"))
         if not pieces:  # shorter video: fetch all of it in the background while the audio is worked on
             video = fetch.submit(media.download, src["url"], d, int(o["quality"]))
-        audio_file = media.download_audio(src["url"], d, lambda p: _set(job, progress=0.03 + 0.1 * p))
+        last_audio_tick = [0.0]
+
+        def _audio_progress(p, d_info=None):
+            if is_paused(job["id"]):
+                raise media.JobPaused("Job paused by user")
+            now = time.time()
+            if now - last_audio_tick[0] < 0.5 and p < 0.99:
+                return
+            last_audio_tick[0] = now
+            stage = "Getting the audio"
+            kw = {}
+            if d_info:
+                speed = d_info.get("speed")
+                downloaded = d_info.get("downloaded_bytes") or 0
+                total = d_info.get("total_bytes") or d_info.get("total_bytes_estimate") or 0
+                speed_str = (media.fmt_bytes(speed) + "/s") if speed else ""
+                dl_str = f"{media.fmt_bytes(downloaded)} / {media.fmt_bytes(total)}" if total else media.fmt_bytes(downloaded)
+                eta_str = f"ETA {media.fmt_eta(d_info.get('eta'))}" if d_info.get("eta") else ""
+
+                parts = [x for x in (speed_str, dl_str, eta_str) if x]
+                if o.get("range_start") or o.get("range_end"):
+                    r_from = media.fmt_eta(o.get("range_start") or 0) or "0s"
+                    r_to = media.fmt_eta(o["range_end"]) if o.get("range_end") else "end"
+                    parts.insert(0, f"part {r_from} to {r_to}")
+                if parts:
+                    stage = f"Getting the audio ({' · '.join(parts)})"
+                if speed_str:
+                    kw["speed"] = speed_str
+            _set(job, stage=stage, progress=0.03 + 0.1 * p, **kw)
+
+        audio_file = media.download_audio(
+            src["url"], d,
+            on_progress=_audio_progress,
+            is_paused=lambda: is_paused(job["id"]),
+            start=o.get("range_start"),
+            end=o.get("range_end"),
+        )
     else:
         pieces, audio_file = False, Path(src["path"])
         info = media.probe(audio_file)
@@ -609,6 +1076,9 @@ def _run_job(job):
     wav.unlink(missing_ok=True)
     if src["type"] == "url":
         audio_file.unlink(missing_ok=True)
+        if o.get("range_start"):
+            silence = np.zeros(int(o["range_start"] * 16000), dtype=audio.dtype)
+            audio = np.concatenate([silence, audio])
     if not job["duration"]:
         job["duration"] = len(audio) / 16000
     lo = int((o["range_start"] or 0) * 16000)
@@ -641,11 +1111,16 @@ def _run_job(job):
 
     began = {}      # clip id -> when work on it started
 
-    def make(clip, words_now):
+    def make(clip, words_now, quality="final"):
         began[clip["id"]] = time.time()
         if src["type"] == "url" and (pieces or not whole_video()):
             _fetch_piece(job, clip, audio)
-        if clip["status"] != "error" and clip.get("captions", True) and yt and yt[1].lower().startswith("en"):
+        if clip.get("layout") in ("gameplay", "stack") and not clip.get("facecam"):
+            src_file = Path(clip["src"]) if clip.get("src") else (Path(job["source_path"]) if job.get("source_path") else None)
+            cam = job.get("facecam") or (src_file and _facecam(job, src=src_file))
+            if cam:
+                clip["facecam"] = cam
+        if clip["status"] not in ("error", "failed") and clip.get("captions", True) and yt and yt[1].lower().startswith("en"):
             # The clip was found with YouTube's transcript. What is shown on screen comes from our own model,
             # run on just this clip: full punctuation, nothing blanked out, timings to the word.
             a0, b0 = max(lo, int((clip["start"] - 1.5) * 16000)), min(hi, int((clip["end"] + 1.5) * 16000))
@@ -656,8 +1131,8 @@ def _run_job(job):
             if len(tw) >= 3:
                 exact[clip["id"]] = (a0 / 16000, b0 / 16000, tw)
                 words_now = tw
-        if clip["status"] != "error":
-            render_one(job, clip, words_now)
+        if clip["status"] not in ("error", "failed"):
+            render_one(job, clip, words_now, quality=quality)
 
     cpus = os.cpu_count() or 4
     renders = ThreadPoolExecutor(2 if cpus < 8 else min(6, cpus // 6))  # more clips made at once on a bigger machine
@@ -711,6 +1186,9 @@ def _run_job(job):
     # so it is done here rather than for each clip, and only when asked for.
     statics = quality.static_ranges(job.get("source_path") or "") if config.SKIP_STATIC else []
     for bi, (a, b) in enumerate(blocks):
+        if is_paused(job["id"]):
+            ahead.shutdown(wait=False)
+            raise media.JobPaused("Job paused by user")
         if bi < done_blocks:
             continue                      # transcribed and checked by the AI before the restart
         shift = a / 16000
@@ -753,18 +1231,38 @@ def _run_job(job):
                 else:
                     keep.append(c)
             found = keep
+        review_mode = o.get("review_mode", "auto")
         for c in found:
-            c.update(id=f"clip{len(job['clips']) + 1:02d}", start=round(c["start"] + shift, 2),
+            cid = f"clip{len(job['clips']) + 1:02d}"
+            c.update(id=cid, start=round(c["start"] + shift, 2),
                      end=round(c["end"] + shift, 2), style=o["style"], layout=o["layout"],
-                     captions=o.get("captions", True), status="queued", version=0)
-            # Only the gameplay layout uses a webcam, so it is only looked for then, and only once: a
-            # stream with no webcam is not looked for again on every clip of it.
-            if o["layout"] == "gameplay" and face is False:
-                face = _facecam(job)
-            if face:
-                c["facecam"] = face
+                     captions=o.get("captions", True), meme=o.get("meme", "none"),
+                     music=o.get("music", "none"), meme_vol=o.get("meme_vol"),
+                     music_db=o.get("music_db"), split_ratio=o.get("split_ratio", 0.4),
+                     cam_swap=o.get("cam_swap", False), cap_anchor=o.get("cap_anchor", "safe_bottom"),
+                     cam_fallback=o.get("cam_fallback", "blur"), cap_y=o.get("cap_y"),
+                     version=0)
+            if o.get("facecam"):
+                c["facecam"] = o["facecam"]
+            elif o["layout"] in ("gameplay", "stack"):
+                if face is False and job.get("source_path"):
+                    face = _facecam(job)
+                if face:
+                    c["facecam"] = face
+
+            ed = edit.init_edit(job, c, words, c.get("facecam"))
+            (d / "clips").mkdir(parents=True, exist_ok=True)
+            edit.save_edit(d / "clips" / f"{cid}_edit.json", ed)
+
+            if review_mode in ("review", "review_first"):
+                c["status"] = "drafting"
+                q = "draft"
+            else:
+                c["status"] = "queued"
+                q = "final"
+
             job["clips"].append(c)
-            futures.append((renders.submit(ctx.bind(make), c, list(words)), c))
+            futures.append((renders.submit(ctx.bind(make), c, list(words), q), c))
         job["ai"] = {"model": model, "tokens": tokens, "note": "", "log": notes[-5:]}
         job["done_blocks"] = bi + 1       # a restart from here on carries on with the next part
         save(job)
@@ -783,7 +1281,13 @@ def _run_job(job):
     clips = job["clips"]
     job["ai"] = {"model": model, "tokens": tokens, "log": notes[-5:],
                  "note": "The AI was unavailable, so clips were picked by loudness only." if clips and not model else ""}
-    stage = "Done" if clips else "Done, but nothing clip-worthy was found"
+    awaiting = [c for c in clips if c.get("status") in ("awaiting_review", "drafting")]
+    if awaiting:
+        stage = f"{len(awaiting)} clip{'s' if len(awaiting) != 1 else ''} ready for review"
+    elif clips:
+        stage = "Done"
+    else:
+        stage = "Done, but nothing clip-worthy was found"
     _set(job, status="done", stage=stage, progress=1.0, took=round(time.time() - t0))
     try:
         from . import notices
@@ -805,7 +1309,7 @@ def _worker(quick_only=False):
                 traceback.print_exc()
             continue
         job = _jobs.get(a)
-        if not job:
+        if not job or (kind == "job" and job.get("status") == "paused"):
             if kind == "job":
                 _q.done()
             continue
@@ -813,17 +1317,30 @@ def _worker(quick_only=False):
         try:
             if kind == "job":
                 _run_job(job)
-            else:
+            elif kind in ("clip_final", "clip"):
                 clip = next(c for c in job["clips"] if c["id"] == cid)
                 words = []
                 if clip.get("captions", True):
-                    words = json.loads((Path(job["dir"]) / "words.json").read_text(encoding="utf-8"))
-                render_one(job, clip, words)
+                    wf = Path(job["dir"]) / "words.json"
+                    if wf.is_file():
+                        words = json.loads(wf.read_text(encoding="utf-8"))
+                render_one(job, clip, words, quality="final")
+            elif kind == "clip_draft":
+                clip = next(c for c in job["clips"] if c["id"] == cid)
+                words = []
+                if clip.get("captions", True):
+                    wf = Path(job["dir"]) / "words.json"
+                    if wf.is_file():
+                        words = json.loads(wf.read_text(encoding="utf-8"))
+                render_one(job, clip, words, quality="draft")
+        except media.JobPaused:
+            _paused.discard(job["id"])
+            _set(job, status="paused", stage="Paused by you")
         except Exception as e:  # noqa: BLE001
             (Path(job["dir"]) / "error.log").write_text(traceback.format_exc(), encoding="utf-8")
             if kind == "job":
                 for c in job["clips"]:
-                    if c.get("status") in ("queued", "rendering"):
+                    if c.get("status") in ("queued", "rendering", "drafting"):
                         c.update(status="error", error="The video stopped before this clip was made.")
                 _set(job, status="error", error=safe.friendly(e), stage="Stopped")
                 creators.log(job["creator"], f"Video failed: {safe.friendly(e)[:200]}")

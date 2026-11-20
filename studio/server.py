@@ -21,8 +21,8 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 
 from . import admin as admins
 from . import account, load
-from . import (accounts, ai, alerts, auth, config, creators, ctx, db, jobs, live, media, posting,
-               profiles, render, safe, transcribe, usage)
+from . import (accounts, ai, alerts, auth, callbacks, config, creators, ctx, db, edit, jobs, live, media, meme, posting,
+               profiles, render, rules, safe, transcribe, usage)
 
 from . import tools as _tools  # noqa: E402
 
@@ -574,10 +574,30 @@ def status(request: Request):
     from . import notices
     from . import updates
     me_ = _me(request)
+    has_nvenc = render.check_nvenc()
+    gpu_on = accounts.settings().get("gpu_enabled", True) and getattr(config, "USE_GPU", True)
+    gpu_info = {
+        "supported": bool(has_nvenc),
+        "enabled": bool(gpu_on and has_nvenc),
+        "name": "NVIDIA GeForce GTX 1650 (NVENC)" if has_nvenc else "Not detected (using CPU libx264)",
+    }
     return {"user": auth.public(me_), "update": updates.latest() if me_.is_admin else None, "accounts": config.ACCOUNTS, "disk_full": load.disk_full(), "no_ffmpeg": bool(_tools.missing()), "links": {"repo": config.REPO_URL, "follow": config.FOLLOW_URL}, "ai": usage.brief(), "unread": notices.unread(),
             "tour": not accounts.settings()["tour_done"],
-            "youtube": accounts.youtube_ready(), "connect": {p: accounts.can_connect(p) for p in accounts.PLATFORM_NAMES}, "max_upload_mb": config.MAX_UPLOAD_MB, "upload_part_mb": config.UPLOAD_PART_MB, "max_batch": config.MAX_ACTIVE_JOBS_PER_USER,
-            "styles": {k: v["label"] for k, v in render.STYLES.items()}, "layouts": render.LAYOUTS}
+            "youtube": accounts.youtube_ready(), "youtube_dl": media.cookie_status(), "connect": {p: accounts.can_connect(p) for p in accounts.PLATFORM_NAMES}, "max_upload_mb": config.MAX_UPLOAD_MB, "upload_part_mb": config.UPLOAD_PART_MB, "max_batch": config.MAX_ACTIVE_JOBS_PER_USER,
+            "styles": {k: v["label"] for k, v in render.STYLES.items()}, "layouts": render.LAYOUTS,
+            "memes": {k: v for k, v in meme.MEME_MOODS.items() if k != "none"},
+            "music_beds": {k: v for k, v in meme.MUSIC_BEDS.items() if k != "none"},
+            "gpu": gpu_info}
+
+
+@app.post("/api/gpu/toggle")
+def toggle_gpu(body: dict = Body(None)):
+    current = accounts.settings().get("gpu_enabled", True)
+    new_val = not current if not body or "enabled" not in body else bool(body["enabled"])
+    accounts.save_settings({"gpu_enabled": new_val})
+    ctx.bump()
+    has_nvenc = render.check_nvenc()
+    return {"gpu_enabled": new_val, "supported": has_nvenc}
 
 
 # ================================================================ videos
@@ -695,14 +715,23 @@ def link_preview(request: Request, url: str = ""):
     except auth.AuthError:
         raise HTTPException(429, "Too many links at once. Wait a moment.")
     try:
-        return _lookup(media.preview, url)
+        res = dict(_lookup(media.preview, url))
+        res["clip_rule"] = rules.get(url, res.get("uploader"))
+        return res
     except media.YouTubeBlocked as e:
         raise HTTPException(503, str(e))
     except ValueError as e:
         raise HTTPException(422, str(e))
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
+        err_str = str(e).lower()
+        if "live event has ended" in err_str or "not currently live" in err_str:
+            raise HTTPException(422, "This YouTube live stream has ended. YouTube takes time to process the broadcast into a regular video before it can be clipped.")
+        if "private video" in err_str or "sign in if you've been granted access" in err_str:
+            raise HTTPException(422, "This video is private on YouTube.")
+        if "members-only" in err_str or "join this channel" in err_str:
+            raise HTTPException(422, "This video is for channel members only.")
         raise HTTPException(422, "Couldn't open that video. Check the link is public and complete.")
 
 
@@ -933,7 +962,7 @@ def rerender(jid: str, cid: str, body: dict = Body(...)):
     clip = next((c for c in job["clips"] if c["id"] == cid), None)
     if not clip:
         raise HTTPException(404, "No such clip")
-    if job["status"] in ("queued", "running") or clip.get("status") in ("queued", "rendering"):
+    if job["status"] in ("queued", "running") or clip.get("status") in ("queued", "rendering", "drafting", "rendering_final"):
         raise HTTPException(409, "This clip is still being made. Try again when it has finished.")
     _throttle("render:" + ctx.uid(), 20, 600, "That's a lot of re-makes in a short time. Wait a few minutes.")
     try:
@@ -943,6 +972,155 @@ def rerender(jid: str, cid: str, body: dict = Body(...)):
     return jobs.public(job)
 
 
+def _find_clip(clip_id: str):
+    """Finds (job, clip) by clip_id. Supports '{jid}_{cid}', '{jid}:{cid}', or scanning user's jobs for '{cid}'."""
+    if "_" in clip_id:
+        jid, cid = clip_id.split("_", 1)
+        job = jobs.get(jid)
+        if job:
+            clip = next((c for c in job.get("clips", []) if c["id"] == cid), None)
+            if clip:
+                return job, clip
+    if ":" in clip_id:
+        jid, cid = clip_id.split(":", 1)
+        job = jobs.get(jid)
+        if job:
+            clip = next((c for c in job.get("clips", []) if c["id"] == cid), None)
+            if clip:
+                return job, clip
+    for j in jobs.list_jobs():
+        for c in j.get("clips", []):
+            if c["id"] == clip_id:
+                return j, c
+    raise HTTPException(404, "No such clip")
+
+
+@app.get("/api/clips/{cid}/edit")
+@app.get("/api/jobs/{jid}/clips/{cid}/edit")
+def get_clip_edit(cid: str, jid: str = None):
+    if jid:
+        job = _job_or_404(jid)
+        clip = next((c for c in job.get("clips", []) if c["id"] == cid), None)
+        if not clip:
+            raise HTTPException(404, "No such clip")
+    else:
+        job, clip = _find_clip(cid)
+    d = Path(job["dir"])
+    ef = d / "clips" / f"{clip['id']}_edit.json"
+    if not ef.is_file():
+        ed = edit.init_edit(job, clip, clip.get("words"), clip.get("facecam"))
+        edit.save_edit(ef, ed)
+    else:
+        ed = edit.load_edit(ef)
+    return ed
+
+
+@app.put("/api/clips/{cid}/edit")
+@app.put("/api/jobs/{jid}/clips/{cid}/edit")
+def update_clip_edit(cid: str, body: dict = Body(...), jid: str = None):
+    if jid:
+        job = _job_or_404(jid)
+        clip = next((c for c in job.get("clips", []) if c["id"] == cid), None)
+        if not clip:
+            raise HTTPException(404, "No such clip")
+    else:
+        job, clip = _find_clip(cid)
+    if clip.get("status") == "rendering_final":
+        raise HTTPException(409, "Clip is currently rendering.")
+    d = Path(job["dir"])
+    ef = d / "clips" / f"{clip['id']}_edit.json"
+    current = edit.load_edit(ef) if ef.is_file() else edit.init_edit(job, clip, clip.get("words"), clip.get("facecam"))
+
+    if "version" in body and body["version"] < current.get("version", 1):
+        raise HTTPException(409, "Edit conflict: this clip was modified elsewhere. Please refresh.")
+
+    valid = edit.validate_edit({**current, **body, "version": current.get("version", 1) + 1},
+                               src_w=job.get("width") or 1920, src_h=job.get("height") or 1080)
+    edit.save_edit(ef, valid)
+
+    clip["start"] = valid["start"]
+    clip["end"] = valid["end"]
+    clip["layout"] = valid["layout"]
+    clip["split_ratio"] = valid["split_ratio"]
+    if valid["facecam"]:
+        fc = valid["facecam"]
+        clip["facecam"] = [fc["x"], fc["y"], fc["w"], fc["h"]]
+    clip["status"] = "drafting"
+    jobs.save(job)
+    jobs._q.put(("clip_draft", job["id"], clip["id"]))
+    return valid
+
+
+@app.post("/api/clips/{cid}/approve")
+@app.post("/api/jobs/{jid}/clips/{cid}/approve")
+def approve_clip_endpoint(cid: str, jid: str = None):
+    if jid:
+        job = _job_or_404(jid)
+        clip = next((c for c in job.get("clips", []) if c["id"] == cid), None)
+        if not clip:
+            raise HTTPException(404, "No such clip")
+    else:
+        job, clip = _find_clip(cid)
+    try:
+        updated = jobs.approve_clip(job["id"], clip["id"])
+        return {"ok": True, "clip": updated}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/jobs/{jid}/apply-to-all")
+def apply_to_all_endpoint(jid: str, body: dict = Body(...)):
+    _job_or_404(jid)
+    try:
+        updated = jobs.apply_to_all(jid, body)
+        return {"ok": True, "count": len(updated)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/jobs/{jid}/approve-all")
+def approve_all_endpoint(jid: str):
+    _job_or_404(jid)
+    try:
+        approved = jobs.approve_all(jid)
+        return {"ok": True, "count": len(approved)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/jobs/{jid}/facecam")
+def set_facecam_endpoint(jid: str, body: dict = Body(...)):
+    _job_or_404(jid)
+    fc = body.get("facecam")
+    if not fc:
+        raise HTTPException(400, "Missing facecam coordinates")
+    try:
+        res = jobs.set_job_facecam(jid, fc)
+        return res
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/jobs/{jid}/pause")
+def pause_job(jid: str):
+    job = _job_or_404(jid)
+    try:
+        updated = jobs.pause(jid)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return jobs.public(updated)
+
+
+@app.post("/api/jobs/{jid}/resume")
+def resume_job(jid: str):
+    job = _job_or_404(jid)
+    try:
+        updated = jobs.resume(jid)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return jobs.public(updated)
+
+
 @app.delete("/api/jobs/{jid}")
 def delete_job(jid: str):
     job = _job_or_404(jid)
@@ -950,6 +1128,22 @@ def delete_job(jid: str):
         raise HTTPException(409, "This is still being worked on. Stop it or wait for it to finish first.")
     jobs.delete(jid)
     return {"ok": True}
+
+
+@app.get("/api/jobs/{jid}/callbacks")
+def job_callbacks(jid: str, min_gap: float = 60.0, max_gap: float = 3600.0):
+    job = _job_or_404(jid)
+    wf = Path(job["dir"]) / "words.json"
+    if not wf.is_file():
+        return {"callbacks": []}
+    try:
+        words = json.loads(wf.read_text(encoding="utf-8"))
+    except Exception:
+        return {"callbacks": []}
+    from . import brain
+    segments = brain.make_lines(words)
+    pairs = callbacks.find_callbacks(segments, min_gap=min_gap, max_gap=max_gap)
+    return {"callbacks": pairs}
 
 
 def _pairs(v, limit=300) -> list:
@@ -1022,14 +1216,86 @@ def delete_my_account(request: Request, body: dict = Body(...)):
     return resp
 
 
+@app.get("/api/frame-preview")
+def frame_preview(jid: str = "", cid: str = "", t: float = 0.0, url: str = ""):
+    if jid:
+        job = _job_or_404(jid)
+        clip = next((c for c in job.get("clips", []) if c["id"] == cid), None) if cid else None
+        target_t = t
+        if clip and t == 0.0:
+            target_t = clip.get("start", 0.0)
+        src = None
+        if clip and clip.get("src") and Path(clip["src"]).is_file():
+            src = Path(clip["src"])
+        elif job.get("source_path") and Path(job["source_path"]).is_file():
+            src = Path(job["source_path"])
+        else:
+            cand = Path(job["dir"]) / "source.mp4"
+            if cand.is_file():
+                src = cand
+        if src and src.is_file():
+            import subprocess
+            cmd = [render._ffmpeg(), "-ss", str(max(0.0, target_t)), "-i", str(src), "-vframes", "1", "-q:v", "3", "-f", "image2", "pipe:1"]
+            try:
+                proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=8)
+                if proc.stdout and len(proc.stdout) > 500:
+                    return Response(content=proc.stdout, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=3600"})
+            except Exception:
+                pass
+        thumb = Path(job["dir"]) / "clips" / "thumb.jpg"
+        if thumb.is_file():
+            return FileResponse(thumb, media_type="image/jpeg")
+
+    if url:
+        p = media._PREVIEWS.get(url.strip()) or media.preview(url.strip())
+        thumb = p.get("thumb") or ""
+        if thumb.startswith("data:image/"):
+            import base64
+            header, encoded = thumb.split(",", 1)
+            ctype = header.split(";")[0].split(":")[1]
+            return Response(content=base64.b64decode(encoded), media_type=ctype, headers={"Cache-Control": "public, max-age=3600"})
+
+    raise HTTPException(404, "Frame preview not available")
+
+
 @app.get("/media/{jid}/{name}")
 def media_file(jid: str, name: str, download: int = 0):
-    if not re.fullmatch(r"[\w\-]+\.(mp4|jpg)", name):
+    if not re.fullmatch(r"[\w\-]+\.(mp4|jpg|json)", name):
         raise HTTPException(404)
     f = Path(_job_or_404(jid)["dir"]) / "clips" / name
     if not f.is_file():
         raise HTTPException(404)
     return FileResponse(f, filename=name if download else None, headers={"Cache-Control": "private, max-age=300"})
+
+
+@app.get("/api/audio/sample/{category}/{name}")
+def audio_sample(category: str, name: str):
+    name = re.sub(r"[^a-zA-Z0-9_\-]", "", name).lower()
+    if not name or name == "none":
+        raise HTTPException(404, "No audio")
+    if category == "music":
+        p = meme.SND / f"bed_{name}.wav"
+    elif category == "meme":
+        moods_file = meme.SND / "moods.json"
+        sname = name
+        if moods_file.exists():
+            try:
+                info = json.loads(moods_file.read_text(encoding="utf-8")).get(name, {})
+                sound = info.get("sound")
+                if isinstance(sound, list):
+                    sname = [s for s in sound if not s.startswith("mine/")][0] if any(not s.startswith("mine/") for s in sound) else sound[0]
+                elif isinstance(sound, str):
+                    sname = sound
+            except Exception:
+                pass
+        p = meme.ensure_sound(sname) or (meme.SND / f"{sname}.wav")
+    else:
+        raise HTTPException(400, "Invalid category")
+
+    if not p or not Path(p).is_file():
+        raise HTTPException(404, "Sound not found")
+    return FileResponse(p, media_type="audio/wav", headers={"Cache-Control": "public, max-age=86400"})
+
 
 
 # ================================================================ creators and live recording
@@ -1139,13 +1405,25 @@ def channel_preview(request: Request, url: str = ""):
     except auth.AuthError:
         raise HTTPException(429, "Too many lookups at once. Wait a moment.")
     try:
-        return _lookup(profiles.preview, url)
+        res = dict(_lookup(profiles.preview, url))
+        res["clip_rule"] = rules.get(url, res.get("name"))
+        return res
     except ValueError as e:
         raise HTTPException(422, str(e))
     except HTTPException:
         raise
     except Exception:
         raise HTTPException(422, "Couldn't open that channel. Check the link.")
+
+
+@app.get("/api/creators/catalog")
+def creator_catalog():
+    return creators.catalog()
+
+
+@app.get("/api/rules")
+def get_rule(channel: str = "", platform: str = ""):
+    return rules.get(channel, platform or None)
 
 
 @app.get("/api/creators/{cid}/avatar")
@@ -1233,14 +1511,51 @@ def clip_now(jid: str, body: dict = Body(...)):
     s = live.mine(jid)
     if not s or s.ended:
         raise HTTPException(404, "This recording has already ended")
-    _throttle("clipnow:" + ctx.uid(), 6, 60, "Give it a moment: your last clips are still being made.")
-    if len(s.manual) >= 3:
+    _throttle("clipnow:" + ctx.uid(), 10, 60, "Give it a moment: your last clips are still being made.")
+    if len(s.manual) >= 5:
         raise HTTPException(429, "Give it a moment: your last clips are still being made.")
     try:
-        s.clip_last(max(5, min(180, float(body.get("seconds", 30)))))
+        req = s.clip_range(
+            start=body.get("start"),
+            end=body.get("end"),
+            seconds=body.get("seconds"),
+            since_last=bool(body.get("since_last")),
+            layout=body.get("layout"),
+            style=body.get("style"),
+            captions=body.get("captions"),
+            cam_delay=body.get("cam_delay")
+        )
     except (ValueError, TypeError) as e:
         raise HTTPException(400, str(e))
-    return {"ok": True}
+    ctx.bump()
+    return {"ok": True, "last_checkpoint": s.last_checkpoint, "req": req}
+
+
+@app.post("/api/live/{jid}/settings")
+def live_settings(jid: str, body: dict = Body(...)):
+    s = live.mine(jid)
+    if not s or s.ended:
+        raise HTTPException(404, "This recording has already ended")
+    if "layout" in body and body["layout"] in render.LAYOUTS:
+        s.settings["layout"] = body["layout"]
+        s.job.setdefault("options", {})["layout"] = body["layout"]
+        if body["layout"] in ("gameplay", "stack"):
+            s.facecam_checked = False
+    if "style" in body and body["style"] in render.STYLES:
+        s.settings["style"] = body["style"]
+        s.job.setdefault("options", {})["style"] = body["style"]
+    if "captions" in body:
+        s.job.setdefault("options", {})["captions"] = bool(body["captions"])
+    if "cam_delay" in body:
+        try:
+            cd = round(max(-3.0, min(3.0, float(body["cam_delay"]))), 2)
+            s.settings["cam_delay"] = cd
+            s.job.setdefault("options", {})["cam_delay"] = cd
+        except (ValueError, TypeError):
+            pass
+    jobs.save(s.job)
+    ctx.bump()
+    return {"ok": True, "layout": s.settings.get("layout"), "style": s.settings.get("style"), "cam_delay": s.settings.get("cam_delay", 0.0)}
 
 
 # ================================================================ AI usage
@@ -1299,6 +1614,56 @@ def ai_test(request: Request):
         raise HTTPException(400, str(e))
     except Exception as e:  # noqa: BLE001
         raise HTTPException(502, ai.explain(e) or "The AI did not answer: " + _ai_error(e))
+
+
+# ================================================================ YouTube cookies & unpause
+@app.get("/api/youtube/status")
+def yt_status():
+    return media.cookie_status()
+
+
+@app.post("/api/youtube/unpause")
+def yt_unpause():
+    _need_verified()
+    media.unpause_youtube()
+    ctx.bump()
+    return media.cookie_status()
+
+
+@app.post("/api/youtube/cookies")
+def yt_save_cookies(request: Request, body: dict = Body(...)):
+    _admin(request)
+    text = (body.get("cookies") or "").strip()
+    if not text:
+        raise HTTPException(400, "Paste or upload cookie text in Netscape format.")
+    try:
+        res = media.save_cookies(text)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    ctx.bump()
+    return res
+
+
+@app.delete("/api/youtube/cookies")
+def yt_remove_cookies(request: Request):
+    _admin(request)
+    res = media.remove_cookies()
+    ctx.bump()
+    return res
+
+
+@app.post("/api/youtube/test")
+def yt_test(request: Request, body: dict = Body(default={})):
+    _need_verified()
+    _throttle("yttest:" + ctx.uid(), 10, 60)
+    url = (body.get("url") or "https://www.youtube.com/watch?v=dQw4w9WgXcQ").strip()
+    if not media.is_youtube(url):
+        raise HTTPException(400, "Test URL must be a YouTube link.")
+    try:
+        info = media.info(url)
+        return {"ok": True, "title": info.get("title", ""), "uploader": info.get("uploader", "")}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 # ================================================================ posting, accounts, settings
