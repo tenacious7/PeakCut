@@ -251,8 +251,8 @@ MAX_SOURCE_HEIGHT = 1080
 OUT_W, OUT_H, OUT_FPS = 1080, 1920, 30
 # Videos longer than this (seconds) download only the required clip sections rather than the full multi-GB video
 LONG_VIDEO = int(env("PEAKCUT_LONG_VIDEO_MIN", "3")) * 60
-# Acceleration with aria2 multi-connection downloader if available
-USE_ARIA2 = env("PEAKCUT_USE_ARIA2", "1") != "0"
+# Acceleration with aria2 multi-connection downloader if available (disabled by default for stability)
+USE_ARIA2 = env("PEAKCUT_USE_ARIA2", "0") != "0"
 # Bypass queue artificial holds/delays to start downloading immediately upon pasting
 BYPASS_QUEUE_HOLD = env("PEAKCUT_BYPASS_QUEUE_HOLD", "1") != "0"
 # GPU hardware acceleration for video rendering (NVENC, QSV, AMF)

@@ -168,7 +168,7 @@ class _Quiet:
 
 
 def get_aria2c_path() -> str | None:
-    if not getattr(config, "USE_ARIA2", True):
+    if not getattr(config, "USE_ARIA2", False):
         return None
     w = shutil.which("aria2c")
     if w:
@@ -219,6 +219,7 @@ def _ydl(opts, url: str | None = None):
     import yt_dlp
     base = {
         "noplaylist": True,
+        "ignoreconfig": True,
         "quiet": True,
         "no_warnings": True,
         "logger": _Quiet(),
@@ -242,8 +243,8 @@ def _ydl(opts, url: str | None = None):
     is_audio = bool(opts.get("is_audio")) or str(opts.get("format", "")).startswith("ba")
 
     allow_aria2 = (
-        getattr(config, "USE_ARIA2", True)
-        and opts.get("use_aria2", True) is not False
+        getattr(config, "USE_ARIA2", False)
+        and opts.get("use_aria2", False) is True
         and "outtmpl" in opts
         and "download_ranges" not in opts
         and "external_downloader" not in opts
