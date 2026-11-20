@@ -297,8 +297,39 @@ def call(model: str, prompt: str, schema: dict, timeout: float | None = None):
 
     `timeout` is how long one answer may take. A live stream passes a short one, because a slow
     answer must not stop the recording."""
+    for prefix in ("ollama:", "ollama/", "local:", "local/"):
+        if model.lower().startswith(prefix):
+            target_model = model[len(prefix):]
+            return call_ollama(target_model, prompt, schema, timeout=timeout)
     how = PROVIDERS[provider()][2]
     return {"gemini": _gemini, "openai": _openai, "anthropic": _anthropic}[how](model, prompt, schema, timeout)
+
+
+def get_local_ollama_model() -> str | None:
+    """Returns the name of a model running in local Ollama (127.0.0.1:11434) if available, prioritizing fast chat/instruct models."""
+    try:
+        r = httpx.get("http://127.0.0.1:11434/api/tags", timeout=1.5)
+        if r.status_code == 200:
+            names = [m.get("name") for m in r.json().get("models", []) if m.get("name")]
+            # 1. Prioritize standard chat/instruct Qwen models like qwen2.5:3b
+            for name in names:
+                low = name.lower()
+                if "qwen2" in low or ("qwen" in low and "reasoning" not in low and "r1" not in low):
+                    return name
+            # 2. Any other Qwen model
+            for name in names:
+                if "qwen" in name.lower():
+                    return name
+            return names[0] if names else None
+    except Exception:
+        pass
+    return None
+
+
+def call_ollama(model: str, prompt: str, schema: dict, timeout: float | None = None):
+    """Directly call a local Ollama instance on 127.0.0.1:11434."""
+    return _openai(model, prompt, schema, timeout=timeout or 180,
+                   base_url_override="http://127.0.0.1:11434/v1", key_override="")
 
 
 def see(prompt: str, image: bytes, timeout: float | None = None) -> tuple[str, int, int]:
@@ -414,14 +445,16 @@ def _from_events(text: str) -> dict:
     return {"choices": [{"message": message}], "usage": usage}
 
 
-def _openai(model, prompt, schema, timeout=None):
-    headers = {"Authorization": f"Bearer {key()}"} if key() else {}
+def _openai(model, prompt, schema, timeout=None, base_url_override=None, key_override=None):
+    burl = (base_url_override or base_url()).rstrip("/")
+    k = key() if key_override is None else key_override
+    headers = {"Authorization": f"Bearer {k}"} if k else {}
     body = {"model": model, "messages": [{"role": "user", "content": _wrapped(prompt, schema)}], "stream": False}
     # Most services accept these two extras; a few models refuse one of them, so they are dropped on a refusal.
     extras = [{"temperature": 0.4, "response_format": {"type": "json_object"}}, {"response_format": {"type": "json_object"}}, {}]
     r = None
     for extra in extras:
-        r = httpx.post(f"{base_url()}/chat/completions", json={**body, **extra}, headers=headers, timeout=timeout or 180)
+        r = httpx.post(f"{burl}/chat/completions", json={**body, **extra}, headers=headers, timeout=timeout or 180)
         if r.status_code not in (400, 422):
             break
     if r.status_code != 200:

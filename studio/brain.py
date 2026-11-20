@@ -200,6 +200,20 @@ def ask_ai(prompt, schema=None, purpose="AI call", timeout=None):
                     continue
                 break
     ai.note_problem(last)
+
+    # If the cloud provider hit rate limits or quota, automatically fall back to local Ollama if available
+    is_limit = last and any(k in str(last).lower() for k in ("429", "rate limit", "quota", "tokens per minute", "otpm", "limit reached", "resource_exhausted"))
+    if is_limit and ai.provider() != "ollama":
+        local_model = ai.get_local_ollama_model()
+        if local_model:
+            try:
+                out, sent, wrote = ai.call_ollama(local_model, prompt, schema or SCHEMA, timeout=timeout or 180)
+                usage.record(sent, wrote, f"{purpose} (local fallback: {local_model})")
+                ai.clear_problem()
+                return out, f"{local_model} (local fallback)", sent + wrote
+            except Exception:
+                pass
+
     raise RuntimeError(f"The AI did not answer: {ai.explain(last) or last}")
 
 
