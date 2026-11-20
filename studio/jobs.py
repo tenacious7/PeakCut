@@ -112,7 +112,8 @@ _lock = threading.RLock()
 on_clip_ready: list = []   # callbacks (job, clip), run once when a clip first finishes
 
 DEFAULTS = {"max_clips": 6, "min_len": 15, "max_len": 60, "style": "bounce", "layout": "blur", "quality": 720,
-            "range_start": None, "range_end": None, "captions": True, "meme": "none", "music": "none", "format": "moment", "cam_delay": 0.0,
+            "range_start": None, "range_end": None, "custom_ranges": None, "timestamp_mode": "direct",
+            "captions": True, "meme": "none", "music": "none", "format": "moment", "cam_delay": 0.0,
             "meme_vol": None, "music_db": None, "cam_pos": "auto",
             "split_ratio": 0.4, "cam_swap": False, "cap_anchor": "safe_bottom", "cam_fallback": "blur", "facecam": None, "cap_y": None,
             "review_mode": "auto"}
@@ -125,16 +126,11 @@ def _parse_time_sec(val):
     if val is None or val == "":
         return None
     if isinstance(val, (int, float)):
-        return float(val)
+        return float(val) if math.isfinite(val) and val >= 0 else None
     s = str(val).strip().lower()
-    if s in ("start", "end", "none", "full"):
+    if s in ("start", "end", "none", "full", ""):
         return None
-    if ":" in s:
-        parts = [float(x) for x in s.split(":")]
-        if len(parts) == 3:
-            return parts[0] * 3600 + parts[1] * 60 + parts[2]
-        if len(parts) == 2:
-            return parts[0] * 60 + parts[1]
+
     import re
     h = re.search(r"(\d+(?:\.\d+)?)\s*h", s)
     m = re.search(r"(\d+(?:\.\d+)?)\s*m", s)
@@ -145,8 +141,48 @@ def _parse_time_sec(val):
         if m: tot += float(m.group(1)) * 60
         if sec: tot += float(sec.group(1))
         return tot
+
+    if ":" in s:
+        try:
+            parts = [float(x) for x in s.split(":") if x.strip()]
+            if len(parts) == 3:
+                return parts[0] * 3600 + parts[1] * 60 + parts[2]
+            if len(parts) == 2:
+                return parts[0] * 60 + parts[1]
+            if len(parts) == 1:
+                return parts[0]
+        except ValueError:
+            return None
+
+    if "." in s:
+        parts = [x.strip() for x in s.split(".") if x.strip()]
+        if len(parts) >= 3:
+            try:
+                nums = [float(p) for p in parts]
+                if len(nums) == 3:
+                    return nums[0] * 3600 + nums[1] * 60 + nums[2]
+                elif len(nums) == 4:
+                    return nums[0] * 86400 + nums[1] * 3600 + nums[2] * 60 + nums[3]
+            except ValueError:
+                return None
+        elif len(parts) == 2:
+            try:
+                n0 = int(parts[0])
+                n1 = int(parts[1])
+                # M.S e.g. 23.3 -> 23m 3s = 1383s, 23.30 -> 23m 30s = 1410s
+                if len(parts[1]) <= 2 and n0 < 60 and n1 < 60:
+                    return float(n0 * 60 + n1)
+                else:
+                    return float(s)
+            except ValueError:
+                try:
+                    return float(s)
+                except ValueError:
+                    return None
+
     try:
-        return float(s)
+        f = float(s)
+        return f if math.isfinite(f) and f >= 0 else None
     except ValueError:
         return None
 
@@ -235,13 +271,44 @@ def clean_options(options) -> dict:
             continue
         elif k == "format":
             v = v if v in ("moment", "callback", "waitforit", "reveal") else "moment"
+        elif k == "timestamp_mode":
+            out[k] = v if v in ("direct", "analyze") else "direct"
+        elif k == "custom_ranges":
+            if isinstance(v, list):
+                ranges = []
+                for item in v:
+                    if isinstance(item, dict):
+                        st = _parse_time_sec(item.get("start"))
+                        en = _parse_time_sec(item.get("end"))
+                        m = item.get("mode", options.get("timestamp_mode", "direct"))
+                        if m not in ("direct", "analyze"):
+                            m = "direct"
+                        if st is not None and en is not None:
+                            if en <= st:
+                                raise ValueError("Each custom range end time must be after its start time.")
+                            ranges.append({"start": round(st, 2), "end": round(en, 2), "mode": m})
+                if ranges:
+                    out[k] = ranges
+            continue
         elif k in ("range_start", "range_end"):
             sec = _parse_time_sec(v)
             if sec is None or not math.isfinite(sec) or sec < 0:
                 raise ValueError("That part of the video isn't valid.")
             v = round(sec, 2)
         out[k] = v
-    if out.get("range_end") is not None and out["range_end"] <= out.get("range_start", 0):
+    if out.get("custom_ranges"):
+        out["range_start"] = min(r["start"] for r in out["custom_ranges"])
+        out["range_end"] = max(r["end"] for r in out["custom_ranges"])
+        out["max_clips"] = max(out.get("max_clips", 6), len(out["custom_ranges"]))
+    elif out.get("range_start") is not None and out.get("range_end") is not None:
+        if out["range_end"] <= out["range_start"]:
+            raise ValueError("The end of the chosen part must be after its start.")
+        out["custom_ranges"] = [{
+            "start": out["range_start"],
+            "end": out["range_end"],
+            "mode": out.get("timestamp_mode", "direct")
+        }]
+    elif out.get("range_end") is not None and out["range_end"] <= out.get("range_start", 0):
         raise ValueError("The end of the chosen part must be after its start.")
     return out
 
@@ -1192,95 +1259,275 @@ def _run_job(job):
     # The ad breaks and static screens of the whole video, found once. It reads the video end to end,
     # so it is done here rather than for each clip, and only when asked for.
     statics = quality.static_ranges(job.get("source_path") or "") if config.SKIP_STATIC else []
-    for bi, (a, b) in enumerate(blocks):
-        if is_paused(job["id"]):
-            ahead.shutdown(wait=False)
-            raise media.JobPaused("Job paused by user")
-        if bi < done_blocks:
-            continue                      # transcribed and checked by the AI before the restart
-        shift = a / 16000
-        where = f" (minute {round((a - lo) / 16000 / 60)} of {round(span / 60)})" if len(blocks) > 1 else ""
-        if yt:
-            _set(job, stage="Reading the transcript" + where)
-            bw = [dict(w, s=round(w["s"] - shift, 2), e=round(w["e"] - shift, 2)) for w in yt[0] if a / 16000 <= w["s"] < b / 16000]
-        else:
-            _set(job, stage="Writing the transcript" + where)
-            now_on[0] = bi
-            hear(bi)
-            hear(bi + 1)
-            bw = heard.pop(bi).result()
-        _set(job, progress=max(job["progress"], 0.14 + 0.78 * (b - lo) / max(1, hi - lo)))
-        words += [dict(w, s=round(w["s"] + shift, 2), e=round(w["e"] + shift, 2)) for w in bw]
-        (d / "words.json").write_text(json.dumps(words), encoding="utf-8")
-        _set(job, stage="Finding the best moments" + where, word_count=len(words))
-        left = int(o["max_clips"]) - len(job["clips"])
-        if left <= 0 or len(bw) < 8:
-            job["done_blocks"] = bi + 1
-            save(job)
-            continue
-        quota = max(1, math.ceil(left / (len(blocks) - bi)))
-        s0 = int((a - lo) / 16000)
-        found, ai = brain.find_clips(bw, db[s0: s0 + int((b - a) / 16000) + 1], (b - a) / 16000, job["title"],
-                                     job["uploader"], quota, int(o["min_len"]), int(o["max_len"]), notes.append, game=game)
-        tokens += ai.get("tokens", 0)
-        model = ai.get("model") or model
-        if ai.get("note"):
-            notes.append(ai["note"])
-        if found and statics:
-            # A commercial or a "be right back" slate is not a clip. Any clip that sits mostly inside one
-            # is dropped.
-            keep = []
-            for c in found:
-                a_s, b_s = c["start"] + shift, c["end"] + shift
-                inside = quality.static_overlap(a_s, b_s, statics)
-                if inside > 0.5 * max(1.0, b_s - a_s):
-                    notes.append(f"A clip from {round(a_s)}s was left out: it sat in an ad break or a static screen.")
-                else:
-                    keep.append(c)
-            found = keep
-        review_mode = o.get("review_mode", "auto")
-        for c in found:
+
+    custom_ranges = o.get("custom_ranges")
+    review_mode = o.get("review_mode", "auto")
+
+    if custom_ranges:
+        for i, crange in enumerate(custom_ranges):
+            if is_paused(job["id"]):
+                ahead.shutdown(wait=False)
+                raise media.JobPaused("Job paused by user")
+            r_start = float(crange["start"])
+            r_end = float(crange["end"])
+            r_mode = crange.get("mode", o.get("timestamp_mode", "direct"))
             cid = f"clip{len(job['clips']) + 1:02d}"
-            c.update(id=cid, start=round(c["start"] + shift, 2),
-                     end=round(c["end"] + shift, 2), style=o["style"], layout=o["layout"],
-                     captions=o.get("captions", True), meme=o.get("meme", "none"),
-                     music=o.get("music", "none"), meme_vol=o.get("meme_vol"),
-                     music_db=o.get("music_db"), split_ratio=o.get("split_ratio", 0.4),
-                     cam_swap=o.get("cam_swap", False), cap_anchor=o.get("cap_anchor", "safe_bottom"),
-                     cam_fallback=o.get("cam_fallback", "blur"), cap_y=o.get("cap_y"),
-                     version=0)
-            if o.get("facecam"):
-                c["facecam"] = o["facecam"]
-            elif o["layout"] in ("gameplay", "stack"):
-                if face is False and job.get("source_path"):
-                    face = _facecam(job)
-                if face:
-                    c["facecam"] = face
 
-            if c.get("facecam") and job.get("source_path"):
+            _set(job, stage=f"Processing clip {i + 1} of {len(custom_ranges)} ({media.fmt_eta(r_start)} to {media.fmt_eta(r_end)})",
+                 progress=0.15 + 0.75 * (i / len(custom_ranges)))
+
+            a_s = int(r_start * 16000)
+            b_s = min(len(audio), int(r_end * 16000))
+            slice_audio = audio[a_s:b_s] if a_s < len(audio) else np.zeros(0, dtype=audio.dtype)
+
+            clip_words = []
+            if o.get("captions", True) and len(slice_audio) >= 1600:
                 try:
-                    fc_focus = facecam.find_clip_face_focus(job["source_path"], c["facecam"], c["start"], c["end"])
-                    if fc_focus:
-                        c["facecam_focus"] = fc_focus
-                except Exception:
-                    pass
+                    if yt:
+                        raw_w = [dict(w) for w in yt[0] if r_start <= w["s"] < r_end]
+                    else:
+                        raw_w = transcribe.transcribe(slice_audio)
+                    clip_words = [dict(w, s=round(w["s"] + (0 if yt else r_start), 2),
+                                       e=round(w["e"] + (0 if yt else r_start), 2)) for w in raw_w]
+                except Exception as e:
+                    notes.append(f"Notice: transcription for clip {cid} ({e})")
+                    clip_words = []
+            words.extend(clip_words)
+            (d / "words.json").write_text(json.dumps(words), encoding="utf-8")
 
-            ed = edit.init_edit(job, c, words, c.get("facecam"))
-            (d / "clips").mkdir(parents=True, exist_ok=True)
-            edit.save_edit(d / "clips" / f"{cid}_edit.json", ed)
+            if r_mode == "direct":
+                # DIRECT CLIP: Never drop, never scout, exact start and end!
+                transcript_text = " ".join(w.get("text") or w.get("w") or "" for w in clip_words).strip()
+                hook_text = ""
+                title_text = ""
+                highlight_words = []
+                if transcript_text and len(transcript_text.split()) >= 3:
+                    try:
+                        desc = brain.describe(transcript_text, title=job.get("title") or "",
+                                              uploader=job.get("uploader") or "", game=game)
+                        if desc:
+                            hook_text = desc.get("hook") or ""
+                            title_text = desc.get("title") or ""
+                            highlight_words = desc.get("highlight_words") or []
+                    except Exception:
+                        pass
+                if not hook_text:
+                    hook_text = f"CLIP {len(job['clips']) + 1}"
+                if not title_text:
+                    title_text = f"Clip {len(job['clips']) + 1}"
 
-            if review_mode in ("review", "review_first"):
-                c["status"] = "drafting"
-                q = "draft"
+                c = {
+                    "id": cid,
+                    "start": round(r_start, 2),
+                    "end": round(r_end, 2),
+                    "hook": hook_text,
+                    "title": title_text,
+                    "score": 100,
+                    "category": "custom",
+                    "highlight_words": highlight_words,
+                    "style": o["style"],
+                    "layout": o["layout"],
+                    "captions": o.get("captions", True),
+                    "meme": o.get("meme", "none"),
+                    "music": o.get("music", "none"),
+                    "meme_vol": o.get("meme_vol"),
+                    "music_db": o.get("music_db"),
+                    "split_ratio": o.get("split_ratio", 0.40),
+                    "cam_swap": o.get("cam_swap", False),
+                    "cap_anchor": o.get("cap_anchor", "safe_bottom"),
+                    "cam_fallback": o.get("cam_fallback", "blur"),
+                    "cap_y": o.get("cap_y"),
+                    "version": 0,
+                    "custom_mode": "direct"
+                }
+
+                if o.get("facecam"):
+                    c["facecam"] = o["facecam"]
+                elif o["layout"] in ("gameplay", "stack"):
+                    if face is False and job.get("source_path"):
+                        face = _facecam(job)
+                    if face:
+                        c["facecam"] = face
+
+                if c.get("facecam") and job.get("source_path"):
+                    try:
+                        fc_focus = facecam.find_clip_face_focus(job["source_path"], c["facecam"], c["start"], c["end"])
+                        if fc_focus:
+                            c["facecam_focus"] = fc_focus
+                    except Exception:
+                        pass
+
+                ed = edit.init_edit(job, c, clip_words, c.get("facecam"))
+                (d / "clips").mkdir(parents=True, exist_ok=True)
+                edit.save_edit(d / "clips" / f"{cid}_edit.json", ed)
+
+                if review_mode in ("review", "review_first"):
+                    c["status"] = "drafting"
+                    q = "draft"
+                else:
+                    c["status"] = "queued"
+                    q = "final"
+
+                job["clips"].append(c)
+                save(job)
+                futures.append((renders.submit(ctx.bind(make), c, list(clip_words), q), c))
+
             else:
-                c["status"] = "queued"
-                q = "final"
+                # ANALYZE MODE: AI evaluates the range and may drop it
+                bw = [dict(w, s=round(w["s"] - r_start, 2), e=round(w["e"] - r_start, 2)) for w in clip_words]
+                s0 = int(r_start)
+                dur = max(1.0, r_end - r_start)
+                s_db = db[s0: s0 + int(dur) + 1] if s0 < len(db) else np.zeros(1, dtype=np.float32)
+                found, ai = brain.find_clips(bw, s_db, dur, job["title"],
+                                             job["uploader"], 1, int(o["min_len"]), int(o["max_len"]),
+                                             notes.append, game=game)
+                tokens += ai.get("tokens", 0)
+                model = ai.get("model") or model
+                if ai.get("note"):
+                    notes.append(ai["note"])
 
-            job["clips"].append(c)
-            futures.append((renders.submit(ctx.bind(make), c, list(words), q), c))
+                if found and statics:
+                    keep = []
+                    for fc in found:
+                        a_s_chk, b_s_chk = fc["start"] + r_start, fc["end"] + r_start
+                        inside = quality.static_overlap(a_s_chk, b_s_chk, statics)
+                        if inside > 0.5 * max(1.0, b_s_chk - a_s_chk):
+                            notes.append(f"Range {media.fmt_eta(r_start)} to {media.fmt_eta(r_end)} was dropped: sat in an ad break or static screen.")
+                        else:
+                            keep.append(fc)
+                    found = keep
+
+                if not found:
+                    notes.append(f"Range {media.fmt_eta(r_start)} to {media.fmt_eta(r_end)} was dropped in Analyze mode: no clip-worthy moment found by AI.")
+                    save(job)
+                else:
+                    for fc in found:
+                        cid = f"clip{len(job['clips']) + 1:02d}"
+                        fc.update(id=cid, start=round(fc["start"] + r_start, 2),
+                                  end=round(fc["end"] + r_start, 2), style=o["style"], layout=o["layout"],
+                                  captions=o.get("captions", True), meme=o.get("meme", "none"),
+                                  music=o.get("music", "none"), meme_vol=o.get("meme_vol"),
+                                  music_db=o.get("music_db"), split_ratio=o.get("split_ratio", 0.4),
+                                  cam_swap=o.get("cam_swap", False), cap_anchor=o.get("cap_anchor", "safe_bottom"),
+                                  cam_fallback=o.get("cam_fallback", "blur"), cap_y=o.get("cap_y"),
+                                  version=0, custom_mode="analyze")
+                        if o.get("facecam"):
+                            fc["facecam"] = o["facecam"]
+                        elif o["layout"] in ("gameplay", "stack"):
+                            if face is False and job.get("source_path"):
+                                face = _facecam(job)
+                            if face:
+                                fc["facecam"] = face
+                        if fc.get("facecam") and job.get("source_path"):
+                            try:
+                                fc_focus = facecam.find_clip_face_focus(job["source_path"], fc["facecam"], fc["start"], fc["end"])
+                                if fc_focus:
+                                    fc["facecam_focus"] = fc_focus
+                            except Exception:
+                                pass
+                        ed = edit.init_edit(job, fc, clip_words, fc.get("facecam"))
+                        (d / "clips").mkdir(parents=True, exist_ok=True)
+                        edit.save_edit(d / "clips" / f"{cid}_edit.json", ed)
+                        if review_mode in ("review", "review_first"):
+                            fc["status"] = "drafting"
+                            q = "draft"
+                        else:
+                            fc["status"] = "queued"
+                            q = "final"
+                        job["clips"].append(fc)
+                        save(job)
+                        futures.append((renders.submit(ctx.bind(make), fc, list(clip_words), q), fc))
         job["ai"] = {"model": model, "tokens": tokens, "note": "", "log": notes[-5:]}
-        job["done_blocks"] = bi + 1       # a restart from here on carries on with the next part
         save(job)
+    else:
+        for bi, (a, b) in enumerate(blocks):
+            if is_paused(job["id"]):
+                ahead.shutdown(wait=False)
+                raise media.JobPaused("Job paused by user")
+            if bi < done_blocks:
+                continue                      # transcribed and checked by the AI before the restart
+            shift = a / 16000
+            where = f" (minute {round((a - lo) / 16000 / 60)} of {round(span / 60)})" if len(blocks) > 1 else ""
+            if yt:
+                _set(job, stage="Reading the transcript" + where)
+                bw = [dict(w, s=round(w["s"] - shift, 2), e=round(w["e"] - shift, 2)) for w in yt[0] if a / 16000 <= w["s"] < b / 16000]
+            else:
+                _set(job, stage="Writing the transcript" + where)
+                now_on[0] = bi
+                hear(bi)
+                hear(bi + 1)
+                bw = heard.pop(bi).result()
+            _set(job, progress=max(job["progress"], 0.14 + 0.78 * (b - lo) / max(1, hi - lo)))
+            words += [dict(w, s=round(w["s"] + shift, 2), e=round(w["e"] + shift, 2)) for w in bw]
+            (d / "words.json").write_text(json.dumps(words), encoding="utf-8")
+            _set(job, stage="Finding the best moments" + where, word_count=len(words))
+            left = int(o["max_clips"]) - len(job["clips"])
+            if left <= 0 or len(bw) < 8:
+                job["done_blocks"] = bi + 1
+                save(job)
+                continue
+            quota = max(1, math.ceil(left / (len(blocks) - bi)))
+            s0 = int((a - lo) / 16000)
+            found, ai = brain.find_clips(bw, db[s0: s0 + int((b - a) / 16000) + 1], (b - a) / 16000, job["title"],
+                                         job["uploader"], quota, int(o["min_len"]), int(o["max_len"]), notes.append, game=game)
+            tokens += ai.get("tokens", 0)
+            model = ai.get("model") or model
+            if ai.get("note"):
+                notes.append(ai["note"])
+            if found and statics:
+                # A commercial or a "be right back" slate is not a clip. Any clip that sits mostly inside one
+                # is dropped.
+                keep = []
+                for c in found:
+                    a_s, b_s = c["start"] + shift, c["end"] + shift
+                    inside = quality.static_overlap(a_s, b_s, statics)
+                    if inside > 0.5 * max(1.0, b_s - a_s):
+                        notes.append(f"A clip from {round(a_s)}s was left out: it sat in an ad break or a static screen.")
+                    else:
+                        keep.append(c)
+                found = keep
+            for c in found:
+                cid = f"clip{len(job['clips']) + 1:02d}"
+                c.update(id=cid, start=round(c["start"] + shift, 2),
+                         end=round(c["end"] + shift, 2), style=o["style"], layout=o["layout"],
+                         captions=o.get("captions", True), meme=o.get("meme", "none"),
+                         music=o.get("music", "none"), meme_vol=o.get("meme_vol"),
+                         music_db=o.get("music_db"), split_ratio=o.get("split_ratio", 0.4),
+                         cam_swap=o.get("cam_swap", False), cap_anchor=o.get("cap_anchor", "safe_bottom"),
+                         cam_fallback=o.get("cam_fallback", "blur"), cap_y=o.get("cap_y"),
+                         version=0)
+                if o.get("facecam"):
+                    c["facecam"] = o["facecam"]
+                elif o["layout"] in ("gameplay", "stack"):
+                    if face is False and job.get("source_path"):
+                        face = _facecam(job)
+                    if face:
+                        c["facecam"] = face
+
+                if c.get("facecam") and job.get("source_path"):
+                    try:
+                        fc_focus = facecam.find_clip_face_focus(job["source_path"], c["facecam"], c["start"], c["end"])
+                        if fc_focus:
+                            c["facecam_focus"] = fc_focus
+                    except Exception:
+                        pass
+
+                ed = edit.init_edit(job, c, words, c.get("facecam"))
+                (d / "clips").mkdir(parents=True, exist_ok=True)
+                edit.save_edit(d / "clips" / f"{cid}_edit.json", ed)
+
+                if review_mode in ("review", "review_first"):
+                    c["status"] = "drafting"
+                    q = "draft"
+                else:
+                    c["status"] = "queued"
+                    q = "final"
+
+                job["clips"].append(c)
+                futures.append((renders.submit(ctx.bind(make), c, list(words), q), c))
+            job["ai"] = {"model": model, "tokens": tokens, "note": "", "log": notes[-5:]}
+            job["done_blocks"] = bi + 1       # a restart from here on carries on with the next part
+            save(job)
     if futures:
         _set(job, stage="Finishing the clips", progress=max(job["progress"], 0.92))
     _wait_for_clips(job, futures, began, renders._max_workers)

@@ -1737,22 +1737,40 @@ function drawAdd(variant) {
           <button type="button" class="btn sm" id="btnSwitchToRange" style="margin-left:auto;font-size:11.5px;padding:4px 10px;border:1px solid var(--line);background:var(--muted)">Target specific timestamps</button>
         </div>
 
-        <div id="rangeCustomBox" style="display:none;background:#fff;border:1px solid var(--brand);border-radius:8px;padding:12px 14px">
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-            <div style="display:flex;flex-direction:column;gap:4px">
-              <label for="o_from" style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:0.04em">Start pulling (HH:MM:SS):</label>
-              <input id="o_from" type="text" placeholder="00:00:00 (or 60m)" aria-label="Start pulling timestamp" style="width:170px;height:38px;padding:0 10px;border:1px solid var(--line);border-radius:6px;background:var(--muted);color:var(--brand-ink);font-weight:700;font-size:13.5px;font-family:monospace,sans-serif">
+        <div id="rangeCustomBox" style="display:none;background:#fff;border:1px solid var(--brand);border-radius:8px;padding:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:12px;font-weight:700;color:var(--dim)">Timestamp Mode:</span>
+              <select id="o_global_timestamp_mode" style="height:32px;padding:0 8px;border:1px solid var(--line);border-radius:6px;font-size:12px;font-weight:700;background:var(--muted);color:var(--brand-ink)">
+                <option value="direct" selected>Direct clip (Cut exact ranges, skip AI filter)</option>
+                <option value="analyze">Analyze (AI evaluates each range)</option>
+              </select>
             </div>
-            <span style="color:var(--brand);font-size:18px;font-weight:bold;align-self:flex-end;margin-bottom:8px">→</span>
-            <div style="display:flex;flex-direction:column;gap:4px">
-              <label for="o_to" style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:0.04em">End pulling (HH:MM:SS):</label>
-              <input id="o_to" type="text" placeholder="01:30:00 (or end)" aria-label="End pulling timestamp" style="width:170px;height:38px;padding:0 10px;border:1px solid var(--line);border-radius:6px;background:var(--muted);color:var(--brand-ink);font-weight:700;font-size:13.5px;font-family:monospace,sans-serif">
+            <button type="button" class="btn sm" id="btnResetFull" style="font-size:11.5px;padding:6px 12px;border:1px solid var(--line);background:#fff">Reset to full video</button>
+          </div>
+
+          <!-- List of Range Rows -->
+          <div id="customRangesList" style="display:flex;flex-direction:column;gap:8px"></div>
+
+          <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+            <button type="button" class="btn sm" id="btnAddCustomRange" style="background:var(--brand);color:#fff;font-weight:700;padding:6px 14px">+ Add Range</button>
+          </div>
+
+          <!-- Bulk Paste Textbox -->
+          <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)">
+            <label for="customBulkInput" style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;font-weight:700;color:var(--dim);margin-bottom:6px">
+              <span>Bulk Paste Timestamp Ranges:</span>
+              <span style="font-weight:normal;color:var(--faint);font-size:11px">Auto-syncs with rows above</span>
+            </label>
+            <textarea id="customBulkInput" rows="2" placeholder="e.g. 1.23.34-2.34.5, 23.3-44.5 (or one range per line)" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;font-family:monospace;font-size:12.5px;background:var(--muted);color:var(--brand-ink);resize:vertical"></textarea>
+            <div style="font-size:11px;color:var(--faint);margin-top:4px;line-height:1.4">
+              Ranges can be separated by commas, semicolons, or newlines. Start and end are separated by a dash (<code>-</code>).<br>
+              <b>Format Rule:</b> Dot (<code>.</code>) or colon (<code>:</code>) separates time units: <code>H.M.S</code> or <code>M.S</code> (e.g. <code>1.23.34</code> = 1h 23m 34s, <code>2.34.5</code> = 2h 34m 5s, <code>23.3</code> = 23m 03s, <code>23.30</code> = 23m 30s). Plain numbers without dots are seconds.
             </div>
-            <button type="button" class="btn sm" id="btnResetFull" style="align-self:flex-end;margin-bottom:2px;font-size:11.5px;padding:8px 12px;border:1px solid var(--line);background:#fff">Reset to full video</button>
           </div>
-          <div style="margin-top:8px;font-size:11.5px;color:var(--faint);line-height:1.4">
-            Only this exact section will be downloaded and clipped (e.g. <code>8:28:30</code> to <code>8:31:00</code> or <code>45m</code> to <code>50m</code>). The rest of the stream is ignored.
-          </div>
+
+          <!-- Live Preview List -->
+          <div id="customRangesPreview" style="margin-top:12px;padding:10px 12px;background:var(--muted);border-radius:6px;font-size:12px;line-height:1.5"></div>
         </div>
       </div>
     </div>
@@ -1762,17 +1780,25 @@ function drawAdd(variant) {
 
   const updateRangeLabel = () => {
     const isCustom = $("#rangeModeCustom")?.getAttribute("aria-pressed") === "true";
-    const fromV = $("#o_from")?.value.trim();
-    const toV = $("#o_to")?.value.trim();
     const lbl = $("#rangeLabel");
     const chip = $("#rangeChip");
     if (!lbl) return;
-    if (isCustom && (fromV || toV)) {
-      lbl.textContent = `Range: ${fromV || "start"} → ${toV || "end"}`;
-      chip?.classList.add("range-active");
-    } else if (isCustom) {
-      lbl.textContent = "Custom Range";
-      chip?.classList.add("range-active");
+    if (isCustom) {
+      const valid = (window.customRangesState || []).filter(r => {
+        const s = parseFlexibleTime(r.start), e = parseFlexibleTime(r.end);
+        return s !== null && e !== null && e > s;
+      });
+      if (valid.length === 1) {
+        const sSec = parseFlexibleTime(valid[0].start), eSec = parseFlexibleTime(valid[0].end);
+        lbl.textContent = `Range: ${formatSecToHMS(sSec)} → ${formatSecToHMS(eSec)}`;
+        chip?.classList.add("range-active");
+      } else if (valid.length > 1) {
+        lbl.textContent = `${valid.length} Ranges (${valid[0].mode || "direct"})`;
+        chip?.classList.add("range-active");
+      } else {
+        lbl.textContent = "Custom Ranges";
+        chip?.classList.add("range-active");
+      }
     } else {
       lbl.textContent = "Pull whole video";
       chip?.classList.remove("range-active");
@@ -1789,9 +1815,8 @@ function drawAdd(variant) {
     btnCust.setAttribute("aria-pressed", String(custom));
     if (bFull) bFull.style.display = custom ? "none" : "flex";
     if (bCust) bCust.style.display = custom ? "block" : "none";
-    if (!custom) {
-      if ($("#o_from")) $("#o_from").value = "";
-      if ($("#o_to")) $("#o_to").value = "";
+    if (custom) {
+      if (typeof renderCustomRangeRows === "function") renderCustomRangeRows();
     }
     updateRangeLabel();
   };
@@ -1800,12 +1825,37 @@ function drawAdd(variant) {
   $("#rangeModeCustom")?.addEventListener("click", () => setRangeMode(true));
   $("#btnSwitchToRange")?.addEventListener("click", () => {
     setRangeMode(true);
-    $("#o_from")?.focus();
+    const firstInp = $("#customRangesList .range-start-input");
+    if (firstInp) firstInp.focus();
   });
   $("#btnResetFull")?.addEventListener("click", () => setRangeMode(false));
-
-  $("#o_from")?.addEventListener("input", updateRangeLabel);
-  $("#o_to")?.addEventListener("input", updateRangeLabel);
+  $("#btnAddCustomRange")?.addEventListener("click", () => {
+    const globalMode = $("#o_global_timestamp_mode")?.value || "direct";
+    if (!window.customRangesState) window.customRangesState = [];
+    window.customRangesState.push({ start: "", end: "", mode: globalMode });
+    if (typeof renderCustomRangeRows === "function") renderCustomRangeRows();
+    const bulk = $("#customBulkInput");
+    if (bulk && typeof buildBulkRangesString === "function") bulk.value = buildBulkRangesString(window.customRangesState);
+  });
+  $("#o_global_timestamp_mode")?.addEventListener("change", e => {
+    const m = e.target.value;
+    (window.customRangesState || []).forEach(r => { r.mode = m; });
+    if (typeof renderCustomRangeRows === "function") renderCustomRangeRows();
+    const bulk = $("#customBulkInput");
+    if (bulk && typeof buildBulkRangesString === "function") bulk.value = buildBulkRangesString(window.customRangesState);
+  });
+  $("#customBulkInput")?.addEventListener("input", e => {
+    const val = e.target.value;
+    if (typeof parseBulkRangesString === "function") {
+      const parsed = parseBulkRangesString(val);
+      if (parsed.length) {
+        window.customRangesState = parsed;
+      } else if (!val.trim()) {
+        window.customRangesState = [{ start: "", end: "", mode: $("#o_global_timestamp_mode")?.value || "direct" }];
+      }
+      if (typeof renderCustomRangeRows === "function") renderCustomRangeRows();
+    }
+  });
 
   // Audio preview buttons & volume controls
   $("#prev_meme")?.addEventListener("click", e => {
@@ -2147,7 +2197,7 @@ document.addEventListener("click", e => {
     }
     setTimeout(() => {
       $("#pullRangeSection")?.scrollIntoView({behavior: "smooth", block: "center"});
-      $("#o_from")?.focus();
+      ($("#customRangesList .range-start-input") || $("#o_from"))?.focus();
     }, 80);
     e.preventDefault();
     return;
@@ -2165,17 +2215,15 @@ document.addEventListener("keydown", e => {
   const os = [...p.querySelectorAll(".pick-opt")], i = os.indexOf(document.activeElement);
   os[(i + (e.key === "ArrowDown" ? 1 : -1) + os.length) % os.length].focus();
 });
-function parseTime(val) {
+window.customRangesState = [
+  { start: "", end: "", mode: "direct" }
+];
+
+function parseFlexibleTime(val) {
   if (val == null) return null;
   const s = String(val).trim().toLowerCase();
-  if (!s || s === "start" || s === "end" || s === "full") return null;
-  if (s.includes(":")) {
-    const parts = s.split(":").map(Number);
-    if (!parts.some(isNaN)) {
-      if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-      if (parts.length === 2) return parts[0] * 60 + parts[1];
-    }
-  }
+  if (!s || s === "start" || s === "end" || s === "full" || s === "none") return null;
+
   const h = s.match(/(\d+(?:\.\d+)?)\s*h/);
   const m = s.match(/(\d+(?:\.\d+)?)\s*m/);
   const sec = s.match(/(\d+(?:\.\d+)?)\s*s/);
@@ -2186,12 +2234,259 @@ function parseTime(val) {
     if (sec) tot += parseFloat(sec[1]);
     return tot;
   }
+
+  if (s.includes(":")) {
+    const parts = s.split(":").map(Number);
+    if (!parts.some(isNaN)) {
+      if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+      if (parts.length === 2) return parts[0] * 60 + parts[1];
+      if (parts.length === 1) return parts[0];
+    }
+  }
+
+  if (s.includes(".")) {
+    const parts = s.split(".").map(x => x.trim()).filter(Boolean);
+    if (parts.length >= 3) {
+      const nums = parts.map(Number);
+      if (!nums.some(isNaN)) {
+        if (nums.length === 3) return nums[0] * 3600 + nums[1] * 60 + nums[2];
+        if (nums.length === 4) return nums[0] * 86400 + nums[1] * 3600 + nums[2] * 60 + nums[3];
+      }
+    } else if (parts.length === 2) {
+      const n0 = Number(parts[0]), n1 = Number(parts[1]);
+      if (!isNaN(n0) && !isNaN(n1)) {
+        if (parts[1].length <= 2 && n0 < 60 && n1 < 60) {
+          // M.S e.g. 23.3 -> 23m 3s = 1383s, 23.30 -> 23m 30s = 1410s
+          return n0 * 60 + n1;
+        } else {
+          return parseFloat(s);
+        }
+      }
+    }
+  }
+
   const num = parseFloat(s);
   if (!isNaN(num) && num >= 0) {
-    return num * 60;
+    return num;
   }
   return null;
 }
+
+const parseTime = parseFlexibleTime;
+
+function formatSecToHMS(sec) {
+  if (sec == null || isNaN(sec)) return "";
+  sec = Math.round(sec);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function parseBulkRangesString(str) {
+  if (!str || !str.trim()) return [];
+  const entries = str.split(/[,;\n\r]+/).map(s => s.trim()).filter(Boolean);
+  const globalMode = $("#o_global_timestamp_mode")?.value || "direct";
+  const result = [];
+  for (const entry of entries) {
+    let mode = globalMode;
+    let clean = entry;
+    if (/\((direct|analyze)\)/i.test(entry)) {
+      const mMatch = entry.match(/\((direct|analyze)\)/i);
+      mode = mMatch[1].toLowerCase();
+      clean = entry.replace(/\((direct|analyze)\)/i, "").trim();
+    }
+    const parts = clean.split(/[\-\u2013\u2014]/).map(s => s.trim());
+    if (parts.length >= 2) {
+      result.push({
+        start: parts[0],
+        end: parts[1],
+        mode: mode
+      });
+    } else if (parts.length === 1 && parts[0]) {
+      result.push({
+        start: parts[0],
+        end: "",
+        mode: mode
+      });
+    }
+  }
+  return result;
+}
+
+function buildBulkRangesString(ranges) {
+  if (!ranges || !ranges.length) return "";
+  const globalMode = $("#o_global_timestamp_mode")?.value || "direct";
+  return ranges.map(r => {
+    const s = r.start || "";
+    const e = r.end || "";
+    if (!s && !e) return "";
+    let str = `${s}-${e}`;
+    if (r.mode && r.mode !== globalMode) {
+      str += ` (${r.mode})`;
+    }
+    return str;
+  }).filter(Boolean).join(", ");
+}
+
+function updateCustomRangesPreview() {
+  const container = $("#customRangesPreview");
+  if (!container) return;
+  const isCustom = $("#rangeModeCustom")?.getAttribute("aria-pressed") === "true";
+  if (!isCustom) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const ranges = window.customRangesState || [];
+  if (!ranges.length) {
+    container.innerHTML = `<span style="color:var(--faint)">No ranges added yet. Add a row above or paste into the bulk box.</span>`;
+    window.customRangeErrors = false;
+    return;
+  }
+
+  let html = `<div style="font-weight:700;margin-bottom:6px;color:var(--brand-ink)">Parsed Ranges Preview:</div>`;
+  let hasErrors = false;
+  const parsedList = [];
+
+  const A = typeof att === "function" ? att() : null;
+  const curLink = A?.links?.find(x => x.state === "ok");
+  const maxVidDur = curLink?.dur || (window.composerMaxDuration || null);
+
+  for (let i = 0; i < ranges.length; i++) {
+    const r = ranges[i];
+    const sSec = parseFlexibleTime(r.start);
+    const eSec = parseFlexibleTime(r.end);
+    let rowErr = null;
+
+    if (!r.start && !r.end) {
+      continue;
+    } else if (sSec === null) {
+      rowErr = `Start time "${esc(r.start)}" is invalid or unreadable.`;
+    } else if (eSec === null) {
+      rowErr = `End time "${esc(r.end)}" is invalid or unreadable.`;
+    } else if (eSec <= sSec) {
+      rowErr = `End (${formatSecToHMS(eSec)}) must be after start (${formatSecToHMS(sSec)}).`;
+    } else if (maxVidDur && eSec > maxVidDur) {
+      rowErr = `End (${formatSecToHMS(eSec)}) exceeds video duration (${formatSecToHMS(maxVidDur)}).`;
+    }
+
+    if (!rowErr && sSec !== null && eSec !== null) {
+      for (let j = 0; j < parsedList.length; j++) {
+        const prev = parsedList[j];
+        if (sSec < prev.end && eSec > prev.start) {
+          rowErr = `Overlaps with Clip ${j + 1} (${formatSecToHMS(prev.start)} to ${formatSecToHMS(prev.end)}).`;
+          break;
+        }
+      }
+    }
+
+    const modeLabel = (r.mode === "analyze") ? "Analyze mode" : "Direct clip";
+
+    if (rowErr) {
+      hasErrors = true;
+      html += `<div style="color:var(--bad);margin-top:3px;font-weight:600">✕ Clip ${i + 1}: ${rowErr}</div>`;
+    } else {
+      parsedList.push({ start: sSec, end: eSec, index: i });
+      const dur = eSec - sSec;
+      let warn = "";
+      if (dur < 3.0) warn = ` <span style="color:#d97706;font-size:11px;font-weight:bold">⚠️ Short range (<3s)</span>`;
+      else if (dur > 180.0) warn = ` <span style="color:#d97706;font-size:11px;font-weight:bold">⚠️ Long clip (>3m)</span>`;
+
+      html += `<div style="color:var(--brand-ink);margin-top:3px">` +
+        `<b>Clip ${i + 1}:</b> <code>${formatSecToHMS(sSec)}</code> to <code>${formatSecToHMS(eSec)}</code> ` +
+        `(${Math.round(dur)}s)${warn} · <span style="color:var(--dim);font-weight:600">${modeLabel}</span>` +
+        `</div>`;
+    }
+  }
+
+  if (hasErrors) {
+    html += `<div style="margin-top:8px;font-size:11px;color:var(--bad);font-weight:700">Please fix highlighted timestamp errors before submitting.</div>`;
+  }
+  container.innerHTML = html;
+  window.customRangeErrors = hasErrors;
+  if (typeof updateRangeLabel === "function") updateRangeLabel();
+}
+
+function renderCustomRangeRows() {
+  const listEl = $("#customRangesList");
+  if (!listEl) return;
+  const globalMode = $("#o_global_timestamp_mode")?.value || "direct";
+
+  if (!window.customRangesState || !window.customRangesState.length) {
+    window.customRangesState = [{ start: "", end: "", mode: globalMode }];
+  }
+
+  listEl.innerHTML = window.customRangesState.map((r, i) => {
+    return `
+      <div class="custom-range-row" data-idx="${i}" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--muted);padding:8px 10px;border-radius:6px;border:1px solid var(--line)">
+        <span style="font-size:11px;font-weight:700;color:var(--dim);min-width:44px">Clip ${i + 1}:</span>
+        <input type="text" class="range-start-input" data-idx="${i}" value="${esc(r.start)}" placeholder="00:00:00" style="width:115px;height:32px;padding:0 8px;border:1px solid var(--line);border-radius:5px;font-family:monospace;font-size:12.5px;background:#fff;font-weight:600">
+        <span style="color:var(--brand);font-weight:bold">→</span>
+        <input type="text" class="range-end-input" data-idx="${i}" value="${esc(r.end)}" placeholder="00:01:00" style="width:115px;height:32px;padding:0 8px;border:1px solid var(--line);border-radius:5px;font-family:monospace;font-size:12.5px;background:#fff;font-weight:600">
+        <select class="range-mode-select" data-idx="${i}" style="height:32px;padding:0 6px;border:1px solid var(--line);border-radius:5px;font-size:11.5px;background:#fff;color:var(--brand-ink);font-weight:600">
+          <option value="direct" ${r.mode === "direct" ? "selected" : ""}>Direct clip</option>
+          <option value="analyze" ${r.mode === "analyze" ? "selected" : ""}>Analyze</option>
+        </select>
+        <button type="button" class="btn sm range-remove-btn" data-idx="${i}" title="Remove range" style="padding:4px 8px;color:var(--bad);background:#fff;border:1px solid var(--line);font-size:12px;font-weight:bold;margin-left:auto">✕</button>
+      </div>
+    `;
+  }).join("");
+
+  listEl.querySelectorAll(".range-start-input").forEach(inp => {
+    inp.addEventListener("input", e => {
+      const idx = Number(e.target.dataset.idx);
+      if (window.customRangesState[idx]) {
+        window.customRangesState[idx].start = e.target.value;
+        const bulk = $("#customBulkInput");
+        if (bulk) bulk.value = buildBulkRangesString(window.customRangesState);
+        updateCustomRangesPreview();
+      }
+    });
+  });
+
+  listEl.querySelectorAll(".range-end-input").forEach(inp => {
+    inp.addEventListener("input", e => {
+      const idx = Number(e.target.dataset.idx);
+      if (window.customRangesState[idx]) {
+        window.customRangesState[idx].end = e.target.value;
+        const bulk = $("#customBulkInput");
+        if (bulk) bulk.value = buildBulkRangesString(window.customRangesState);
+        updateCustomRangesPreview();
+      }
+    });
+  });
+
+  listEl.querySelectorAll(".range-mode-select").forEach(sel => {
+    sel.addEventListener("change", e => {
+      const idx = Number(e.target.dataset.idx);
+      if (window.customRangesState[idx]) {
+        window.customRangesState[idx].mode = e.target.value;
+        const bulk = $("#customBulkInput");
+        if (bulk) bulk.value = buildBulkRangesString(window.customRangesState);
+        updateCustomRangesPreview();
+      }
+    });
+  });
+
+  listEl.querySelectorAll(".range-remove-btn").forEach(btn => {
+    btn.addEventListener("click", e => {
+      const idx = Number(e.target.dataset.idx);
+      if (window.customRangesState.length > 1) {
+        window.customRangesState.splice(idx, 1);
+      } else {
+        window.customRangesState[0] = { start: "", end: "", mode: $("#o_global_timestamp_mode")?.value || "direct" };
+      }
+      renderCustomRangeRows();
+      const bulk = $("#customBulkInput");
+      if (bulk) bulk.value = buildBulkRangesString(window.customRangesState);
+      updateCustomRangesPreview();
+    });
+  });
+
+  updateCustomRangesPreview();
+}
+
 const targetCreator = () => creatorId() || $("#o_creator")?.value || "";
 function jobOptions() {
   const n = id => { const el = $(id); if (!el) return null; const v = el.value; return v === "" ? null : Number(v); };
@@ -2240,10 +2535,32 @@ function jobOptions() {
   }
   const isCustom = $("#rangeModeCustom")?.getAttribute("aria-pressed") === "true";
   if (isCustom) {
-    const fromSec = parseTime($("#o_from")?.value);
-    const toSec = parseTime($("#o_to")?.value);
-    if (fromSec !== null) o.range_start = fromSec;
-    if (toSec !== null) o.range_end = toSec;
+    const globalMode = $("#o_global_timestamp_mode")?.value || "direct";
+    o.timestamp_mode = globalMode;
+    const validRanges = [];
+    if (Array.isArray(window.customRangesState)) {
+      for (const r of window.customRangesState) {
+        const s = typeof parseFlexibleTime === "function" ? parseFlexibleTime(r.start) : parseTime(r.start);
+        const e = typeof parseFlexibleTime === "function" ? parseFlexibleTime(r.end) : parseTime(r.end);
+        if (s !== null && e !== null && e > s) {
+          validRanges.push({
+            start: s,
+            end: e,
+            mode: r.mode || globalMode
+          });
+        }
+      }
+    }
+    if (validRanges.length > 0) {
+      o.custom_ranges = validRanges;
+      o.range_start = Math.min(...validRanges.map(r => r.start));
+      o.range_end = Math.max(...validRanges.map(r => r.end));
+    } else {
+      const fromSec = parseTime($("#o_from")?.value);
+      const toSec = parseTime($("#o_to")?.value);
+      if (fromSec !== null) o.range_start = fromSec;
+      if (toSec !== null) o.range_end = toSec;
+    }
   }
   return o;
 }
@@ -2481,6 +2798,22 @@ async function makeClips() {
     A.queued = true; drawAtt();
     toast("Finding the video first. Clipping starts as soon as it's found.");
     return;
+  }
+  const isCustom = $("#rangeModeCustom")?.getAttribute("aria-pressed") === "true";
+  if (isCustom) {
+    if (window.customRangeErrors) {
+      toast("Please fix errors in custom timestamp ranges before submitting.", "bad");
+      return;
+    }
+    const validCount = (window.customRangesState || []).filter(r => {
+      const s = typeof parseFlexibleTime === "function" ? parseFlexibleTime(r.start) : null;
+      const e = typeof parseFlexibleTime === "function" ? parseFlexibleTime(r.end) : null;
+      return s !== null && e !== null && e > s;
+    }).length;
+    if (validCount === 0) {
+      toast("Please enter at least one valid custom timestamp range (e.g. 01:00-02:00).", "bad");
+      return;
+    }
   }
   if (!canGo(A)) {
     toast(A.note || "Paste a YouTube, Twitch or Kick video link, or add a video file first.", "bad");

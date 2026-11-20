@@ -201,10 +201,8 @@ def validate_edit(data: dict, src_w=1920, src_h=1080) -> dict:
         e = round(float(data.get("end", s + 15.0)), 2)
         if s < 0:
             s = 0.0
-        if e <= s + 2.0:
-            e = s + 3.0
-        if e - s > 180.0:
-            e = s + 180.0
+        if e <= s:
+            e = s + 0.5
         out["start"], out["end"] = s, e
     except (ValueError, TypeError):
         pass
