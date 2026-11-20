@@ -392,16 +392,15 @@ NOT_MUST = "Most checks should return []. Only return a moment you would stop sc
 
 FACE_CAM = """One frame of a gaming stream is attached.
 
-A streamer often puts a small picture of their own webcam in a corner of the stream, next to the game.
-Is the streamer's own face on this frame? A real person, filmed by a camera, sitting in a room. Not a
-character in the game, not a picture inside a game menu, not someone in a video the game is playing.
+A streamer often puts a webcam overlay of themselves in a corner or along an edge of the stream (it may have a rectangle frame, rounded corners, dark room lighting, or a green-screen cutout).
+Is the streamer's own face/webcam on this frame? A real person filmed by a camera — NOT a 3D game character or in-game portrait.
 
 Answer in one line and nothing else:
-  CAM x=..% y=..% w=..% h=..%     the webcam picture, as parts of the whole frame; x,y is its top left corner
-  NO CAM                         there is no webcam on this frame"""
+  CAM x=..% y=..% w=..% h=..%     tight bounding box around the webcam picture as percentages (0-100) of the whole frame; x,y is top-left
+  NO CAM                         there is no streamer webcam on this frame"""
 
-_FACE_BOX = re.compile(r"x\s*=\s*(\d+(?:\.\d+)?)\s*%?\s*,?\s*y\s*=\s*(\d+(?:\.\d+)?)\s*%?\s*"
-                       r",?\s*w\s*=\s*(\d+(?:\.\d+)?)\s*%?\s*,?\s*h\s*=\s*(\d+(?:\.\d+)?)", re.I)
+_FACE_BOX = re.compile(r'["\']?x["\']?\s*[:=]\s*(\d+(?:\.\d+)?)\s*(%?)\s*,?\s*["\']?y["\']?\s*[:=]\s*(\d+(?:\.\d+)?)\s*(%?)\s*'
+                       r',?\s*["\']?w["\']?\s*[:=]\s*(\d+(?:\.\d+)?)\s*(%?)\s*,?\s*["\']?h["\']?\s*[:=]\s*(\d+(?:\.\d+)?)\s*(%?)', re.I)
 
 
 def look_for_facecam(jpeg: bytes, timeout=None) -> dict:
@@ -418,7 +417,13 @@ def look_for_facecam(jpeg: bytes, timeout=None) -> dict:
         usage.record(sent, wrote, "Webcam: one frame")
     m = _FACE_BOX.search(text or "")
     if m:
-        x, y, w, h = (max(0.0, min(1.0, float(v) / 100.0)) for v in m.groups())
+        raw_nums = [float(m.group(i)) for i in (1, 3, 5, 7)]
+        has_pct = any(m.group(i) == "%" for i in (2, 4, 6, 8))
+        # Support both percentage values (0..100) and normalized 0..1 decimal responses
+        if not has_pct and all(0.0 <= v <= 1.0 for v in raw_nums) and (raw_nums[2] > 0.02 or raw_nums[3] > 0.02):
+            x, y, w, h = (max(0.0, min(1.0, v)) for v in raw_nums)
+        else:
+            x, y, w, h = (max(0.0, min(1.0, v / 100.0)) for v in raw_nums)
         return {"looked": True, "box": (x, y, w, h)}
     said_no = re.search(r"\bno\s*(?:web\s*-?\s*)?cam\b|\bnot\s+(?:visible|there|present)\b", text or "", re.I)
     if said_no:
