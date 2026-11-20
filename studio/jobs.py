@@ -584,6 +584,15 @@ def request_render(jid, cid, changes: dict):
             new["hook_y"] = int(float(changes["hook_y"])) if changes["hook_y"] is not None else None
         except (ValueError, TypeError):
             pass
+    if "hook_enabled" in changes:
+        new["hook_enabled"] = bool(changes["hook_enabled"])
+    if "hook_font_size" in changes:
+        try:
+            new["hook_font_size"] = int(float(changes["hook_font_size"]))
+        except (ValueError, TypeError):
+            pass
+    if "hook_style" in changes:
+        new["hook_style"] = str(changes["hook_style"])
     if "meme_vol" in changes:
         try:
             new["meme_vol"] = round(max(-30.0, min(10.0, float(changes["meme_vol"]))), 1)
@@ -651,6 +660,24 @@ def request_render(jid, cid, changes: dict):
     else:
         new["_fast_caption_only"] = False
 
+    edit_file = Path(job["dir"]) / "clips" / f"{cid}_edit.json"
+    if edit_file.is_file():
+        ed = edit.load_edit(edit_file)
+        if ed:
+            if "captions" in new:
+                ed.setdefault("caption", {})["enabled"] = bool(new["captions"])
+            if "hook_enabled" in new:
+                ed.setdefault("hook", {})["enabled"] = bool(new["hook_enabled"])
+            if "hook" in new:
+                ed.setdefault("hook", {})["text"] = str(new["hook"])
+            if "hook_y" in new and new["hook_y"] is not None:
+                ed.setdefault("hook", {})["y_pos"] = float(new["hook_y"])
+            if "cap_y" in new and new["cap_y"] is not None:
+                ed.setdefault("caption", {})["y_pos"] = float(new["cap_y"])
+            if "cam_swap" in new:
+                ed["cam_swap"] = bool(new["cam_swap"])
+            edit.save_edit(edit_file, ed)
+
     clip.update(new, status="queued")
     save(job)
     _q.put(("clip", jid, cid))
@@ -675,11 +702,12 @@ def render_one(job, clip, words, quality="final"):
             if face:
                 clip["facecam"] = face
         local = dict(clip, start=clip["start"] - off, end=clip["end"] - off,
-                     hook=roman.to_roman(clip.get("hook") or ""),
+                     hook=roman.to_roman(clip.get("hook") or "") if clip.get("hook_enabled", True) else "",
+                     hook_enabled=clip.get("hook_enabled", True),
                      cam_delay=float(clip.get("cam_delay", 0.0) or 0.0))
         if clip.get("captions", True):
             if clip.get("words"):
-                near = [dict(w, s=float(w["s"]), e=float(w["e"])) for w in clip["words"]]
+                near = [dict(w, s=float(w["s"]), e=float(w["e"])) for w in roman.words(clip["words"])]
             elif clip.get("src_words"):
                 raw = [dict(w) for w in clip["src_words"] if local["start"] - 0.5 <= w["s"] <= local["end"] + 0.5]
                 try:
@@ -706,13 +734,17 @@ def render_one(job, clip, words, quality="final"):
             edit.save_edit(edit_file, ed)
         else:
             ed = edit.load_edit(edit_file)
-            if ed and "captions" in clip:
-                ed["caption"]["enabled"] = bool(clip["captions"])
+            if ed:
+                if "captions" in clip:
+                    ed["caption"]["enabled"] = bool(clip["captions"])
+                if "hook_enabled" in clip:
+                    ed.setdefault("hook", {})["enabled"] = bool(clip["hook_enabled"])
                 edit.save_edit(edit_file, ed)
 
         out = render.render_clip(src, d / "clips", clip["id"], local, near, job["width"], job["height"], quality=quality)
         if quality == "draft":
             clip.update(out, status="awaiting_review", error=None)
+            clip["version"] = clip.get("version", 0) + 1
             clip["words"] = near
         else:
             final_status = "done"

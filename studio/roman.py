@@ -259,5 +259,17 @@ def unicodedata_nfc(s: str) -> str:
 
 
 def words(ws: list) -> list:
-    """Caption words ({'w', 's', 'e'}) with any Hindi or Urdu in Roman letters. Timings are untouched."""
-    return [dict(w, w=to_roman(w["w"])) if needs_roman(w.get("w", "")) else w for w in ws]
+    """Caption words ({'w'/'text', 's'/'start', 'e'/'end'}) with any Hindi or Urdu in Roman letters (Hinglish). Timings are untouched."""
+    out = []
+    for w in ws:
+        txt = str(w.get("w") if "w" in w else w.get("text", ""))
+        rom = to_roman(txt) if needs_roman(txt) else txt
+        nw = dict(w)
+        if "w" in nw:
+            nw["w"] = rom
+        if "text" in nw:
+            nw["text"] = rom
+        if "w" not in nw and "text" not in nw:
+            nw["w"] = rom
+        out.append(nw)
+    return out

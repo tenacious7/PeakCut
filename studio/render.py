@@ -191,6 +191,8 @@ def build_ass(words, start, end, hook, style_name, highlight, hook_y, cap_y,
     norm_words = []
     for w in words:
         txt = str(w.get("w") if "w" in w else w.get("text", ""))
+        if roman.needs_roman(txt):
+            txt = roman.to_roman(txt)
         s = float(w["s"] if "s" in w else w.get("start", 0.0))
         e = float(w["e"] if "e" in w else w.get("end", s + 0.3))
         norm_words.append({"w": txt, "s": s - CAPTION_LEAD, "e": e - CAPTION_LEAD})
@@ -306,9 +308,8 @@ def cover_crop_filter(cam, panel_w, panel_h, face=None, headroom=0.42, zoom=1.0)
     return f"crop={cw}:{ch}:{cx}:{cy},scale={panel_w}:{panel_h}:flags=lanczos,setsar=1"
 
 
-def build_stack_filter(cam, ratio, swap=False, face=None, W=1080, H=1920, cam_delay=0.0, zoom=1.0):
-    ratio = max(0.20, min(0.80, float(ratio or 0.40)))
-    cam_h = round(H * ratio / 2) * 2          # ratio = facecam share, e.g. 0.35 / 0.40 / 0.50
+def build_stack_filter(cam, ratio=0.40, swap=False, face=None, W=1080, H=1920, cam_delay=0.0, zoom=1.0):
+    cam_h = round(H * (ratio or 0.40) / 2) * 2
     game_h = H - cam_h
     cam_f = cover_crop_filter(cam, W, cam_h, face=face, zoom=zoom)
     game_f = f"scale={W}:{game_h}:force_original_aspect_ratio=increase,crop={W}:{game_h},setsar=1"
@@ -368,15 +369,14 @@ def _filter(layout, fg_h, facecam=None, cam_delay=0.0, split_ratio=0.4, cam_swap
 def _hook_y(layout, hook_y, facecam=None, split_ratio=0.40, cam_swap=False):
     """Where the heading goes. In the gameplay layout the webcam sits in the top corner, so a heading
     across the top would run under it: it goes just below the picture instead. In stack layout,
-    it sits at the seam between the two panels to avoid covering faces."""
+    it sits right at the seam between the two panels so it overlaps between facecam and video."""
     if layout == "gameplay" and facecam and len(facecam) == 4 and facecam[2] > 8:
         return PIP_MARGIN + int(round(PIP_W * facecam[3] / facecam[2])) + 32
     if layout == "stack":
-        ratio = max(0.20, min(0.80, float(split_ratio or 0.40)))
-        cam_h = round(H * ratio / 2) * 2
+        cam_h = round(H * (split_ratio or 0.40) / 2) * 2
         game_h = H - cam_h
         seam_y = game_h if cam_swap else cam_h
-        return max(80, seam_y - 90)
+        return float(seam_y)
     return hook_y
 
 
@@ -422,14 +422,20 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
         face_zoom = float(fc_obj.get("zoom", 1.0)) if (fc_obj and isinstance(fc_obj, dict)) else 1.0
         cam_swap = bool(ed.get("cam_swap", clip.get("cam_swap", False)))
         cap_conf = ed.get("caption") or {}
-        cap_enabled = bool(clip.get("captions", cap_conf.get("enabled", True)))
+        if "enabled" in cap_conf:
+            cap_enabled = bool(cap_conf["enabled"])
+        else:
+            cap_enabled = bool(clip.get("captions", True))
         cap_style = str(cap_conf.get("style", "bounce"))
         cap_font_size = int(cap_conf.get("font_size", 132))
         cap_y = float(cap_conf.get("y_pos", 1630.0))
         words_to_use = cap_conf.get("words") if cap_conf.get("words") else words
         hook_conf = ed.get("hook") or {}
-        hook_enabled = bool(hook_conf.get("enabled", True))
-        hook_text = str(hook_conf.get("text", "")).strip()
+        if "enabled" in hook_conf:
+            hook_enabled = bool(hook_conf["enabled"])
+        else:
+            hook_enabled = bool(clip.get("hook_enabled", bool(clip.get("hook"))))
+        hook_text = str(hook_conf.get("text", "")).strip() if hook_enabled else ""
         hook_font_size = int(hook_conf.get("font_size", 96))
         hook_y = float(hook_conf.get("y_pos", 300.0))
         hook_style = str(hook_conf.get("style", "default"))
@@ -458,8 +464,8 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
         cap_font_size = 132
         cap_y = clip.get("cap_y")
         words_to_use = words
-        hook_text = str(clip.get("hook", "")).strip()
-        hook_enabled = bool(hook_text)
+        hook_enabled = bool(clip.get("hook_enabled", bool(clip.get("hook"))))
+        hook_text = str(clip.get("hook", "")).strip() if hook_enabled else ""
         hook_font_size = int(clip.get("hook_font_size") or 96)
         hook_y = clip.get("hook_y")
         hook_style = str(clip.get("hook_style") or "default")
@@ -472,10 +478,15 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
             "music_db": float(clip.get("music_db") or -18.0),
         }
 
+    if hook_text and roman.needs_roman(hook_text):
+        hook_text = roman.to_roman(hook_text)
+
     # Normalize word timestamps to align with [start, end] inside src
     adjusted_words = []
     for w in (words_to_use or []):
         t = str(w.get("w") if "w" in w else w.get("text", "")).strip()
+        if roman.needs_roman(t):
+            t = roman.to_roman(t)
         s_val = float(w.get("s") if "s" in w else w.get("start", 0.0))
         e_val = float(w.get("e") if "e" in w else w.get("end", s_val + 0.3))
         if off > 0 and s_val >= off:

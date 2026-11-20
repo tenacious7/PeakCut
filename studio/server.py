@@ -1042,11 +1042,19 @@ def update_clip_edit(cid: str, body: dict = Body(...), jid: str = None):
     clip["end"] = valid["end"]
     clip["layout"] = valid["layout"]
     clip["split_ratio"] = valid["split_ratio"]
-    if valid.get("hook"):
+    clip["cam_swap"] = bool(valid.get("cam_swap", False))
+    if "hook" in valid:
         clip["hook"] = valid["hook"].get("text", "")
-    if valid.get("caption"):
+        clip["hook_enabled"] = bool(valid["hook"].get("enabled", True))
+        clip["hook_font_size"] = valid["hook"].get("font_size", 96)
+        clip["hook_y"] = valid["hook"].get("y_pos", 300.0)
+        clip["hook_style"] = valid["hook"].get("style", "default")
+    if "caption" in valid:
         clip["style"] = valid["caption"].get("style", "bounce")
-        clip["captions"] = valid["caption"].get("enabled", True)
+        clip["captions"] = bool(valid["caption"].get("enabled", True))
+        clip["cap_y"] = valid["caption"].get("y_pos", 1630.0)
+    clip["draft_v"] = int(time.time() * 1000)
+    clip["version"] = clip.get("version", 0) + 1
     if "title" in body and body["title"]:
         clip["title"] = str(body["title"])[:100]
     if "description" in body and body["description"]:

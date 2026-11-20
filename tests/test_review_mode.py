@@ -502,14 +502,14 @@ class TestReviewMode(unittest.TestCase):
         self.assertIn("scale=1080:672:flags=lanczos", stack_swap)
         self.assertIn("crop=1080:1248", stack_noswap)
 
-        # 6. Test hook placement at the seam (clearing the forehead)
-        # swap=False: seam at cam_h (672) -> hook_y = 672 - 90 = 582
+        # 6. Test hook placement at the seam (overlapping facecam and video halves)
+        # swap=False: seam at cam_h (672) -> hook_y = 672
         hook_y_noswap = render._hook_y("stack", 300, facecam=cam, split_ratio=0.35, cam_swap=False)
-        self.assertEqual(hook_y_noswap, 582)
+        self.assertEqual(hook_y_noswap, 672)
 
-        # swap=True: seam at game_h (1248) -> hook_y = 1248 - 90 = 1158
+        # swap=True: seam at game_h (1248) -> hook_y = 1248
         hook_y_swap = render._hook_y("stack", 300, facecam=cam, split_ratio=0.35, cam_swap=True)
-        self.assertEqual(hook_y_swap, 1158)
+        self.assertEqual(hook_y_swap, 1248)
         print("PASS test_cover_crop_and_stack_filters")
 
     def test_face_center_and_focus_detection(self):

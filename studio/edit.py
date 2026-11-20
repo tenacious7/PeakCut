@@ -6,6 +6,8 @@ import json
 import math
 from pathlib import Path
 
+from . import roman
+
 GLOBAL_FIELDS = {
     "layout",
     "split_ratio",
@@ -131,18 +133,22 @@ def init_edit(job: dict, clip: dict, words: list = None, facecam: list = None) -
     c_end = float(clip.get("end", c_start + 30.0) or (c_start + 30.0))
     for w in w_src:
         text = str(w.get("text") if "text" in w else w.get("w", ""))
+        if roman.needs_roman(text):
+            text = roman.to_roman(text)
         s = round(float(w.get("start") if "start" in w else w.get("s", 0.0)), 2)
         e = round(float(w.get("end") if "end" in w else w.get("e", s + 0.3)), 2)
         if text.strip() and (c_start - 2.0 <= s <= c_end + 2.0 or 0 <= s <= (c_end - c_start) + 2.0):
             cap_words.append({"text": text, "start": s, "end": e})
 
     hook_text = str(clip.get("hook") or "").strip()
-    hook_enabled = bool(hook_text)
+    if roman.needs_roman(hook_text):
+        hook_text = roman.to_roman(hook_text)
+    hook_enabled = bool(clip.get("hook_enabled", bool(hook_text)))
     if layout == "stack":
-        cam_h = round(1920 * split_ratio / 2) * 2
+        cam_h = 768
         game_h = 1920 - cam_h
         seam_y = game_h if cam_swap else cam_h
-        hook_y = float(clip.get("hook_y") or max(80, seam_y - 90))
+        hook_y = float(clip.get("hook_y") or seam_y)
     else:
         hook_y = float(clip.get("hook_y") or 300.0)
     hook_style = str(clip.get("hook_style") or "default")
@@ -271,6 +277,8 @@ def validate_edit(data: dict, src_w=1920, src_h=1080) -> dict:
         for w in raw_words:
             if isinstance(w, dict):
                 txt = str(w.get("text") if "text" in w else w.get("w", "")).strip()
+                if roman.needs_roman(txt):
+                    txt = roman.to_roman(txt)
                 try:
                     ws = round(float(w.get("start") if "start" in w else w.get("s", 0.0)), 2)
                     we = round(float(w.get("end") if "end" in w else w.get("e", ws + 0.3)), 2)
@@ -283,7 +291,10 @@ def validate_edit(data: dict, src_w=1920, src_h=1080) -> dict:
     # Hook
     hk = data.get("hook") if isinstance(data.get("hook"), dict) else {}
     out["hook"]["enabled"] = bool(hk.get("enabled", True))
-    out["hook"]["text"] = str(hk.get("text", "")).strip()
+    htxt = str(hk.get("text", "")).strip()
+    if roman.needs_roman(htxt):
+        htxt = roman.to_roman(htxt)
+    out["hook"]["text"] = htxt
     try:
         hfs = int(hk.get("font_size", 96))
         out["hook"]["font_size"] = max(36, min(160, hfs))
