@@ -709,7 +709,7 @@ def get_job(jid: str):
 def link_preview(request: Request, url: str = ""):
     url = url.strip()[:500]
     if not media.site_allowed(url):
-        raise HTTPException(400, "Paste a full link to a YouTube, Twitch or Kick video.")
+        raise HTTPException(400, "Paste a full link to a YouTube, Twitch, Kick or Discord video.")
     try:
         auth.throttle(f"preview:{_me(request).id}", 12, 60)
     except auth.AuthError:
@@ -742,7 +742,7 @@ def create_from_link(body: dict = Body(...)):
     _throttle("newjob:" + ctx.uid(), 30, 600)
     url = str(body.get("url", "")).strip()[:500]
     if not media.site_allowed(url):
-        raise HTTPException(400, "Paste a full link to a YouTube, Twitch or Kick video.")
+        raise HTTPException(400, "Paste a full link to a YouTube, Twitch, Kick or Discord video.")
     try:
         media.check_youtube(url)          # YouTube is refusing us right now: say so, rather than queue a job that fails
     except media.YouTubeBlocked as e:

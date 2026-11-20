@@ -1554,7 +1554,7 @@ function toggleAudioSample(cat, targetId, btn) {
 function drawAdd(variant) {
   const c = creator();
   $("#add").innerHTML = `<form class="composer ${variant === "hero" ? "big" : "compact"}" id="addform">
-    <div class="composer-input">${ic("link")}<input id="url" placeholder="Paste a YouTube, Twitch or Kick video link" autocomplete="off" aria-label="Video link"></div>
+    <div class="composer-input">${ic("link")}<input id="url" placeholder="Paste a YouTube, Twitch, Kick or Discord video link" autocomplete="off" aria-label="Video link"></div>
     <div class="att" id="att"><div><div class="att-in" id="attIn"></div></div></div>
     <div class="composer-bar">
       <button type="button" class="chip" data-act="pickfile">${ic("up")}Upload video</button>
@@ -2574,8 +2574,8 @@ const VIDEO_EXT = /\.(mp4|mov|mkv|webm|m4v|ts|flv)$/i;
 const fmtLen = s => { s = Math.round(s || 0); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = String(s % 60).padStart(2, "0"); return h ? `${h}:${String(m).padStart(2, "0")}:${x}` : `${m}:${x}`; };
 const fmtSize = b => b >= 1e9 ? (b / 1e9).toFixed(1) + " GB" : Math.max(1, Math.round(b / 1e6)) + " MB";
 const isChannel = u => /^(https?:\/\/)?(www\.)?(twitch\.tv|kick\.com)\/[A-Za-z0-9_]+\/?$/.test(u) || /youtube\.com\/(@[^/]+|channel\/[^/]+)\/?(live|videos|streams)?\/?$/.test(u);
-const looksLink = u => /^https?:\/\/([\w-]+\.)*(youtube\.com|youtu\.be|twitch\.tv|kick\.com)\//i.test(u);
-const fullLink = u => /[?&]v=[\w-]{11}\b|youtu\.be\/[\w-]{11}\b|\/(shorts|live|embed)\/[\w-]{11}\b|twitch\.tv\/videos\/\d{6,}|clips\.twitch\.tv\/\w|twitch\.tv\/\w+\/clip\/\w|kick\.com\/[\w-]+\/(videos?|clips?)\/[\w-]{6,}/i.test(u);
+const looksLink = u => /^https?:\/\/([\w-]+\.)*(youtube\.com|youtu\.be|twitch\.tv|kick\.com|discord\.com|discordapp\.com|discordapp\.net)\//i.test(u);
+const fullLink = u => /[?&]v=[\w-]{11}\b|youtu\.be\/[\w-]{11}\b|\/(shorts|live|embed)\/[\w-]{11}\b|twitch\.tv\/videos\/\d{6,}|clips\.twitch\.tv\/\w|twitch\.tv\/\w+\/clip\/\w|kick\.com\/[\w-]+\/(videos?|clips?)\/[\w-]{6,}|(discordapp\.(com|net)|discord\.com)\/attachments\//i.test(u);
 const batchMax = () => S.status.max_batch || 5;
 const batchUsed = A => A.files.length + A.links.filter(l => l.state !== "bad").length;
 const newId = () => Math.random().toString(36).slice(2);
@@ -2634,7 +2634,7 @@ function drawAtt() {
     if (f && !f.dur) { f.dur = v.duration; const th = v.parentElement; if (!th.querySelector(".du")) th.insertAdjacentHTML("beforeend", `<span class="du">${fmtLen(f.dur)}</span>`); }
   }, {once: true}));
   $("#att")?.classList.toggle("has", !!h);
-  const u = $("#url"); if (u) u.placeholder = A.links.length || A.files.length ? "Paste another link" : "Paste a YouTube, Twitch or Kick video link";
+  const u = $("#url"); if (u) u.placeholder = A.links.length || A.files.length ? "Paste another link" : "Paste a YouTube, Twitch, Kick or Discord video link";
   const b = $("#goBtn");
   if (b) { b.disabled = A.busy;
     const k = A.files.length + A.links.filter(l => l.state === "ok").length;
@@ -2673,7 +2673,7 @@ function onLink(input) {
   const A = att(), u = input.value.trim();
   if (!u) { A.note = null; return drawAtt(); }
   if (isChannel(u)) { A.note = "That's a channel, not a video. To clip their live streams, add them as a creator and press Start recording."; return drawAtt(); }
-  if (!looksLink(u)) { A.note = u.length > 10 ? "Paste a full YouTube, Twitch or Kick video link." : null; return drawAtt(); }
+  if (!looksLink(u)) { A.note = u.length > 10 ? "Paste a full YouTube, Twitch, Kick or Discord video link." : null; return drawAtt(); }
   A.note = null; drawAtt();
   if (fullLink(u)) return takeLink(A, u, input);
   linkTimer = setTimeout(() => { if (input.value.trim() === u) takeLink(A, u, input); }, 900);   // other link shapes: take it once typing stops
@@ -2816,7 +2816,7 @@ async function makeClips() {
     }
   }
   if (!canGo(A)) {
-    toast(A.note || "Paste a YouTube, Twitch or Kick video link, or add a video file first.", "bad");
+    toast(A.note || "Paste a YouTube, Twitch, Kick or Discord video link, or add a video file first.", "bad");
     $("#url")?.focus();
     return;
   }

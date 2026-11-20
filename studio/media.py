@@ -190,7 +190,32 @@ def get_aria2c_path() -> str | None:
     return None
 
 
-def _ydl(opts):
+def _get_aria2_args() -> list:
+    args = [
+        "-x", "8",
+        "-s", "8",
+        "-j", "8",
+        "-k", "1M",
+        "--min-split-size=1M",
+        "--file-allocation=none",
+        "--summary-interval=0",
+        "--timeout=30",
+        "--max-tries=3",
+        "--retry-wait=2",
+    ]
+    try:
+        import certifi
+        ca = certifi.where()
+        if os.path.isfile(ca):
+            args.extend(["--ca-certificate", ca])
+        else:
+            args.append("--check-certificate=false")
+    except Exception:
+        args.append("--check-certificate=false")
+    return args
+
+
+def _ydl(opts, url: str | None = None):
     import yt_dlp
     base = {
         "noplaylist": True,
@@ -199,7 +224,9 @@ def _ydl(opts):
         "logger": _Quiet(),
         "extract_flat": "in_playlist",
         "playlistend": 1,
-        "socket_timeout": 20,
+        "socket_timeout": 30,
+        "retries": 10,
+        "fragment_retries": 10,
         "concurrent_fragment_downloads": 8,
         "http_chunk_size": 10485760,
         "throttled_rate": "100K",
@@ -211,14 +238,92 @@ def _ydl(opts):
     elif get_browser_cookies() and "cookiesfrombrowser" not in opts:
         base["cookiesfrombrowser"] = (get_browser_cookies(),)
 
-    if "outtmpl" in opts and "download_ranges" not in opts and "external_downloader" not in opts:
+    url_is_yt = is_youtube(url) if url else False
+    is_audio = bool(opts.get("is_audio")) or str(opts.get("format", "")).startswith("ba")
+
+    allow_aria2 = (
+        getattr(config, "USE_ARIA2", True)
+        and opts.get("use_aria2", True) is not False
+        and "outtmpl" in opts
+        and "download_ranges" not in opts
+        and "external_downloader" not in opts
+        and not url_is_yt
+        and not is_audio
+    )
+    if allow_aria2:
         aria2 = get_aria2c_path()
         if aria2:
             base["external_downloader"] = {"default": aria2}
-            base["external_downloader_args"] = {
-                "default": ["-x", "16", "-s", "16", "-k", "1M", "--file-allocation=none", "--summary-interval=0"]
+            base["external_downloader_args"] = {"default": _get_aria2_args()}
+
+    merged = {**base, **opts}
+    merged.pop("use_aria2", None)
+    merged.pop("is_audio", None)
+    if merged.get("external_downloader") is None:
+        merged.pop("external_downloader", None)
+        merged.pop("external_downloader_args", None)
+    return yt_dlp.YoutubeDL(merged)
+
+
+def _is_aria2_error(e: Exception) -> bool:
+    s = str(e).lower()
+    return "aria2" in s or "exited with code" in s or "external downloader" in s
+
+
+def _execute_download(opts: dict, url: str):
+    """Run yt-dlp download with complete fault tolerance:
+    1. If an external downloader (e.g. aria2c) fails with exit code or error, retry immediately with native yt-dlp.
+    2. If YouTube bot check is hit, retry with mweb/android player clients.
+    3. Handles temporary network blips with retry.
+    """
+    cur_opts = dict(opts)
+    if is_youtube(url) or cur_opts.get("is_audio") or str(cur_opts.get("format", "")).startswith("ba"):
+        cur_opts["use_aria2"] = False
+        cur_opts["external_downloader"] = None
+        cur_opts.pop("external_downloader_args", None)
+
+    try:
+        with _ydl(cur_opts, url=url) as ydl:
+            ydl.download([url])
+            return
+    except Exception as e:
+        if isinstance(e, JobPaused) or "Job paused" in str(e):
+            raise JobPaused("Job paused by user") from None
+
+        # Fallback 1: If aria2c / external downloader failed, retry immediately using native yt-dlp downloader
+        if _is_aria2_error(e) or cur_opts.get("external_downloader"):
+            fallback_opts = dict(cur_opts)
+            fallback_opts["use_aria2"] = False
+            fallback_opts["external_downloader"] = None
+            fallback_opts.pop("external_downloader_args", None)
+            try:
+                with _ydl(fallback_opts, url=url) as ydl:
+                    ydl.download([url])
+                    return
+            except Exception as e2:
+                if isinstance(e2, JobPaused) or "Job paused" in str(e2):
+                    raise JobPaused("Job paused by user") from None
+                e = e2
+
+        # Fallback 2: If YouTube bot-check error, try alternate player clients
+        if is_youtube(url) and _BOT_CHECK.search(str(e)):
+            fb_opts = {
+                **cur_opts,
+                "use_aria2": False,
+                "external_downloader": None,
+                "extractor_args": {"youtube": {"player_client": ["mweb", "android"]}},
             }
-    return yt_dlp.YoutubeDL({**base, **opts})
+            fb_opts.pop("external_downloader_args", None)
+            try:
+                with _ydl(fb_opts, url=url) as ydl:
+                    ydl.download([url])
+                    return
+            except Exception as e3:
+                if isinstance(e3, JobPaused) or "Job paused" in str(e3):
+                    raise JobPaused("Job paused by user") from None
+                raise e3 from None
+
+        raise e
 
 
 def _video_format(height):
@@ -236,13 +341,13 @@ def _biggest(job_dir: Path, stem: str) -> Path:
 def _extract_info(url: str, download=False) -> dict:
     with _youtube_guard(url):
         try:
-            with _ydl({}) as ydl:
+            with _ydl({}, url=url) as ydl:
                 return ydl.extract_info(url, download=download)
         except Exception as e:
             if is_youtube(url) and _BOT_CHECK.search(str(e)):
                 try:
                     fallback_opts = {"extractor_args": {"youtube": {"player_client": ["mweb", "android"]}}}
-                    with _ydl(fallback_opts) as ydl:
+                    with _ydl(fallback_opts, url=url) as ydl:
                         return ydl.extract_info(url, download=download)
                 except Exception:
                     raise e
@@ -447,6 +552,8 @@ def download_audio(url: str, job_dir: Path, on_progress=None, is_paused=None, st
         "format": "ba[ext=m4a]/ba/worst",
         "outtmpl": str(job_dir / "audio_src.%(ext)s"),
         "progress_hooks": [hook],
+        "is_audio": True,
+        "external_downloader": None,
     }
     start_sec = max(0.0, float(start or 0.0))
     end_sec = float(end) if end is not None else None
@@ -456,21 +563,7 @@ def download_audio(url: str, job_dir: Path, on_progress=None, is_paused=None, st
         opts["force_keyframes_at_cuts"] = True
 
     with _youtube_guard(url):
-        try:
-            with _ydl(opts) as ydl:
-                ydl.download([url])
-        except Exception as e:
-            if isinstance(e, JobPaused) or "Job paused" in str(e):
-                raise JobPaused("Job paused by user") from None
-            if is_youtube(url) and _BOT_CHECK.search(str(e)):
-                try:
-                    fallback_opts = {**opts, "extractor_args": {"youtube": {"player_client": ["mweb", "android"]}}}
-                    with _ydl(fallback_opts) as ydl:
-                        ydl.download([url])
-                except Exception:
-                    raise e
-            else:
-                raise
+        _execute_download(opts, url)
     return _biggest(job_dir, "audio_src")
 
 
@@ -478,20 +571,10 @@ def download(url: str, job_dir: Path, height=720) -> Path:
     """The whole video. Used for shorter videos, where this is quicker than fetching pieces."""
     opts = {"format": _video_format(height), "merge_output_format": "mp4",
             "outtmpl": str(job_dir / "source.%(ext)s")}
+    if is_youtube(url):
+        opts["external_downloader"] = None
     with _youtube_guard(url):
-        try:
-            with _ydl(opts) as ydl:
-                ydl.download([url])
-        except Exception as e:
-            if is_youtube(url) and _BOT_CHECK.search(str(e)):
-                try:
-                    fallback_opts = {**opts, "extractor_args": {"youtube": {"player_client": ["mweb", "android"]}}}
-                    with _ydl(fallback_opts) as ydl:
-                        ydl.download([url])
-                except Exception:
-                    raise e
-            else:
-                raise
+        _execute_download(opts, url)
     return _biggest(job_dir, "source")
 
 
@@ -514,25 +597,12 @@ def download_section(url: str, out_dir: Path, stem: str, start: float, end: floa
 
     opts = {"format": _video_format(height), "merge_output_format": "mp4", "outtmpl": str(out_dir / (stem + ".%(ext)s")),
             "download_ranges": download_range_func(None, [(max(0.0, start), end)]),
-            "progress_hooks": [hook]}
+            "progress_hooks": [hook],
+            "external_downloader": None}
     if exact:
         opts["force_keyframes_at_cuts"] = True
     with _youtube_guard(url):
-        try:
-            with _ydl(opts) as ydl:
-                ydl.download([url])
-        except Exception as e:
-            if isinstance(e, JobPaused) or "Job paused" in str(e):
-                raise JobPaused("Job paused by user") from None
-            if is_youtube(url) and _BOT_CHECK.search(str(e)):
-                try:
-                    fallback_opts = {**opts, "extractor_args": {"youtube": {"player_client": ["mweb", "android"]}}}
-                    with _ydl(fallback_opts) as ydl:
-                        ydl.download([url])
-                except Exception:
-                    raise e
-            else:
-                raise
+        _execute_download(opts, url)
     return _biggest(out_dir, stem)
 
 

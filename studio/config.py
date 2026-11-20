@@ -192,7 +192,7 @@ MAX_LIVE_HOURS = _limit("PEAKCUT_MAX_LIVE_HOURS")                # a recording s
 MAX_USER_GB = _limit("PEAKCUT_MAX_USER_GB")                      # disk space one account may fill
 MAX_CREATORS = int(_limit("PEAKCUT_MAX_CREATORS"))               # creators one account may add
 ALLOWED_SITES = tuple(s.strip().lower() for s in env(
-    "PEAKCUT_ALLOWED_SITES", "youtube.com,youtu.be,twitch.tv,kick.com").split(",") if s.strip())
+    "PEAKCUT_ALLOWED_SITES", "youtube.com,youtu.be,twitch.tv,kick.com,discord.com,discordapp.com,discordapp.net").split(",") if s.strip())
 
 # ---------------------------------------------------------------- AI (bring your own key: see studio/ai.py)
 # These are the starting values. Whatever is saved from the dashboard (Settings, AI) is used instead.
