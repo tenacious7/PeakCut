@@ -305,8 +305,34 @@ def call(model: str, prompt: str, schema: dict, timeout: float | None = None):
     return {"gemini": _gemini, "openai": _openai, "anthropic": _anthropic}[how](model, prompt, schema, timeout)
 
 
+def ensure_ollama_running() -> bool:
+    """Checks if Ollama is running, and if not, attempts to start it automatically in the background."""
+    try:
+        r = httpx.get("http://127.0.0.1:11434/api/tags", timeout=1.0)
+        if r.status_code == 200:
+            return True
+    except Exception:
+        pass
+    try:
+        import subprocess, shutil
+        p = shutil.which("ollama") or (os.environ.get("LOCALAPPDATA", "") + r"\Programs\Ollama\ollama.exe")
+        if p and os.path.isfile(p):
+            subprocess.Popen([p, "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            for _ in range(8):
+                time.sleep(0.5)
+                try:
+                    if httpx.get("http://127.0.0.1:11434/api/tags", timeout=1.0).status_code == 200:
+                        return True
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return False
+
+
 def get_local_ollama_model() -> str | None:
     """Returns the name of a model running in local Ollama (127.0.0.1:11434) if available, prioritizing fast chat/instruct models."""
+    ensure_ollama_running()
     try:
         r = httpx.get("http://127.0.0.1:11434/api/tags", timeout=1.5)
         if r.status_code == 200:
@@ -328,6 +354,7 @@ def get_local_ollama_model() -> str | None:
 
 def call_ollama(model: str, prompt: str, schema: dict, timeout: float | None = None):
     """Directly call a local Ollama instance on 127.0.0.1:11434."""
+    ensure_ollama_running()
     return _openai(model, prompt, schema, timeout=timeout or 180,
                    base_url_override="http://127.0.0.1:11434/v1", key_override="")
 
