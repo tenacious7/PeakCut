@@ -3689,38 +3689,6 @@ function collectClipEdit() {
     version: D.edit?.version || 1
   };
 }
-    start,
-    end,
-    title,
-    description,
-    layout,
-    split_ratio: splitRatio,
-    cam_swap: camSwap,
-    facecam: facecam,
-    facecam_override: D.edit?.facecam_override || false,
-    caption: {
-      enabled: capEnabled,
-      style: capStyle,
-      font_size: capSize,
-      y_pos: capY,
-      words: words
-    },
-    hook: {
-      enabled: hookEnabled,
-      text: hookText,
-      font_size: hookSize,
-      y_pos: hookY,
-      style: hookStyle
-    },
-    audio: {
-      meme: memeVal !== "" && memeVal !== "none",
-      music: musicVal !== "" && musicVal !== "none",
-      meme_mood: memeVal || "none",
-      music_bed: musicVal || "none"
-    },
-    version: D.edit?.version || 1
-  };
-}
 
 function collectGlobalPatch() {
   const ed = collectClipEdit();
