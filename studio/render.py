@@ -406,10 +406,14 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
     out_dir.mkdir(parents=True, exist_ok=True)
     edit_file = out_dir / f"{name}_edit.json"
     ed = edit.load_edit(edit_file) if edit_file.is_file() else None
+    off = float(clip.get("src_offset", 0.0) or 0.0)
 
     if ed:
         start = float(ed["start"])
         end = float(ed["end"])
+        if off > 0 and start >= off:
+            start = round(start - off, 2)
+            end = round(end - off, 2)
         layout = ed.get("layout", "blur")
         split_ratio = float(ed.get("split_ratio", 0.40) or 0.40)
         fc_obj = ed.get("facecam")
@@ -440,6 +444,9 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
         }
     else:
         start, end = float(clip["start"]), float(clip["end"])
+        if off > 0 and start >= off:
+            start = round(start - off, 2)
+            end = round(end - off, 2)
         layout = clip.get("layout", "blur")
         split_ratio = float(clip.get("split_ratio", 0.40) or 0.40)
         face = clip.get("facecam")
@@ -464,6 +471,21 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
             "meme_vol": float(clip.get("meme_vol") or 0.0),
             "music_db": float(clip.get("music_db") or -18.0),
         }
+
+    # Normalize word timestamps to align with [start, end] inside src
+    adjusted_words = []
+    for w in (words_to_use or []):
+        t = str(w.get("w") if "w" in w else w.get("text", "")).strip()
+        s_val = float(w.get("s") if "s" in w else w.get("start", 0.0))
+        e_val = float(w.get("e") if "e" in w else w.get("end", s_val + 0.3))
+        if off > 0 and s_val >= off:
+            s_val -= off
+            e_val -= off
+        elif s_val < start and (end - start) >= s_val:
+            s_val += start
+            e_val += start
+        adjusted_words.append({"w": t, "s": round(s_val, 2), "e": round(e_val, 2)})
+    words_to_use = adjusted_words
 
     layout, fg_h, def_hook_y, def_cap_y = geometry(src_w, src_h, layout)
     if face and len(face) == 4 and src_w > 0 and src_h > 0:
@@ -527,6 +549,52 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
         shutil.rmtree(work, ignore_errors=True)
 
 
+def _extract_cover(video_file: Path, out_jpg: Path, duration: float, fallback_src: Path = None, fallback_start: float = 0.0):
+    """Safely extracts a cover image for a clip. Tries rendered video first, then fallback source, and finally Pillow if needed."""
+    if out_jpg.is_file() and out_jpg.stat().st_size > 0:
+        return
+    work_dir = out_jpg.parent
+    cover_t = max(0.0, min(1.2, duration / 2.0))
+
+    # 1. Try rendered video at cover_t
+    if video_file.is_file():
+        subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", "-ss", f"{cover_t:.2f}", "-i", str(video_file),
+             "-frames:v", "1", "-strict", "-1", "-q:v", "3", str(out_jpg)],
+            cwd=work_dir, capture_output=True, text=True, creationflags=NO_WINDOW, timeout=15
+        )
+        if out_jpg.is_file() and out_jpg.stat().st_size > 0:
+            return
+
+        # 2. Try first frame of rendered video
+        subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", "-i", str(video_file),
+             "-frames:v", "1", "-strict", "-1", "-q:v", "3", str(out_jpg)],
+            cwd=work_dir, capture_output=True, text=True, creationflags=NO_WINDOW, timeout=15
+        )
+        if out_jpg.is_file() and out_jpg.stat().st_size > 0:
+            return
+
+    # 3. Try fallback src at fallback_start + cover_t
+    if fallback_src and fallback_src.is_file():
+        src_t = max(0.0, fallback_start + cover_t)
+        subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", "-ss", f"{src_t:.2f}", "-i", str(fallback_src),
+             "-frames:v", "1", "-strict", "-1", "-q:v", "3", str(out_jpg)],
+            cwd=work_dir, capture_output=True, text=True, creationflags=NO_WINDOW, timeout=15
+        )
+        if out_jpg.is_file() and out_jpg.stat().st_size > 0:
+            return
+
+    # 4. Emergency fallback: generate a solid dark frame with Pillow
+    try:
+        from PIL import Image
+        img = Image.new("RGB", (W, H), color=(20, 20, 20))
+        img.save(str(out_jpg), "JPEG", quality=85)
+    except Exception:
+        pass
+
+
 def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layout, fg_h, ass: str,
                face=None, clip=None, words=None, hook_y=300, cap_y=1380, quality="final",
                audio_opts=None, split_ratio=0.40, focus=None, zoom=1.0, cam_swap=False) -> dict:
@@ -585,12 +653,7 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
         else:
             raise RuntimeError(f"Draft render failed: {err}")
 
-        cover_t = min(1.2, (end - start) / 2)
-        run(["ffmpeg", "-y", "-v", "error", "-ss", f"{cover_t:.2f}", "-i", f"{name}_draft.mp4", "-frames:v", "1",
-             "-strict", "-1", "-q:v", "3", f"{name}.jpg"], cwd=work)
-        if not (work / f"{name}.jpg").is_file():
-            run(["ffmpeg", "-y", "-v", "error", "-i", f"{name}_draft.mp4", "-frames:v", "1",
-                 "-strict", "-1", "-q:v", "3", f"{name}.jpg"], cwd=work)
+        _extract_cover(work / f"{name}_draft.mp4", work / f"{name}.jpg", end - start, fallback_src=src, fallback_start=start)
         for ext in ("mp4", "jpg", "ass"):
             fpath = work / f"{name}_draft.mp4" if ext == "mp4" else work / f"{name}.{ext}"
             if fpath.is_file():
@@ -681,14 +744,11 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
         except Exception:
             pass
 
-    cover_t = min(1.2, (end - start) / 2)
-    run(["ffmpeg", "-y", "-v", "error", "-ss", f"{cover_t:.2f}", "-i", f"{name}.mp4", "-frames:v", "1",
-         "-strict", "-1", "-q:v", "3", f"{name}.jpg"], cwd=work)
-    if not (work / f"{name}.jpg").is_file():
-        run(["ffmpeg", "-y", "-v", "error", "-i", f"{name}.mp4", "-frames:v", "1",
-             "-strict", "-1", "-q:v", "3", f"{name}.jpg"], cwd=work)
+    _extract_cover(work / f"{name}.mp4", work / f"{name}.jpg", end - start, fallback_src=src, fallback_start=start)
     for ext in ("mp4", "jpg", "ass"):
-        shutil.move(str(work / f"{name}.{ext}"), str(out_dir / f"{name}.{ext}"))
+        fpath = work / f"{name}.{ext}"
+        if fpath.is_file():
+            shutil.move(str(fpath), str(out_dir / fpath.name))
     if (work / f"{name}_raw.mp4").is_file():
         shutil.move(str(work / f"{name}_raw.mp4"), str(out_dir / f"{name}_raw.mp4"))
     if (work / f"{name}_captions.json").is_file():

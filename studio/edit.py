@@ -127,11 +127,13 @@ def init_edit(job: dict, clip: dict, words: list = None, facecam: list = None) -
     # Normalize words
     cap_words = []
     w_src = clip.get("words") or words or []
+    c_start = float(clip.get("start", 0.0) or 0.0)
+    c_end = float(clip.get("end", c_start + 30.0) or (c_start + 30.0))
     for w in w_src:
         text = str(w.get("text") if "text" in w else w.get("w", ""))
         s = round(float(w.get("start") if "start" in w else w.get("s", 0.0)), 2)
         e = round(float(w.get("end") if "end" in w else w.get("e", s + 0.3)), 2)
-        if text.strip():
+        if text.strip() and (c_start - 2.0 <= s <= c_end + 2.0 or 0 <= s <= (c_end - c_start) + 2.0):
             cap_words.append({"text": text, "start": s, "end": e})
 
     hook_text = str(clip.get("hook") or "").strip()
