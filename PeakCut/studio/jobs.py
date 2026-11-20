@@ -710,7 +710,8 @@ def render_one(job, clip, words, quality="final"):
         if not clip.get("src"):
             clip["end"] = min(clip["end"], job["duration"])
         if clip.get("layout") in ("gameplay", "stack") and not clip.get("facecam"):
-            face = job.get("facecam") or _facecam(job, src=src)
+            clip_win = (max(0.0, float(clip["start"]) - off), max(0.0, float(clip["end"]) - off))
+            face = job.get("facecam") or _facecam(job, src=src, window=clip_win)
             if face:
                 clip["facecam"] = face
         local = dict(clip, start=clip["start"] - off, end=clip["end"] - off,
@@ -1052,13 +1053,11 @@ def _covers(words: list, start: float, end: float) -> bool:
     return len(inside) >= 25 * minutes and inside[-1]["s"] >= start + 0.85 * (end - start)
 
 
-def _facecam(job, src=None) -> list | None:
+def _facecam(job, src=None, window=None) -> list | None:
     """Where the webcam is in the source: once for the whole video, for every clip of it.
 
-    Only a sure answer is used. A box that is a scoreboard drawn over the game would
-    put a picture of a scoreboard in the corner of the clip. One frame is also shown to
-    the AI, which tells a person from a game character better than any measurement can;
-    what it says is measured again on the picture, so it cannot do any harm."""
+    Uses multi-frame vision AI + full/quadrant border scan + OpenCV face clustering + corner stillness
+    so real facecams are reliably auto-detected without falling back to gameplay."""
     if job.get("facecam"):
         return job["facecam"]
     path = src or job.get("source_path")
@@ -1067,7 +1066,9 @@ def _facecam(job, src=None) -> list | None:
         # Snap tightly to the real webcam inside the requested corner so we don't capture surrounding gameplay
         if path and Path(path).is_file():
             try:
-                detected = facecam.detect_in_corner(path, cam_pos)
+                detected = facecam.detect_in_corner(path, cam_pos, window=window)
+                if not detected and window is not None:
+                    detected = facecam.detect_in_corner(path, cam_pos, window=None)
                 if detected:
                     job["facecam"] = [detected["x"], detected["y"], detected["w"], detected["h"]]
                     return job["facecam"]
@@ -1096,7 +1097,9 @@ def _facecam(job, src=None) -> list | None:
     if not path or not Path(path).is_file():
         return None
     try:
-        box = facecam.detect(path, ask=brain.look_for_facecam)
+        box = facecam.detect(path, ask=brain.look_for_facecam, window=window)
+        if (not box or box.get("conf") == "none") and window is not None:
+            box = facecam.detect(path, ask=brain.look_for_facecam, window=None)
     except Exception:  # noqa: BLE001 - a missing facecam is not a failure
         return None
     if not box or box.get("conf") == "none":
@@ -1404,8 +1407,8 @@ def _run_job(job):
                 if o.get("facecam"):
                     c["facecam"] = o["facecam"]
                 elif o["layout"] in ("gameplay", "stack"):
-                    if face is False and job.get("source_path"):
-                        face = _facecam(job)
+                    if not face and job.get("source_path"):
+                        face = _facecam(job, window=(r_start, r_end))
                     if face:
                         c["facecam"] = face
 
@@ -1475,8 +1478,8 @@ def _run_job(job):
                         if o.get("facecam"):
                             fc["facecam"] = o["facecam"]
                         elif o["layout"] in ("gameplay", "stack"):
-                            if face is False and job.get("source_path"):
-                                face = _facecam(job)
+                            if not face and job.get("source_path"):
+                                face = _facecam(job, window=(fc["start"], fc["end"]))
                             if face:
                                 fc["facecam"] = face
                         if fc.get("facecam") and job.get("source_path"):
@@ -1561,8 +1564,8 @@ def _run_job(job):
                 if o.get("facecam"):
                     c["facecam"] = o["facecam"]
                 elif o["layout"] in ("gameplay", "stack"):
-                    if face is False and job.get("source_path"):
-                        face = _facecam(job)
+                    if not face and job.get("source_path"):
+                        face = _facecam(job, window=(c["start"], c["end"]))
                     if face:
                         c["facecam"] = face
 

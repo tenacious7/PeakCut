@@ -687,9 +687,20 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
         layout = fb if fb in ("blur", "zoom") else "blur"
         layout, fg_h, def_hook_y, def_cap_y = geometry(src_w, src_h, layout, out_w=ow, out_h=oh)
     elif layout == "stack" and not (face and len(face) == 4):
-        sw = src_w if src_w > 0 else 1920
-        sh = src_h if src_h > 0 else 1080
-        face = [0, 0, sw, int(round(sh * 0.50))]
+        if src and Path(src).is_file():
+            try:
+                from . import facecam as _fc
+                det = _fc.detect(src, window=(start, end))
+                if not det:
+                    det = _fc.detect(src)
+                if det and det.get("w", 0) > 10 and det.get("h", 0) > 10:
+                    face = [int(det["x"]), int(det["y"]), int(det["w"]), int(det["h"])]
+            except Exception:
+                pass
+        if not (face and len(face) == 4):
+            sw = src_w if src_w > 0 else 1920
+            sh = src_h if src_h > 0 else 1080
+            face = [0, 0, sw, int(round(sh * 0.50))]
 
     stack_m = stack_layout_metrics(ow, oh, split_ratio=split_ratio, cam_swap=cam_swap, divider=split_divider) if layout == "stack" else None
     y_scale = oh / 1920.0
