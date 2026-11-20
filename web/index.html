@@ -3644,6 +3644,8 @@ function collectClipEdit() {
 
   const start = $("#dlg_start") ? Number($("#dlg_start").value) : 0;
   const end = $("#dlg_end") ? Number($("#dlg_end").value) : 30;
+  const title = $("#dlg_title") ? $("#dlg_title").value.trim() : "";
+  const description = $("#dlg_description") ? $("#dlg_description").value.trim() : "";
 
   const wPills = $$("#dlgWordsBox [data-widx]");
   let words = D.edit?.caption?.words || [];
@@ -3658,6 +3660,8 @@ function collectClipEdit() {
   return {
     start,
     end,
+    title,
+    description,
     layout,
     split_ratio: splitRatio,
     cam_swap: camSwap,
@@ -3711,82 +3715,29 @@ function collectGlobalPatch() {
 }
 
 function syncLiveOverlay() {
-  const vwrap = $("#vwrap"), hookBox = $("#liveHookBox"), capBox = $("#liveCapBox"), seamEl = $("#liveStackSeam");
-  if (!vwrap || !hookBox) return;
-
-  const width = vwrap.clientWidth || 320;
-  const scale = width / 1080;
-
-  const hookEnabled = $("#dlg_hook_enabled") ? $("#dlg_hook_enabled").checked : true;
-  const hookText = $("#dlg_hook_text") ? $("#dlg_hook_text").value.trim() : "";
   const hookSize = $("#dlg_hook_size") ? Number($("#dlg_hook_size").value) : 96;
   const hookY = $("#dlg_hook_y") ? Number($("#dlg_hook_y").value) : 300;
-  const hookStyle = $("#dlg_hook_style") ? $("#dlg_hook_style").value : "default";
-
   if ($("#hookSizeVal")) $("#hookSizeVal").textContent = hookSize + "px";
   if ($("#hookYVal")) $("#hookYVal").textContent = Math.round(hookY) + "px";
 
-  hookBox.style.display = hookEnabled ? "block" : "none";
-  hookBox.textContent = hookText || (hookEnabled ? "BIG TEXT PREVIEW" : "");
-  hookBox.style.fontSize = Math.max(12, Math.round(hookSize * scale * 2.2)) + "px";
-  hookBox.style.top = ((hookY / 1920) * 100) + "%";
-  hookBox.classList.toggle("nobox", hookStyle === "nobox");
+  const capSize = $("#dlg_cap_size") ? Number($("#dlg_cap_size").value) : 132;
+  const capY = $("#dlg_cap_y") ? Number($("#dlg_cap_y").value) : 1630;
+  if ($("#capSizeVal")) $("#capSizeVal").textContent = capSize + "px";
+  if ($("#capYVal")) $("#capYVal").textContent = Math.round(capY) + "px";
 
-  if (capBox) {
-    const capEnabled = $("#dlg_cap_enabled") ? $("#dlg_cap_enabled").checked : true;
-    const capSize = $("#dlg_cap_size") ? Number($("#dlg_cap_size").value) : 132;
-    const capY = $("#dlg_cap_y") ? Number($("#dlg_cap_y").value) : 1630;
+  const splitRatio = $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.40;
+  if ($("#dlgSplitRatioText")) $("#dlgSplitRatioText").textContent = Math.round(splitRatio * 100) + "% / " + Math.round((1 - splitRatio) * 100) + "%";
 
-    if ($("#capSizeVal")) $("#capSizeVal").textContent = capSize + "px";
-    if ($("#capYVal")) $("#capYVal").textContent = Math.round(capY) + "px";
-
-    capBox.style.display = capEnabled ? "block" : "none";
-    capBox.style.fontSize = Math.max(11, Math.round(capSize * scale * 2.2)) + "px";
-    capBox.style.top = ((capY / 1920) * 100) + "%";
-  }
-
+  const seamEl = $("#liveStackSeam");
   if (seamEl) {
     const isStack = ($("#dlg_layout") ? $("#dlg_layout").value : "blur") === "stack";
-    const sr = $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.40;
     const isSwap = $("#dlg_cam_swap") ? $("#dlg_cam_swap").checked : false;
     seamEl.style.display = isStack ? "block" : "none";
-    seamEl.style.top = ((isSwap ? (1 - sr) : sr) * 100) + "%";
+    seamEl.style.top = ((isSwap ? (1 - splitRatio) : splitRatio) * 100) + "%";
   }
 }
 
-function setupOverlayDraggables() {
-  const vwrap = $("#vwrap"), hookBox = $("#liveHookBox"), capBox = $("#liveCapBox");
-  if (!vwrap) return;
-
-  function makeDraggable(el, ySliderId, minY, maxY) {
-    if (!el) return;
-    let dragging = false;
-    const onStart = e => {
-      e.preventDefault();
-      dragging = true;
-      const onMove = ev => {
-        if (!dragging) return;
-        const rect = vwrap.getBoundingClientRect();
-        if (!rect.height) return;
-        const relY = (ev.clientY - rect.top) / rect.height;
-        const y1920 = Math.round(Math.max(minY, Math.min(maxY, relY * 1920)));
-        const slider = $(ySliderId);
-        if (slider) { slider.value = y1920; syncLiveOverlay(); }
-      };
-      const onEnd = () => {
-        dragging = false;
-        document.removeEventListener("pointermove", onMove);
-        document.removeEventListener("pointerup", onEnd);
-      };
-      document.addEventListener("pointermove", onMove);
-      document.addEventListener("pointerup", onEnd);
-    };
-    el.addEventListener("pointerdown", onStart);
-  }
-
-  makeDraggable(hookBox, "#dlg_hook_y", 80, 1750);
-  makeDraggable(capBox, "#dlg_cap_y", 150, 1800);
-}
+function setupOverlayDraggables() {}
 
 function drawClipDlg(full) {
   const j = jobOf(D.jid), c = j?.clips.find(x => x.id === D.cid), dlg = $("#clipdlg");
@@ -3828,16 +3779,8 @@ function drawClipDlg(full) {
   } else if (c.file) {
     stageHtml = `<div class="video-preview-wrap" id="vwrap">
       <video id="dlgVideo" src="${videoFile}" poster="${posterFile}" controls playsinline preload="metadata"></video>
-      <div class="live-overlay-container" id="liveOverlay">
-        <div id="liveStackSeam" style="position:absolute;left:0;right:0;border-bottom:2px dashed rgba(255,102,0,0.6);pointer-events:none;z-index:5;top:${((camSwap ? (1 - splitRatio) : splitRatio) * 100)}%;display:${layout === 'stack' ? 'block' : 'none'}">
-          <span style="position:absolute;right:8px;bottom:2px;font-size:10px;font-weight:700;color:#fff;background:rgba(0,0,0,0.6);padding:1px 6px;border-radius:3px">SEAM</span>
-        </div>
-        <div id="liveHookBox" class="live-hook-box ${hk.style === 'nobox' ? 'nobox' : ''}" style="top:${(hk.y_pos/1920)*100}%;display:${hk.enabled !== false ? 'block' : 'none'}">
-          ${esc(hk.text || "BIG TEXT PREVIEW")}
-        </div>
-        <div id="liveCapBox" class="live-cap-box" style="top:${(cap.y_pos/1920)*100}%;display:${cap.enabled !== false ? 'block' : 'none'}">
-          <span class="cap-word-hl">LIVE</span> CAPTION PREVIEW
-        </div>
+      <div id="liveStackSeam" style="position:absolute;left:0;right:0;border-bottom:2px dashed rgba(255,102,0,0.6);pointer-events:none;z-index:5;top:${((camSwap ? (1 - splitRatio) : splitRatio) * 100)}%;display:${layout === 'stack' ? 'block' : 'none'}">
+        <span style="position:absolute;right:8px;bottom:2px;font-size:10px;font-weight:700;color:#fff;background:rgba(0,0,0,0.6);padding:1px 6px;border-radius:3px">SEAM</span>
       </div>
     </div>`;
   } else {
@@ -3863,21 +3806,21 @@ function drawClipDlg(full) {
           ${c.qc ? `<span class="badge ${c.qc.status === 'PASS' ? 'qc-pass' : c.qc.status === 'WARN' ? 'qc-warn' : 'qc-fail'}" style="position:static" title="${esc((c.qc.notes || []).join(' · ') || c.qc.status)}">QC: ${esc(c.qc.status)}</span>` : ""}
         </div>
         ${c.reason ? `<p class="sub" style="margin-top:2px;font-size:12px">${esc(c.reason)}</p>` : ""}
-        ${c.qc && c.qc.notes?.length ? `<div style="font-size:11px;color:var(--dim);background:var(--muted);padding:4px 8px;border-radius:4px">QC Notes: ${esc(c.qc.notes.join(' · '))}${c.qc.lufs != null ? ` (${c.qc.lufs} LUFS)` : ''}</div>` : ''}
+        ${c.qc && c.qc.notes?.length ? `<div style="font-size:11px;color:var(--dim);background:var(--muted);padding:4px 8px;border-radius:4px;margin-top:4px">QC Notes: ${esc(c.qc.notes.join(' · '))}${c.qc.lufs != null ? ` (${c.qc.lufs} LUFS)` : ''}</div>` : ''}
 
-        <!-- 1. BIG TEXT (HOOK) CONTROLS -->
-        <div style="padding:10px;background:var(--muted);border-radius:8px;border:1px solid var(--line);margin-top:4px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <label class="sw" style="margin:0;font-weight:700;font-size:12px">
-              <input type="checkbox" id="dlg_hook_enabled" ${hk.enabled !== false ? "checked" : ""}>
-              Big Text (Hook)
+        <h3>On the video</h3>
+        <!-- Big text (Hook) -->
+        <div style="margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <label class="sw" style="margin:0;font-size:12px">
+              <input type="checkbox" id="dlg_hook_enabled" ${hk.enabled !== false ? "checked" : ""}> Enable Big text
             </label>
             <button type="button" class="btn sm ghost" data-act="applyhookall" style="padding:2px 8px;font-size:11px" title="Apply Big Text style, size and position to all clips">
               ⚡ Apply to all
             </button>
           </div>
-          <label class="f" style="margin-bottom:6px">Text
-            <input id="dlg_hook_text" value="${esc(hk.text || '')}" placeholder="HOOK / HEADLINE TEXT">
+          <label class="f" style="margin-bottom:6px">Big text
+            <input data-f="hook" id="dlg_hook_text" value="${esc(hk.text || c.hook || '')}" placeholder="HOOK / HEADLINE TEXT">
           </label>
           <div style="margin-bottom:6px">
             <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
@@ -3892,7 +3835,7 @@ function drawClipDlg(full) {
           </div>
           <div style="margin-bottom:6px">
             <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
-              <span>Vertical Position (Y): <b id="hookYVal" style="color:var(--brand-ink)">${hk.y_pos || 300}px</b></span>
+              <span>Position (Y): <b id="hookYVal" style="color:var(--brand-ink)">${hk.y_pos || 300}px</b></span>
             </div>
             <input type="range" id="dlg_hook_y" min="80" max="1750" step="10" value="${hk.y_pos || 300}" style="width:100%">
             <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">
@@ -3906,143 +3849,146 @@ function drawClipDlg(full) {
           <label class="f" style="margin:0">Style
             <select id="dlg_hook_style">
               <option value="default" ${(hk.style||'default')==='default'?'selected':''}>Dark Boxed Backing</option>
-              <option value="nobox" ${(hk.style||'default')==='nobox'?'selected':''}>Clean Text with Black Outline</option>
+              <option value="nobox" ${(hk.style||'default')==='nobox'?'selected':''}>Clean Text with Outline</option>
             </select>
           </label>
         </div>
 
-        <!-- 2. CAPTIONS CONTROLS -->
-        <div style="padding:10px;background:var(--muted);border-radius:8px;border:1px solid var(--line);margin-top:6px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <label class="sw" style="margin:0;font-weight:700;font-size:12px">
-              <input type="checkbox" id="dlg_cap_enabled" ${cap.enabled !== false ? "checked" : ""}>
-              Generate Captions
+        <!-- Captions -->
+        <div style="margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <label class="sw" style="margin:0">
+              <input type="checkbox" data-f="captions" data-caption-toggle id="dlg_cap_enabled" ${cap.enabled !== false && c.captions !== false ? "checked" : ""}>Generate captions
             </label>
             <button type="button" class="btn sm ghost" data-act="applycapall" style="padding:2px 8px;font-size:11px" title="Apply caption style, size and position to all clips">
               ⚡ Apply to all
             </button>
           </div>
-          <label class="f" style="margin-bottom:6px">Caption Style
-            <select id="dlg_cap_style">${opts(S.status.styles, cap.style || 'bounce')}</select>
-          </label>
-          <div style="margin-bottom:6px">
-            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
-              <span>Caption Size: <b id="capSizeVal" style="color:var(--brand-ink)">${cap.font_size || 132}px</b></span>
-              <div style="display:flex;gap:4px">
-                <button type="button" class="btn xs ghost" data-cap-size="100">Compact</button>
-                <button type="button" class="btn xs ghost" data-cap-size="132">Standard</button>
-                <button type="button" class="btn xs ghost" data-cap-size="160">Large</button>
+          <div class="two">
+            <label class="f">Caption style
+              <select data-f="style" data-caption-style id="dlg_cap_style" ${cap.enabled === false || c.captions === false ? "disabled" : ""}>${opts(S.status.styles, cap.style || c.style)}</select>
+            </label>
+            <label class="f">Layout
+              <select data-f="layout" id="dlg_layout">${opts(S.status.layouts, layout)}</select>
+            </label>
+          </div>
+
+          <!-- Extra caption customization -->
+          <div id="dlgCapExtraControls" style="display:${cap.enabled !== false && c.captions !== false ? 'block' : 'none'};margin-top:6px">
+            <div style="margin-bottom:6px">
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
+                <span>Caption Size: <b id="capSizeVal" style="color:var(--brand-ink)">${cap.font_size || 132}px</b></span>
+                <div style="display:flex;gap:4px">
+                  <button type="button" class="btn xs ghost" data-cap-size="100">Compact</button>
+                  <button type="button" class="btn xs ghost" data-cap-size="132">Standard</button>
+                  <button type="button" class="btn xs ghost" data-cap-size="160">Large</button>
+                </div>
+              </div>
+              <input type="range" id="dlg_cap_size" min="40" max="220" step="2" value="${cap.font_size || 132}" style="width:100%">
+            </div>
+            <div style="margin-bottom:6px">
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
+                <span>Caption Position (Y): <b id="capYVal" style="color:var(--brand-ink)">${cap.y_pos || 1630}px</b></span>
+              </div>
+              <input type="range" id="dlg_cap_y" min="150" max="1800" step="10" value="${cap.y_pos || 1630}" style="width:100%">
+              <div style="display:flex;gap:4px;margin-top:4px">
+                <button type="button" class="cap-anchor-btn ${Math.abs((cap.y_pos||1630) - 250) < 50 ? 'active' : ''}" data-cap-pos="250">Top (250)</button>
+                <button type="button" class="cap-anchor-btn ${Math.abs((cap.y_pos||1630) - 960) < 50 ? 'active' : ''}" data-cap-pos="960">On Seam (960)</button>
+                <button type="button" class="cap-anchor-btn ${Math.abs((cap.y_pos||1630) - 1630) < 50 ? 'active' : ''}" data-cap-pos="1630">Safe Bottom (1630)</button>
               </div>
             </div>
-            <input type="range" id="dlg_cap_size" min="40" max="220" step="2" value="${cap.font_size || 132}" style="width:100%">
+            <!-- Word pills editor -->
+            ${(cap.words && cap.words.length) ? `
+            <div style="margin-top:8px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+                <span style="font-size:11px;font-weight:700;color:var(--brand-ink)">Words (${cap.words.length}):</span>
+                <span style="font-size:10px;color:var(--faint)">Click word to fix typo</span>
+              </div>
+              <div id="dlgWordsBox" style="display:flex;flex-wrap:wrap;gap:4px;max-height:80px;overflow-y:auto;padding:6px;background:#fff;border:1px solid var(--line);border-radius:6px">
+                ${cap.words.map((w, idx) => `<span class="word-pill" contenteditable="true" data-widx="${idx}" title="${fmtLen(w.start ?? w.s ?? 0)} - ${fmtLen(w.end ?? w.e ?? 0)}">${esc(w.text || w.w || '')}</span>`).join("")}
+              </div>
+            </div>` : ""}
           </div>
-          <div style="margin-bottom:6px">
-            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
-              <span>Caption Position (Y): <b id="capYVal" style="color:var(--brand-ink)">${cap.y_pos || 1630}px</b></span>
-            </div>
-            <input type="range" id="dlg_cap_y" min="150" max="1800" step="10" value="${cap.y_pos || 1630}" style="width:100%">
-            <div style="display:flex;gap:4px;margin-top:4px">
-              <button type="button" class="cap-anchor-btn ${Math.abs((cap.y_pos||1630) - 250) < 50 ? 'active' : ''}" data-cap-pos="250">Top (250)</button>
-              <button type="button" class="cap-anchor-btn ${Math.abs((cap.y_pos||1630) - 960) < 50 ? 'active' : ''}" data-cap-pos="960">On Seam (960)</button>
-              <button type="button" class="cap-anchor-btn ${Math.abs((cap.y_pos||1630) - 1630) < 50 ? 'active' : ''}" data-cap-pos="1630">Safe Bottom (1630)</button>
-            </div>
-          </div>
-          <!-- Word pills editor -->
-          ${(cap.words && cap.words.length) ? `
-          <div style="margin-top:8px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-              <span style="font-size:11px;font-weight:700;color:var(--brand-ink)">Words (${cap.words.length}):</span>
-              <span style="font-size:10px;color:var(--faint)">Click word to fix typo</span>
-            </div>
-            <div id="dlgWordsBox" style="display:flex;flex-wrap:wrap;gap:4px;max-height:90px;overflow-y:auto;padding:6px;background:#fff;border:1px solid var(--line);border-radius:6px">
-              ${cap.words.map((w, idx) => `<span class="word-pill" contenteditable="true" data-widx="${idx}" title="${fmtLen(w.start ?? w.s ?? 0)} - ${fmtLen(w.end ?? w.e ?? 0)}">${esc(w.text || w.w || '')}</span>`).join("")}
-            </div>
-          </div>` : ""}
         </div>
 
-        <!-- 3. LAYOUT & FRAMING -->
-        <div style="padding:10px;background:var(--muted);border-radius:8px;border:1px solid var(--line);margin-top:6px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <span style="font-size:12px;font-weight:700;color:var(--brand-ink)">Layout &amp; Framing</span>
+        <!-- Split screen controls when layout === 'stack' -->
+        <div id="dlgStackControls" style="display:${layout === 'stack' ? 'block' : 'none'};padding:8px;background:var(--muted);border:1px solid var(--line);border-radius:6px;margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:11px;font-weight:700;color:var(--brand-ink)">Split Screen Ratio: <b id="dlgSplitRatioText" style="color:var(--brand)">${Math.round(splitRatio*100)}% / ${Math.round((1-splitRatio)*100)}%</b></span>
             <button type="button" class="btn sm ghost" data-act="applylayoutall" style="padding:2px 8px;font-size:11px" title="Apply layout to all clips">
               ⚡ Apply to all
             </button>
           </div>
-          <div class="two">
-            <label class="f">Layout<select id="dlg_layout">${opts(S.status.layouts, layout)}</select></label>
-            <div id="dlgStackControls" style="display:${layout === 'stack' ? 'block' : 'none'}">
-              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
-                <span>Split: <b id="dlgSplitRatioText" style="color:var(--brand)">${Math.round(splitRatio*100)}% / ${Math.round((1-splitRatio)*100)}%</b></span>
-              </div>
-              <div style="display:flex;gap:4px">
-                <button type="button" class="split-preset-btn ${splitRatio === 0.35 ? 'active' : ''}" data-dlg-ratio="0.35">35/65</button>
-                <button type="button" class="split-preset-btn ${splitRatio === 0.40 ? 'active' : ''}" data-dlg-ratio="0.40">40/60</button>
-                <button type="button" class="split-preset-btn ${splitRatio === 0.50 ? 'active' : ''}" data-dlg-ratio="0.50">50/50</button>
-              </div>
-              <label class="ck" style="margin-top:6px;font-size:11px;display:flex;align-items:center;gap:4px">
-                <input type="checkbox" id="dlg_cam_swap" ${camSwap ? 'checked' : ''}> Swap (Gameplay on top)
-              </label>
-              <input type="hidden" id="dlg_split_ratio" value="${splitRatio}">
-            </div>
+          <div style="display:flex;gap:4px;margin-bottom:6px">
+            <button type="button" class="split-preset-btn ${splitRatio === 0.35 ? 'active' : ''}" data-dlg-ratio="0.35">35/65</button>
+            <button type="button" class="split-preset-btn ${splitRatio === 0.40 ? 'active' : ''}" data-dlg-ratio="0.40">40/60</button>
+            <button type="button" class="split-preset-btn ${splitRatio === 0.50 ? 'active' : ''}" data-dlg-ratio="0.50">50/50</button>
           </div>
+          <label class="ck" style="font-size:11px;display:flex;align-items:center;gap:4px">
+            <input type="checkbox" id="dlg_cam_swap" ${camSwap ? 'checked' : ''}> Swap (Gameplay on top)
+          </label>
+          <input type="hidden" id="dlg_split_ratio" value="${splitRatio}">
+        </div>
 
-          <!-- Facecam Zoom & Nudge Focus -->
-          <div id="dlgFaceControls" style="display:${(layout === 'stack' || layout === 'gameplay' || !!ed.facecam) ? 'block' : 'none'};margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-              <span style="font-size:11px;font-weight:700;color:var(--brand-ink)">Facecam Zoom &amp; Nudge Focus</span>
-              <button type="button" class="btn sm ghost" data-act="applyfaceall" style="padding:2px 8px;font-size:11px" title="Apply facecam zoom to all clips">⚡ Apply zoom to all</button>
+        <!-- Facecam Zoom & Nudge Focus -->
+        <div id="dlgFaceControls" style="display:${(layout === 'stack' || layout === 'gameplay' || !!ed.facecam) ? 'block' : 'none'};padding:8px;background:var(--muted);border:1px solid var(--line);border-radius:6px;margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:11px;font-weight:700;color:var(--brand-ink)">Facecam Zoom &amp; Nudge Focus</span>
+            <button type="button" class="btn sm ghost" data-act="applyfaceall" style="padding:2px 8px;font-size:11px" title="Apply facecam zoom to all clips">⚡ Apply zoom to all</button>
+          </div>
+          <div style="margin-bottom:6px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
+              <span>Zoom: <b id="faceZoomVal" style="color:var(--brand-ink)">${(ed.facecam?.zoom || 1.0).toFixed(2)}x</b></span>
+              <div style="display:flex;gap:4px">
+                <button type="button" class="btn xs ghost" data-face-zoom="1.0">Fit (1.0x)</button>
+                <button type="button" class="btn xs ghost" data-face-zoom="1.25">1.25x</button>
+                <button type="button" class="btn xs ghost" data-face-zoom="1.5">1.5x</button>
+                <button type="button" class="btn xs ghost" data-face-zoom="2.0">2.0x</button>
+              </div>
             </div>
-            <div style="margin-bottom:6px">
-              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
-                <span>Zoom: <b id="faceZoomVal" style="color:var(--brand-ink)">${(ed.facecam?.zoom || 1.0).toFixed(2)}x</b></span>
-                <div style="display:flex;gap:4px">
-                  <button type="button" class="btn xs ghost" data-face-zoom="1.0">Fit (1.0x)</button>
-                  <button type="button" class="btn xs ghost" data-face-zoom="1.25">1.25x</button>
-                  <button type="button" class="btn xs ghost" data-face-zoom="1.5">1.5x</button>
-                  <button type="button" class="btn xs ghost" data-face-zoom="2.0">2.0x</button>
-                </div>
-              </div>
-              <input type="range" id="dlg_face_zoom" min="1.0" max="2.5" step="0.05" value="${ed.facecam?.zoom || 1.0}" style="width:100%">
+            <input type="range" id="dlg_face_zoom" min="1.0" max="2.5" step="0.05" value="${ed.facecam?.zoom || 1.0}" style="width:100%">
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--dim);margin-bottom:4px">
+              <span>Face Focus: <b id="faceFocusVal" style="color:var(--brand-ink)">${ed.facecam?.focus ? `(${ed.facecam.focus[0]}, ${ed.facecam.focus[1]})` : 'Auto Center'}</b></span>
+              <button type="button" class="btn xs ghost" data-act="resetfocus" title="Reset to auto box center">Reset Center</button>
             </div>
-            <div>
-              <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--dim);margin-bottom:4px">
-                <span>Face Focus: <b id="faceFocusVal" style="color:var(--brand-ink)">${ed.facecam?.focus ? `(${ed.facecam.focus[0]}, ${ed.facecam.focus[1]})` : 'Auto Center'}</b></span>
-                <button type="button" class="btn xs ghost" data-act="resetfocus" title="Reset to auto box center">Reset Center</button>
-              </div>
-              <div style="display:flex;gap:4px;align-items:center">
-                <span style="font-size:11px;color:var(--dim)">Nudge:</span>
-                <button type="button" class="btn xs" data-nudge-focus="-30,0" title="Nudge face focus Left">← Left</button>
-                <button type="button" class="btn xs" data-nudge-focus="30,0" title="Nudge face focus Right">Right →</button>
-                <button type="button" class="btn xs" data-nudge-focus="0,-30" title="Nudge face focus Up">↑ Up</button>
-                <button type="button" class="btn xs" data-nudge-focus="0,30" title="Nudge face focus Down">Down ↓</button>
-              </div>
+            <div style="display:flex;gap:4px;align-items:center">
+              <span style="font-size:11px;color:var(--dim)">Nudge:</span>
+              <button type="button" class="btn xs" data-nudge-focus="-30,0" title="Nudge face focus Left">← Left</button>
+              <button type="button" class="btn xs" data-nudge-focus="30,0" title="Nudge face focus Right">Right →</button>
+              <button type="button" class="btn xs" data-nudge-focus="0,-30" title="Nudge face focus Up">↑ Up</button>
+              <button type="button" class="btn xs" data-nudge-focus="0,30" title="Nudge face focus Down">Down ↓</button>
             </div>
           </div>
         </div>
 
-        <!-- 4. AUDIO -->
-        <div style="padding:10px;background:var(--muted);border-radius:8px;border:1px solid var(--line);margin-top:6px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <span style="font-size:12px;font-weight:700;color:var(--brand-ink)">Audio</span>
+        <!-- Audio (Meme & Music Bed) -->
+        <div style="padding:8px;background:var(--muted);border:1px solid var(--line);border-radius:6px;margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:11px;font-weight:700;color:var(--brand-ink)">Audio (Meme &amp; Music Bed)</span>
             <button type="button" class="btn sm ghost" data-act="applyaudioall" style="padding:2px 8px;font-size:11px" title="Apply audio settings to all clips">
               ⚡ Apply to all
             </button>
           </div>
           <div class="two">
-            <label class="f">Viral Meme Sound<select id="dlg_meme"><option value="">None</option>${opts(S.status.memes || {}, memeVal)}</select></label>
-            <label class="f">Music Bed<select id="dlg_music"><option value="">None</option>${opts(S.status.music_beds || {}, musicVal)}</select></label>
+            <label class="f" style="margin:0">Meme Sound<select id="dlg_meme"><option value="">None</option>${opts(S.status.memes || {}, memeVal)}</select></label>
+            <label class="f" style="margin:0">Music Bed<select id="dlg_music"><option value="">None</option>${opts(S.status.music_beds || {}, musicVal)}</select></label>
           </div>
         </div>
 
-        <!-- 5. TRIM & POST TEXT -->
-        <div class="two" style="margin-top:4px">
-          <label class="f">Start (seconds)<input id="dlg_start" type="number" step="0.5" value="${startVal}"></label>
-          <label class="f">End (seconds)<input id="dlg_end" type="number" step="0.5" value="${endVal}"></label>
+        <!-- Start / End -->
+        <div class="two">
+          <label class="f">Start (seconds)<input data-f="start" id="dlg_start" type="number" step="0.5" value="${startVal}"></label>
+          <label class="f">End (seconds)<input data-f="end" id="dlg_end" type="number" step="0.5" value="${endVal}"></label>
         </div>
-        <label class="f">Title<input data-f="title" value="${esc(c.title || '')}"></label>
-        <label class="f">Description<textarea data-f="description" rows="2">${esc(c.description || '')}</textarea></label>
 
-        <!-- 6. REVIEW ACTIONS & APPROVAL -->
+        <!-- Post text -->
+        <h3>Post text</h3>
+        <label class="f">Title<input data-f="title" id="dlg_title" value="${esc(c.title || '')}"></label>
+        <label class="f">Description<textarea data-f="description" id="dlg_description" rows="2">${esc(c.description || '')}</textarea></label>
+
+        <!-- Review Actions & Approval -->
         <div class="review-actions-bar">
           ${(c.status === "awaiting_review" || c.status === "drafting" || c.status === "qc_flagged" || c.status === "failed") ? `
           <div style="display:flex;gap:6px">
@@ -4061,6 +4007,14 @@ function drawClipDlg(full) {
               Approve all remaining
             </button>
           </div>
+          <div style="display:flex;gap:6px;margin-top:2px">
+            <button type="button" class="btn" data-act="fastremake" style="flex:1;font-size:11px" title="Re-burns captions onto existing video in 2–4s">
+              ⚡ Fast Remake
+            </button>
+            <button type="button" class="btn" data-act="remake" style="flex:1;font-size:11px" title="Full re-render from source video">
+              ${ic("scissors")}Save &amp; Remake
+            </button>
+          </div>
           ` : (c.status === "approved" || c.status === "rendering_final") ? `
           <div style="display:flex;align-items:center;justify-content:space-between">
             <span style="font-size:12px;color:var(--brand);font-weight:600">Rendering final 1080p video with LUFS &amp; QC…</span>
@@ -4072,7 +4026,7 @@ function drawClipDlg(full) {
               ⚡ Fast Remake (2-4s)
             </button>
             <button type="button" class="btn" data-act="remake" style="font-size:12px" title="Full re-render from source video">
-              Full Remake
+              ${ic("scissors")}Save &amp; Remake
             </button>
           </div>
           `}
@@ -4276,7 +4230,9 @@ document.addEventListener("dragover", e => { const a = $(".composer"); if (a) { 
 document.addEventListener("dragleave", () => $(".composer")?.classList.remove("over"));
 document.addEventListener("drop", e => { const a = $(".composer"); if (a) { e.preventDefault(); a.classList.remove("over"); attach(e.dataTransfer.files); } });
 function syncCaptionStyle(toggle) {
-  toggle.closest("#addform, #cform, #clipdlg").querySelectorAll("[data-caption-style]").forEach(i => i.disabled = !toggle.checked);
+  toggle.closest("#addform, #cform, #clipdlg")?.querySelectorAll("[data-caption-style]").forEach(i => i.disabled = !toggle.checked);
+  const extra = $("#dlgCapExtraControls");
+  if (extra && toggle.closest("#clipdlg")) extra.style.display = toggle.checked ? "block" : "none";
   window.updateOptsBadges?.();
 }
 document.addEventListener("change", async e => {
@@ -4868,7 +4824,14 @@ document.addEventListener("click", async e => {
       }
       if ($("#dlg_cap_anchor")) body.cap_anchor = $("#dlg_cap_anchor").value;
       if ($("#dlg_split_ratio")) body.split_ratio = Number($("#dlg_split_ratio").value);
-      if ($("#dlg_cam_swap")) body.cam_swap = $("#dlg_cam_swap").value === "true";
+      if ($("#dlg_cam_swap")) body.cam_swap = $("#dlg_cam_swap").checked;
+      if ($("#dlg_hook_size")) body.hook_font_size = Number($("#dlg_hook_size").value);
+      if ($("#dlg_hook_y")) body.hook_y = Number($("#dlg_hook_y").value);
+      if ($("#dlg_hook_style")) body.hook_style = $("#dlg_hook_style").value;
+      if ($("#dlg_cap_size")) body.cap_font_size = Number($("#dlg_cap_size").value);
+      if ($("#dlg_cap_y")) body.cap_y = Number($("#dlg_cap_y").value);
+      if ($("#dlg_meme")) body.meme = $("#dlg_meme").value;
+      if ($("#dlg_music")) body.music = $("#dlg_music").value;
 
       await send(`/api/jobs/${D.jid}/clips/${D.cid}/render`, body);
       toast(a === "fastremake" ? "Fast re-burning captions (2-4s)…" : "Re-making the clip…", "ok");

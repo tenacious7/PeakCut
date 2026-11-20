@@ -1042,6 +1042,15 @@ def update_clip_edit(cid: str, body: dict = Body(...), jid: str = None):
     clip["end"] = valid["end"]
     clip["layout"] = valid["layout"]
     clip["split_ratio"] = valid["split_ratio"]
+    if valid.get("hook"):
+        clip["hook"] = valid["hook"].get("text", "")
+    if valid.get("caption"):
+        clip["style"] = valid["caption"].get("style", "bounce")
+        clip["captions"] = valid["caption"].get("enabled", True)
+    if "title" in body and body["title"]:
+        clip["title"] = str(body["title"])[:100]
+    if "description" in body and body["description"]:
+        clip["description"] = str(body["description"])[:2000]
     if valid["facecam"]:
         fc = valid["facecam"]
         clip["facecam"] = [fc["x"], fc["y"], fc["w"], fc["h"]]

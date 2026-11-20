@@ -237,12 +237,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             fs = max(44, min(int(st["size"] * 0.7), int(1500 / max(1, len(line)) * 1.6)))
             ev.append(f"Dialogue: 1,{_ts(g_start)},{_ts(g_end)},Cap,,60,60,0,,{{\\an5\\pos({W // 2},{cap_y:.0f})\\q0\\fs{fs}}}{line}")
             continue
-        size = st["size"]
-        gap = f.width("n n", size) - 2 * f.width("n", size) + (2 * st["outline"] + 6) * size / st["size"]   # a space, plus room for both outlines
+        size = cap_sz
+        gap = f.width("n n", size) - 2 * f.width("n", size) + (2 * st["outline"] + 6) * size / max(1, st["size"])   # a space, plus room for both outlines
         total = sum(f.width(t, size) for t in texts) + gap * (len(texts) - 1)
         if total > CAP_MAX_W:                                  # a long phrase: shrink it to fit, never run off the frame
             size = max(36, int(size * CAP_MAX_W / total))
-            gap = f.width("n n", size) - 2 * f.width("n", size) + (2 * st["outline"] + 6) * size / st["size"]   # a space, plus room for both outlines
+            gap = f.width("n n", size) - 2 * f.width("n", size) + (2 * st["outline"] + 6) * size / max(1, st["size"])   # a space, plus room for both outlines
             total = sum(f.width(t, size) for t in texts) + gap * (len(texts) - 1)
         cy = cap_y - f.cap_shift(size)
         x = (W - total) / 2
@@ -351,13 +351,12 @@ def _filter(layout, fg_h, facecam=None, cam_delay=0.0, split_ratio=0.4, cam_swap
                     f"[fc]crop={fw}:{fh}:{fx}:{fy},scale={PIP_W}:{pip_h},setsar=1,{delay_f}setpts=PTS-STARTPTS[p];"
                     f"[b][p]overlay={W - PIP_W - PIP_MARGIN}:{PIP_MARGIN}:eof_action=repeat:shortest=1,setpts=PTS-STARTPTS[v0];")
 
-    if layout == "stack" and facecam:
-        fx, fy, fw, fh = (int(v) for v in facecam)
-        if fw > 8 and fh > 8:
-            ratio = max(0.2, min(0.8, float(split_ratio or 0.4)))
-            return build_stack_filter(facecam, ratio, swap=cam_swap, face=focus, W=W, H=H, cam_delay=cam_delay, zoom=zoom)
+    if layout == "stack":
+        fx, fy, fw, fh = (int(v) for v in facecam) if (facecam and len(facecam) == 4 and facecam[2] > 8 and facecam[3] > 8) else (0, 0, 1920, 960)
+        ratio = max(0.2, min(0.8, float(split_ratio or 0.4)))
+        return build_stack_filter([fx, fy, fw, fh], ratio, swap=cam_swap, face=focus, W=W, H=H, cam_delay=cam_delay, zoom=zoom)
 
-    if layout == "crop" or (layout in ("gameplay", "stack") and not facecam):
+    if layout == "crop" or (layout == "gameplay" and not facecam):
         return f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,setpts=PTS-STARTPTS[v0];"
     return (f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},split=2[a][b];"
             f"[a]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,boxblur=6:2,"
@@ -480,10 +479,14 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
         fw = max(10, min(fw, src_w - fx))
         fh = max(10, min(fh, src_h - fy))
         face = [fx, fy, fw, fh]
-    if layout in ("gameplay", "stack") and not (face and len(face) == 4):
+    if layout == "gameplay" and not (face and len(face) == 4):
         fb = clip.get("cam_fallback") or "blur"
         layout = fb if fb in ("blur", "zoom") else "blur"
         layout, fg_h, def_hook_y, def_cap_y = geometry(src_w, src_h, layout)
+    elif layout == "stack" and not (face and len(face) == 4):
+        sw = src_w if src_w > 0 else 1920
+        sh = src_h if src_h > 0 else 1080
+        face = [0, 0, sw, int(round(sh * 0.50))]
 
     cap_anchor = clip.get("cap_anchor")
     if cap_y is not None:
