@@ -24,7 +24,11 @@ _states: dict = {}   # one-time values for the connect redirects: state -> (user
 
 SECRET_KEYS = ("discord_webhook", "telegram_token")
 SETTING_DEFAULTS = {"discord_webhook": "", "telegram_token": "", "telegram_chat": "", "paused": False,
-                    "digest_hour": 8, "last_digest": "", "tour_done": False, "gpu_enabled": True}
+                    "digest_hour": 8, "last_digest": "", "tour_done": False, "gpu_enabled": True,
+                    "asr_engine": "parakeet", "whisper_model": "small", "asr_language": "auto"}
+ASR_ENGINES = ("parakeet", "faster-whisper")
+WHISPER_MODELS = ("base", "small", "medium", "large-v3-turbo")
+ASR_LANGUAGES = ("auto", "en", "hi")
 
 YT_SCOPES = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly"
 IG = "https://graph.instagram.com"
@@ -254,6 +258,18 @@ def save_settings(patch: dict) -> dict:
                 v = bool(v)
             elif k == "digest_hour":
                 v = max(0, min(23, int(v)))
+            elif k == "asr_engine":
+                v = str(v).strip().lower()
+                if v not in ASR_ENGINES:
+                    raise ValueError(f"Unknown speech engine: {v}")
+            elif k == "whisper_model":
+                v = str(v).strip().lower()
+                if v not in WHISPER_MODELS:
+                    raise ValueError(f"Unknown Whisper model: {v}")
+            elif k == "asr_language":
+                v = str(v).strip().lower()
+                if v not in ASR_LANGUAGES:
+                    raise ValueError(f"Unknown caption language: {v}")
             else:
                 v = str(v).strip()[:300]
                 if k == "discord_webhook" and v and not v.startswith("https://discord.com/api/webhooks/"):

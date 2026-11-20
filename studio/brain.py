@@ -140,10 +140,55 @@ def _tidy(c, s, e, game=None):
     }
 
 
+def _phonetic_key(text: str) -> str:
+    """Fold phonetic spelling differences between Hinglish romanization and standard English spelling
+    (e.g. 'tebal' vs 'table', 'kveshchan' vs 'question', 'phyuchar' vs 'future', 'voch' vs 'watch', 'jaj' vs 'judge')."""
+    s = re.sub(r"[^a-z0-9]", "", (text or "").lower())
+    if not s:
+        return ""
+    for pat, rep in (
+        (r"tion$|sion$", "shn"),
+        (r"tious|cious", "shs"),
+        (r"ture$", "chr"),
+        (r"dge|ge(?=[eiy]|$)", "j"),
+        (r"tch", "ch"),
+        (r"ph", "f"),
+        (r"qu|kw|kv", "kw"),
+        (r"wh|v", "w"),
+        (r"sh|chh", "sh"),
+        (r"th|dh", "t"),
+        (r"gh|kh", "k"),
+        (r"ck|q|c(?![eiyh])", "k"),
+        (r"c(?=[eiy])", "s"),
+        (r"x", "ks"),
+        (r"z", "s"),
+        (r"wr", "r"),
+        (r"kn", "n"),
+        (r"y", "i"),
+    ):
+        s = re.sub(pat, rep, s)
+    # Collapse repeated letters and strip internal/trailing vowels for consonant skeleton
+    s = re.sub(r"(.)\1+", r"\1", s)
+    lead = s[0] if s[0] in "aeiou" else ""
+    cons = re.sub(r"[aeiou]", "", s)
+    return (lead + cons) if cons else s
+
+
 def _same_word(old, new):
-    """A caption fix may respell a word or turn it into digits. It may not swap in different words."""
+    """A caption fix may respell a word (including restoring standard English spelling for Hinglish loanwords)
+    or turn it into digits. It may not swap in unrelated translated words."""
     a, b = re.sub(r"[^a-z0-9]", "", old.lower()), re.sub(r"[^a-z0-9]", "", new.lower())
-    return (not b) or (any(ch.isdigit() for ch in b) and len(new) <= 12) or difflib.SequenceMatcher(None, a, b).ratio() >= 0.45
+    if not b:
+        return True
+    if any(ch.isdigit() for ch in b) and len(new) <= 12:
+        return True
+    if difflib.SequenceMatcher(None, a, b).ratio() >= 0.45:
+        return True
+    pa, pb = _phonetic_key(a), _phonetic_key(b)
+    if pa and pb and len(pa) >= 2 and len(pb) >= 2:
+        # Require strong consonant-skeleton similarity so 'tebal'~='table' passes while 'chuna'!='lime' fails
+        return difflib.SequenceMatcher(None, pa, pb).ratio() >= 0.72
+    return False
 
 
 def _overlaps(s, e, others):
@@ -578,10 +623,17 @@ def _fix_caption_words(words: list, title: str = "", lang: str = "") -> list:
     # The Hindi and Urdu rule is only given for those videos. On an English video it is one more thing a small
     # model can get wrong (turning English into something else).
     hindi = (lang or "").lower().startswith(("hi", "ur")) or any(roman.needs_roman(w["w"]) for w in words)
-    hinglish = ("If a word is Hindi or Urdu (in Devanagari or Urdu script, or already "
-                "in Roman letters), write that same word in Roman letters the way people type Hindi in chats (Hinglish): "
-                "'चूना' -> 'choona', 'जो' -> 'jo', 'उसको' -> 'usko', 'یار' -> 'yaar', 'کیا' -> 'kya'. Never translate it into "
-                "English and never leave Devanagari or Urdu script. ") if hindi else ""
+    hinglish = (
+        "CRITICAL HINGLISH & ENGLISH RULE: "
+        "1) If the speaker said an English word that was written phonetically in Devanagari/Urdu script "
+        "(for example 'टेबल' -> 'table', 'चेयर' -> 'chair', 'व्हाट्स' 'अप' -> 'what\\'s' 'up', "
+        "'एथलेटिक' -> 'athletic', 'क्वेश्चन' -> 'question', 'वॉच' -> 'watch', 'फ्यूचर' -> 'future'), "
+        "ALWAYS output the standard English spelling (NEVER phonetic Hindi spelling like 'tebal' or 'vhaats ap'). "
+        "2) If the word is an actual Hindi or Urdu word (in Devanagari, Urdu script, or Roman letters), "
+        "write that SAME word in natural Roman Hinglish chat spelling ('चूना' -> 'choona', 'जो' -> 'jo', "
+        "'उसको' -> 'usko', 'क्या' -> 'kya', 'भाई' -> 'bhai', 'یار' -> 'yaar'). Never translate Hindi/Urdu words into "
+        "English and never leave Devanagari or Urdu script. "
+    ) if hindi else ""
     numbered = "\n".join(f"{i}: {_safe(w['w'], 60)}" for i, w in enumerate(words))
     prompt = (
         "These are the words of a short video clip's captions, one per line with its number, written by a speech "
@@ -604,8 +656,8 @@ def _fix_caption_words(words: list, title: str = "", lang: str = "") -> list:
     for w, new in zip(words, out):
         new = _CTRL.sub(" ", str(new or "")).strip()
         if roman.needs_roman(w["w"]) and new and not roman.needs_roman(new):
-            # Hindi or Urdu spelled in Roman letters. Checked against the rule-made spelling where there is one, so a
-            # translation ("lime" for चूना) is not taken for a spelling.
+            # Hindi or Urdu spelled in Roman letters (or restored English loanword). Checked against the rule-made
+            # spelling + phonetic skeleton so English loanwords ("table" for टेबल) pass while translations ("lime" for चूना) fail.
             if roman.has_hindi(w["w"]) and len(new.split()) <= 2 and not _same_word(roman.to_roman(w["w"]), new):
                 new = w["w"]
         elif len(new) > max(24, len(w["w"]) * 4) or not _same_word(w["w"], new):   # a rewrite, not a fix: keep what was said

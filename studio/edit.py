@@ -92,7 +92,8 @@ def default_edit(start=0.0, end=30.0, layout="blur") -> dict:
             "style": "bounce",
             "font_size": 132,
             "y_pos": def_cap_y,
-            "words": []
+            "words": [],
+            "words_edited": False
         },
         "hook": {
             "enabled": True,
@@ -213,7 +214,8 @@ def init_edit(job: dict, clip: dict, words: list = None, facecam: list = None) -
             "style": cap_style,
             "font_size": 132,
             "y_pos": cap_y,
-            "words": cap_words
+            "words": cap_words,
+            "words_edited": bool(clip.get("words_edited", False))
         },
         "hook": {
             "enabled": hook_enabled,
@@ -329,6 +331,7 @@ def validate_edit(data: dict, src_w=1920, src_h=1080) -> dict:
                 if txt:
                     clean_words.append({"text": txt, "start": ws, "end": we})
         out["caption"]["words"] = clean_words
+    out["caption"]["words_edited"] = bool(cap.get("words_edited", False))
 
     # Hook
     hk = data.get("hook") if isinstance(data.get("hook"), dict) else {}

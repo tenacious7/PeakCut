@@ -3416,7 +3416,7 @@ const setTabs = () => [
                                           ["security", "Security", "lock", "Password and signing out"]]),
   ["apps", "Connected apps", "plug", "Where your clips get posted"],
   ["youtube", "YouTube & Cookies", "play", "Fix bot checks, sign-in & rate limits"],
-  ...(S.status.user?.is_admin ? [["hardware", "Hardware & GPU", "bolt", "GPU acceleration and rendering options"]] : []),
+  ...(S.status.user?.is_admin ? [["hardware", "Hardware & Speech", "bolt", "GPU acceleration and speech-to-text models"]] : []),
   ...(S.status.user?.is_admin ? [["storage", "Storage", "folder", "Where videos and clips are kept"]] : [])];
 function aiHints() {
   const k = S.ai, sel = $("#ai_provider"); if (!k || !sel) return;
@@ -3570,7 +3570,72 @@ async function drawSettings() {
     }
     if (tab === "hardware") {
       const g = S.status.gpu || {supported: false, enabled: false, name: "CPU (libx264)"};
-      body.innerHTML = `<section class="set-sec"><h2>Hardware & GPU Acceleration</h2>
+      const asr = S.asr = await api("/api/asr").catch(() => S.status.asr || {
+        engine: "parakeet", whisper_model: "small", language: "auto", status: "ready",
+        message: "Parakeet-v2 ready.", device: "cpu", compute_type: "int8",
+        faster_whisper_installed: false, parakeet_installed: true, models: []
+      });
+      const isWhisper = asr.engine === "faster-whisper";
+      const asrPill = asr.status === "ready"
+        ? `<span class="pill ok">${ic("check")}Ready</span>`
+        : asr.status === "loading"
+        ? `<span class="pill warn">${ic("clock")}Loading model…</span>`
+        : asr.status === "not_installed"
+        ? `<span class="pill warn">${ic("warn")}Install needed</span>`
+        : asr.status === "error"
+        ? `<span class="pill bad">${ic("x")}Load error</span>`
+        : `<span class="pill">${ic("bolt")}Standby</span>`;
+      const models = (asr.models && asr.models.length) ? asr.models : [
+        {id: "base", label: "Base (~150 MB · Fastest)"},
+        {id: "small", label: "Small (~500 MB · Recommended)"},
+        {id: "medium", label: "Medium (~1.5 GB · High Accuracy)"},
+        {id: "large-v3-turbo", label: "Large-v3-Turbo (~1.6 GB · Best)"}
+      ];
+      body.innerHTML = `<section class="set-sec"><h2>Speech-to-Text Engine (Captions)</h2>
+        <p class="help">Switch between <b>Parakeet-v2</b> and <b>Faster-Whisper</b> anytime. Only one model stays loaded in memory — toggling unloads the other automatically to keep RAM and CPU usage low.</p>
+        <div class="ai-state" id="asr_state_bar" style="margin-bottom:16px">
+          ${asrPill}
+          <span class="sub" id="asr_state_msg">${esc(asr.message || "")}</span>
+        </div>
+        <div class="card" style="margin-bottom:24px">
+          <div class="card-head">
+            <div>
+              <h3>Transcription Model</h3>
+              <p class="sub">Both engines run 100% free and locally on your computer with INT8 optimization.</p>
+            </div>
+          </div>
+          <div style="padding:16px 20px;display:flex;flex-direction:column;gap:16px">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+              <button type="button" class="btn ${!isWhisper ? "primary" : ""}" data-act="asrengine" data-engine="parakeet" style="height:auto;padding:12px 14px;text-align:left;display:flex;flex-direction:column;align-items:flex-start;gap:4px">
+                <span style="font-weight:600;display:flex;align-items:center;gap:6px">${ic("bolt")}Parakeet-v2 (ONNX) ${!isWhisper ? "· Active" : ""}</span>
+                <small style="opacity:.85;font-weight:400">Ultra-fast English · Low RAM · sherpa-onnx INT8</small>
+              </button>
+              <button type="button" class="btn ${isWhisper ? "primary" : ""}" data-act="asrengine" data-engine="faster-whisper" style="height:auto;padding:12px 14px;text-align:left;display:flex;flex-direction:column;align-items:flex-start;gap:4px">
+                <span style="font-weight:600;display:flex;align-items:center;gap:6px">${ic("bolt")}Faster-Whisper (VAD) ${isWhisper ? "· Active" : ""}</span>
+                <small style="opacity:.85;font-weight:400">Hindi + Hinglish + English · Silero noise filter</small>
+              </button>
+            </div>
+            ${isWhisper ? `<div class="fields" style="margin-top:4px">
+              <label class="f">Whisper model size
+                <select id="asr_wmodel" data-act-change="asrcfg">
+                  ${models.map(m => `<option value="${esc(m.id)}" ${m.id === asr.whisper_model ? "selected" : ""}>${esc(m.label)}</option>`).join("")}
+                </select>
+                <span class="hint">Small is fast and accurate on CPU INT8. Larger models improve heavy accents or noisy game audio.</span>
+              </label>
+              <label class="f">Caption language mode
+                <select id="asr_lang" data-act-change="asrcfg">
+                  <option value="auto" ${asr.language === "auto" ? "selected" : ""}>Auto (English &amp; Hinglish · blocks random scripts)</option>
+                  <option value="en" ${asr.language === "en" ? "selected" : ""}>English only</option>
+                  <option value="hi" ${asr.language === "hi" ? "selected" : ""}>Hindi + Hinglish (keeps English words in English)</option>
+                </select>
+                <span class="hint">Auto uses Silero VAD + anti-hallucination guard so noisy English never turns into Arabic.</span>
+              </label>
+            </div>
+            <div class="row"><button type="button" class="btn primary" data-act="asrsave">${ic("check")}Apply &amp; Load Model</button></div>` : ""}
+            ${!asr.faster_whisper_installed ? `<div class="note" style="margin:0">${ic("warn")}<span><b>Faster-Whisper package not installed yet.</b> Run <code>pip install -r requirements.txt</code> (or <code>pip install faster-whisper</code>) and restart PeakCut to use Faster-Whisper. Parakeet-v2 keeps working meanwhile.</span></div>` : ""}
+          </div>
+        </div>
+        <h2>Hardware &amp; GPU Acceleration</h2>
         <p class="help">Hardware acceleration offloads video rendering, scaling, aspect ratio conversion (9:16), and subtitle burning to your graphics card. On supported NVIDIA GPUs (NVENC), this cuts rendering time by 3x–8x and keeps your CPU cool.</p>
         <div class="ai-state" style="margin-bottom:16px">
           ${g.enabled && g.supported ? `<span class="pill ok">${ic("check")}GPU Acceleration Active</span><span class="sub">${esc(g.name)}</span>`
@@ -3608,16 +3673,47 @@ async function drawSettings() {
           </div>
           <div style="padding:16px 20px">
             <ul style="padding-left:18px;margin:0;line-height:1.8" class="sub">
-              <li><b>Video Rendering & Encoding:</b> Offloaded to NVIDIA Turing NVENC (GeForce GTX 1650) with high quality preset. Very fast, low CPU load.</li>
-              <li><b>Speech-to-Text Transcription:</b> Run locally on multi-threaded CPU INT8 quantization for optimal numerical stability.</li>
-              <li><b>Analysis & Moment Detection:</b> Analyzed by LLM prompts and silence/scene detection.</li>
+              <li><b>Video Rendering &amp; Encoding:</b> Offloaded to NVIDIA NVENC when available, else multi-core CPU libx264.</li>
+              <li><b>Speech-to-Text Transcription:</b> Runs locally with ${isWhisper ? `Faster-Whisper (${esc(asr.whisper_model)}, ${esc((asr.device || "cpu").toUpperCase())} ${esc(asr.compute_type || "int8")}, Silero VAD)` : `Parakeet-v2 (${esc((asr.device || "cpu").toUpperCase())} ONNX INT8)`}.</li>
+              <li><b>Memory Optimization:</b> Switching engines unloads the previous speech model automatically so only one stays in RAM/VRAM.</li>
             </ul>
           </div>
         </div></section>`;
+      if (asr.status === "loading") pollAsrStatus();
     }
   } catch (e) { body.innerHTML = `<div class="set-load">${esc(e.message)}</div>`; }
 }
 async function saveSettings() { const d = {}; $$("#sform [data-s]").forEach(i => d[i.dataset.s] = i.value); await send("/api/settings", d, "PUT"); }
+let _asrPollTimer = null;
+function pollAsrStatus() {
+  if (_asrPollTimer) clearTimeout(_asrPollTimer);
+  _asrPollTimer = setTimeout(async () => {
+    if (S.view !== "settings" || S.stab !== "hardware") return;
+    try {
+      const asr = S.asr = await api("/api/asr");
+      const bar = $("#asr_state_bar");
+      if (bar) {
+        const pill = asr.status === "ready"
+          ? `<span class="pill ok">${ic("check")}Ready</span>`
+          : asr.status === "loading"
+          ? `<span class="pill warn">${ic("clock")}Loading model…</span>`
+          : asr.status === "not_installed"
+          ? `<span class="pill warn">${ic("warn")}Install needed</span>`
+          : asr.status === "error"
+          ? `<span class="pill bad">${ic("x")}Load error</span>`
+          : `<span class="pill">${ic("bolt")}Standby</span>`;
+        bar.innerHTML = `${pill}<span class="sub" id="asr_state_msg">${esc(asr.message || "")}</span>`;
+      }
+      if (asr.status === "loading") {
+        pollAsrStatus();
+      } else if (asr.status === "ready") {
+        toast(asr.message || "Speech model loaded and ready.", "ok");
+      } else if (asr.status === "error") {
+        toast(asr.message || "Speech model failed to load.", "bad");
+      }
+    } catch {}
+  }, 1200);
+}
 
 /* ============================================================ clip editor */
 function openClip(jid, cid) {
@@ -5025,6 +5121,33 @@ document.addEventListener("click", async e => {
         if (out) out.innerHTML = `<span class="pill warn">${ic("warn")}Error</span> ${esc(err.message)}`;
         toast(err.message, "bad");
       } finally { b.disabled = false; }
+      return;
+    }
+    if (a === "asrengine" || a === "asrsave") {
+      b.disabled = true;
+      try {
+        const payload = {preload: true};
+        if (a === "asrengine") {
+          payload.engine = d.engine;
+        } else {
+          payload.engine = "faster-whisper";
+          const wm = $("#asr_wmodel"), lg = $("#asr_lang");
+          if (wm) payload.whisper_model = wm.value;
+          if (lg) payload.language = lg.value;
+        }
+        const res = await send("/api/asr", payload, "POST");
+        S.asr = res;
+        S.status = await api("/api/status");
+        if (res.status === "not_installed") {
+          toast("Saved! Install faster-whisper with: pip install -r requirements.txt", "warn");
+        } else if (res.status === "loading") {
+          toast(res.message || "Loading speech model in background…", "ok");
+        } else {
+          toast(res.message || "Speech engine updated!", "ok");
+        }
+        return drawSettings();
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
       return;
     }
     if (a === "gputoggle") {
