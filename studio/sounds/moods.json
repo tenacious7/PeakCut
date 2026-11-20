@@ -1,0 +1,117 @@
+{
+ "embarrassing": {
+  "sound": [
+   "mine/hello_darkness",
+   "sad_trombone"
+  ],
+  "effect": [
+   "zoom",
+   "vignette",
+   "desat"
+  ],
+  "volume": -3,
+  "offset": 0.0,
+  "hold": 1.2,
+  "tail": "auto"
+ },
+ "fail": {
+  "sound": [
+   "mine/sad_violin",
+   "sad_trombone"
+  ],
+  "effect": [
+   "punch",
+   "desat"
+  ],
+  "volume": -2,
+  "offset": 0.1,
+  "hold": 0.0,
+  "tail": "auto"
+ },
+ "shock": {
+  "sound": "vine_boom",
+  "effect": [
+   "punch",
+   "flash"
+  ],
+  "volume": 0,
+  "offset": 0.0,
+  "hold": 0.0,
+  "tail": 0
+ },
+ "hype": {
+  "sound": [
+   "airhorn",
+   "bass_drop"
+  ],
+  "effect": [
+   "punch",
+   "shake",
+   "flash"
+  ],
+  "volume": -2,
+  "offset": 0.0,
+  "hold": 0.0,
+  "tail": 0
+ },
+ "win": {
+  "sound": "bass_drop",
+  "effect": [
+   "punch",
+   "flash"
+  ],
+  "volume": -2,
+  "offset": -0.15,
+  "hold": 0.0,
+  "tail": 0
+ },
+ "awkward": {
+  "sound": [
+   "mine/curb_enthusiasm",
+   "crickets"
+  ],
+  "effect": [
+   "zoom",
+   "desat"
+  ],
+  "volume": -4,
+  "offset": 0.0,
+  "hold": 0.8,
+  "tail": "auto"
+ },
+ "cringe": {
+  "sound": "record_scratch",
+  "effect": [
+   "flash",
+   "desat"
+  ],
+  "volume": -2,
+  "offset": 0.0,
+  "hold": 1.0,
+  "tail": 0.4
+ },
+ "funny": {
+  "sound": [
+   "rimshot",
+   "ding"
+  ],
+  "effect": [
+   "punch"
+  ],
+  "volume": -3,
+  "offset": 0.1,
+  "hold": 0.0,
+  "tail": 0.6
+ },
+ "suspense": {
+  "sound": "heartbeat",
+  "effect": [
+   "zoom",
+   "vignette"
+  ],
+  "volume": -3,
+  "offset": -0.3,
+  "hold": 0.0,
+  "tail": 0
+ }
+}

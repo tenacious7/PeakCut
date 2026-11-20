@@ -270,7 +270,68 @@ PIP_W = 380            # how wide the facecam is in the 1080-wide frame
 PIP_MARGIN = 26
 
 
-def _filter(layout, fg_h, facecam=None, cam_delay=0.0, split_ratio=0.4, cam_swap=False):
+def cover_crop_filter(cam, panel_w, panel_h, face=None, headroom=0.42, zoom=1.0):
+    """
+    cam  = (x, y, w, h) facecam box in source pixels
+    face = (cx, cy) face center in source pixels, optional (falls back to box center)
+    Returns an ffmpeg filter that fills panel_w x panel_h with NO gaps and NO stretch.
+    """
+    x, y, w, h = (int(v) for v in cam)
+    target = panel_w / panel_h
+
+    # biggest window inside the cam box with the panel's aspect ratio
+    if w / h > target:          # cam wider than panel -> trim sides
+        cw, ch = int(round(h * target)), h
+    else:                       # cam taller than panel -> trim top/bottom
+        cw, ch = w, int(round(w / target))
+    cw -= cw % 2
+    ch -= ch % 2
+
+    # zoom in if requested (shrinks cw/ch before clamp)
+    zoom_val = max(1.0, min(3.0, float(zoom or 1.0)))
+    if zoom_val > 1.0:
+        cw = int(round(cw / zoom_val))
+        ch = int(round(ch / zoom_val))
+        cw -= cw % 2
+        ch -= ch % 2
+        cw = max(20, min(w, cw))
+        ch = max(20, min(h, ch))
+
+    fcx, fcy = face if face else (x + w / 2, y + h / 2)
+    cx = int(round(fcx - cw / 2))
+    cy = int(round(fcy - ch * headroom))   # face sits ~42% down the panel, so there's room for the hook
+    cx = max(x, min(cx, x + w - cw))
+    cy = max(y, min(cy, y + h - ch))
+
+    return f"crop={cw}:{ch}:{cx}:{cy},scale={panel_w}:{panel_h}:flags=lanczos,setsar=1"
+
+
+def build_stack_filter(cam, ratio, swap=False, face=None, W=1080, H=1920, cam_delay=0.0, zoom=1.0):
+    ratio = max(0.20, min(0.80, float(ratio or 0.40)))
+    cam_h = round(H * ratio / 2) * 2          # ratio = facecam share, e.g. 0.35 / 0.40 / 0.50
+    game_h = H - cam_h
+    cam_f = cover_crop_filter(cam, W, cam_h, face=face, zoom=zoom)
+    game_f = f"scale={W}:{game_h}:force_original_aspect_ratio=increase,crop={W}:{game_h},setsar=1"
+
+    delay_f = ""
+    if cam_delay and abs(cam_delay) >= 0.02:
+        if cam_delay > 0:
+            delay_f = f"tpad=start_duration={cam_delay:.3f}:start_mode=clone,"
+        else:
+            delay_f = f"trim=start={-cam_delay:.3f},"
+
+    if swap:   # gameplay on top
+        return (f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},split=2[g0][c0];"
+                f"[g0]{game_f},setpts=PTS-STARTPTS[g];"
+                f"[c0]{cam_f},{delay_f}setpts=PTS-STARTPTS[c];"
+                f"[g][c]vstack=inputs=2,setsar=1,setpts=PTS-STARTPTS[v0];")
+    return (f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},split=2[c0][g0];"
+            f"[c0]{cam_f},{delay_f}setpts=PTS-STARTPTS[c];"
+            f"[g0]{game_f},setpts=PTS-STARTPTS[g];"
+            f"[c][g]vstack=inputs=2,setsar=1,setpts=PTS-STARTPTS[v0];")
+
+
+def _filter(layout, fg_h, facecam=None, cam_delay=0.0, split_ratio=0.4, cam_swap=False, focus=None, zoom=1.0):
     delay_f = ""
     if cam_delay and abs(cam_delay) >= 0.02:
         if cam_delay > 0:
@@ -294,18 +355,7 @@ def _filter(layout, fg_h, facecam=None, cam_delay=0.0, split_ratio=0.4, cam_swap
         fx, fy, fw, fh = (int(v) for v in facecam)
         if fw > 8 and fh > 8:
             ratio = max(0.2, min(0.8, float(split_ratio or 0.4)))
-            top_h = int(round(H * ratio / 2)) * 2
-            bot_h = H - top_h
-            if cam_swap:
-                return (f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},split=2[top][bot];"
-                        f"[top]scale={W}:{top_h}:force_original_aspect_ratio=increase,crop={W}:{top_h},setsar=1,setpts=PTS-STARTPTS[t];"
-                        f"[bot]crop={fw}:{fh}:{fx}:{fy},scale={W}:{bot_h}:force_original_aspect_ratio=increase,crop={W}:{bot_h},setsar=1,{delay_f}setpts=PTS-STARTPTS[b];"
-                        f"[t][b]vstack,setsar=1,setpts=PTS-STARTPTS[v0];")
-            else:
-                return (f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},split=2[bot][top];"
-                        f"[top]crop={fw}:{fh}:{fx}:{fy},scale={W}:{top_h}:force_original_aspect_ratio=increase,crop={W}:{top_h},setsar=1,{delay_f}setpts=PTS-STARTPTS[t];"
-                        f"[bot]scale={W}:{bot_h}:force_original_aspect_ratio=increase,crop={W}:{bot_h},setsar=1,setpts=PTS-STARTPTS[b];"
-                        f"[t][b]vstack,setsar=1,setpts=PTS-STARTPTS[v0];")
+            return build_stack_filter(facecam, ratio, swap=cam_swap, face=focus, W=W, H=H, cam_delay=cam_delay, zoom=zoom)
 
     if layout == "crop" or (layout in ("gameplay", "stack") and not facecam):
         return f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,setpts=PTS-STARTPTS[v0];"
@@ -316,13 +366,18 @@ def _filter(layout, fg_h, facecam=None, cam_delay=0.0, split_ratio=0.4, cam_swap
             f"[bg][fg]overlay=0:(H-h)/2:eof_action=repeat:shortest=1,setsar=1,setpts=PTS-STARTPTS[v0];")
 
 
-def _hook_y(layout, hook_y, facecam=None):
+def _hook_y(layout, hook_y, facecam=None, split_ratio=0.40, cam_swap=False):
     """Where the heading goes. In the gameplay layout the webcam sits in the top corner, so a heading
-    across the top would run under it: it goes just below the picture instead."""
+    across the top would run under it: it goes just below the picture instead. In stack layout,
+    it sits at the seam between the two panels to avoid covering faces."""
     if layout == "gameplay" and facecam and len(facecam) == 4 and facecam[2] > 8:
         return PIP_MARGIN + int(round(PIP_W * facecam[3] / facecam[2])) + 32
     if layout == "stack":
-        return 330
+        ratio = max(0.20, min(0.80, float(split_ratio or 0.40)))
+        cam_h = round(H * ratio / 2) * 2
+        game_h = H - cam_h
+        seam_y = game_h if cam_swap else cam_h
+        return max(80, seam_y - 90)
     return hook_y
 
 
@@ -358,7 +413,11 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
         end = float(ed["end"])
         layout = ed.get("layout", "blur")
         split_ratio = float(ed.get("split_ratio", 0.40) or 0.40)
-        face = [ed["facecam"]["x"], ed["facecam"]["y"], ed["facecam"]["w"], ed["facecam"]["h"]] if ed.get("facecam") else None
+        fc_obj = ed.get("facecam")
+        face = [fc_obj["x"], fc_obj["y"], fc_obj["w"], fc_obj["h"]] if (fc_obj and all(k in fc_obj for k in ("x", "y", "w", "h"))) else None
+        face_focus = fc_obj.get("focus") if (fc_obj and isinstance(fc_obj, dict)) else None
+        face_zoom = float(fc_obj.get("zoom", 1.0)) if (fc_obj and isinstance(fc_obj, dict)) else 1.0
+        cam_swap = bool(ed.get("cam_swap", clip.get("cam_swap", False)))
         cap_conf = ed.get("caption") or {}
         cap_enabled = bool(clip.get("captions", cap_conf.get("enabled", True)))
         cap_style = str(cap_conf.get("style", "bounce"))
@@ -385,6 +444,9 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
         layout = clip.get("layout", "blur")
         split_ratio = float(clip.get("split_ratio", 0.40) or 0.40)
         face = clip.get("facecam")
+        face_focus = clip.get("facecam_focus")
+        face_zoom = float(clip.get("facecam_zoom", 1.0))
+        cam_swap = bool(clip.get("cam_swap", False))
         cap_enabled = bool(clip.get("captions", True))
         cap_style = clip.get("style", "bounce")
         cap_font_size = 132
@@ -433,7 +495,7 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
         cap_y = 1630.0
     elif cap_anchor == "seam" and layout == "stack":
         top_h = int(round(H * split_ratio / 2)) * 2
-        cap_y = float(top_h + (50 if not clip.get("cam_swap") else -50))
+        cap_y = float(top_h + (50 if not cam_swap else -50))
     elif cap_anchor == "top":
         cap_y = 420.0
     else:
@@ -443,9 +505,9 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
         try:
             hook_y = float(hook_y)
         except (ValueError, TypeError):
-            hook_y = _hook_y(layout, def_hook_y, face)
+            hook_y = _hook_y(layout, def_hook_y, face, split_ratio=split_ratio, cam_swap=cam_swap)
     else:
-        hook_y = _hook_y(layout, def_hook_y, face)
+        hook_y = _hook_y(layout, def_hook_y, face, split_ratio=split_ratio, cam_swap=cam_swap)
 
     ass = build_ass(words_to_use if cap_enabled else [], start, end, hook_text, cap_style,
                     clip.get("highlight_words", []), hook_y, cap_y,
@@ -456,14 +518,15 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
     try:
         return _render_in(work, src, out_dir, name, start, end, layout, fg_h, ass,
                           face=face, clip=clip, words=words_to_use, hook_y=hook_y, cap_y=cap_y,
-                          quality=quality, audio_opts=audio_opts, split_ratio=split_ratio)
+                          quality=quality, audio_opts=audio_opts, split_ratio=split_ratio,
+                          focus=face_focus, zoom=face_zoom, cam_swap=cam_swap)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
 
 def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layout, fg_h, ass: str,
                face=None, clip=None, words=None, hook_y=300, cap_y=1380, quality="final",
-               audio_opts=None, split_ratio=0.40) -> dict:
+               audio_opts=None, split_ratio=0.40, focus=None, zoom=1.0, cam_swap=False) -> dict:
     global _nvenc_ok, _qsv_ok, _amf_ok
     (work / f"{name}.ass").write_text(ass, encoding="utf-8")
     (work / "f").mkdir()
@@ -487,11 +550,12 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
     encoders.append(("x264", ["yuv420p", "-c:v", "libx264", "-crf", "21", "-preset", "veryfast"]))
 
     cam_delay = float((clip or {}).get("cam_delay", 0.0) or 0.0)
-    cam_swap = bool((clip or {}).get("cam_swap", False))
+    cam_swap = bool(cam_swap or (clip or {}).get("cam_swap", False))
 
     if quality == "draft":
-        fc = _filter(layout, fg_h, face, cam_delay=cam_delay, split_ratio=split_ratio, cam_swap=cam_swap)
-        fc_draft = f"{fc};[v0]scale=540:960,ass={name}.ass:fontsdir=f[vdraft]"
+        fc = _filter(layout, fg_h, face, cam_delay=cam_delay, split_ratio=split_ratio, cam_swap=cam_swap, focus=focus, zoom=zoom)
+        fc_clean = fc.rstrip(";")
+        fc_draft = f"{fc_clean};[v0]scale=540:960,ass={name}.ass:fontsdir=f[vdraft]"
         base_draft = ["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
                       "-filter_complex", fc_draft, "-map", "[vdraft]", "-map", "0:a:0",
                       "-af", "asetpts=PTS-STARTPTS",
@@ -520,7 +584,10 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
 
         cover_t = min(1.2, (end - start) / 2)
         run(["ffmpeg", "-y", "-v", "error", "-ss", f"{cover_t:.2f}", "-i", f"{name}_draft.mp4", "-frames:v", "1",
-             "-q:v", "3", f"{name}.jpg"], cwd=work)
+             "-strict", "-1", "-q:v", "3", f"{name}.jpg"], cwd=work)
+        if not (work / f"{name}.jpg").is_file():
+            run(["ffmpeg", "-y", "-v", "error", "-i", f"{name}_draft.mp4", "-frames:v", "1",
+                 "-strict", "-1", "-q:v", "3", f"{name}.jpg"], cwd=work)
         for ext in ("mp4", "jpg", "ass"):
             fpath = work / f"{name}_draft.mp4" if ext == "mp4" else work / f"{name}.{ext}"
             if fpath.is_file():
@@ -536,9 +603,10 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
     if fast_caption:
         shutil.copyfile(existing_raw, raw_file)
     else:
-        fc = _filter(layout, fg_h, face, cam_delay=cam_delay, split_ratio=split_ratio, cam_swap=cam_swap)
+        fc = _filter(layout, fg_h, face, cam_delay=cam_delay, split_ratio=split_ratio, cam_swap=cam_swap, focus=focus, zoom=zoom)
+        fc_clean = fc.rstrip(";")
         base_raw = ["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
-                    "-filter_complex", fc, "-map", "[v0]", "-map", "0:a:0",
+                    "-filter_complex", fc_clean, "-map", "[v0]", "-map", "0:a:0",
                     "-af", "asetpts=PTS-STARTPTS,aresample=48000,loudnorm=I=-14:TP=-1.5:LRA=11",
                     "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", "-pix_fmt"]
         err = None
@@ -612,7 +680,10 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
 
     cover_t = min(1.2, (end - start) / 2)
     run(["ffmpeg", "-y", "-v", "error", "-ss", f"{cover_t:.2f}", "-i", f"{name}.mp4", "-frames:v", "1",
-         "-q:v", "3", f"{name}.jpg"], cwd=work)
+         "-strict", "-1", "-q:v", "3", f"{name}.jpg"], cwd=work)
+    if not (work / f"{name}.jpg").is_file():
+        run(["ffmpeg", "-y", "-v", "error", "-i", f"{name}.mp4", "-frames:v", "1",
+             "-strict", "-1", "-q:v", "3", f"{name}.jpg"], cwd=work)
     for ext in ("mp4", "jpg", "ass"):
         shutil.move(str(work / f"{name}.{ext}"), str(out_dir / f"{name}.{ext}"))
     if (work / f"{name}_raw.mp4").is_file():

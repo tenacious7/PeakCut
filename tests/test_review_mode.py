@@ -466,6 +466,174 @@ class TestReviewMode(unittest.TestCase):
         self.assertIn("Audio clipping", clip["error"])
         print("PASS test_qc_failure_sets_qc_flagged_status")
 
+    def test_cover_crop_and_stack_filters(self):
+        """Test cover_crop_filter and build_stack_filter across split ratios and swap options."""
+        cam = [100, 100, 400, 400]
+
+        # 1. Test 35/65 ratio: panel 1080x672 (target 1.607)
+        # Cam aspect is 1.0 < 1.607 -> trim top/bottom -> cw=400, ch=248
+        f35 = render.cover_crop_filter(cam, 1080, 672, headroom=0.42)
+        self.assertIn("crop=400:248:100:196", f35)
+        self.assertIn("scale=1080:672:flags=lanczos,setsar=1", f35)
+
+        # 2. Test 50/50 ratio: panel 1080x960 (target 1.125) -> cw=400, ch=356
+        # cy clamps to y + h - ch = 100 + 400 - 356 = 144 to stay inside camera bounds
+        f50 = render.cover_crop_filter(cam, 1080, 960, headroom=0.42)
+        self.assertIn("crop=400:356:100:144", f50)
+        self.assertIn("scale=1080:960:flags=lanczos,setsar=1", f50)
+
+        # 3. Test 40/60 ratio: panel 1080x768 (target 1.406) -> cw=400, ch=284
+        f40 = render.cover_crop_filter(cam, 1080, 768, headroom=0.42)
+        self.assertIn("crop=400:284:100:181", f40)
+        self.assertIn("scale=1080:768:flags=lanczos,setsar=1", f40)
+
+        # 4. Test zoom: zoom=1.5 shrinks cw and ch
+        fzoom = render.cover_crop_filter(cam, 1080, 672, zoom=1.5)
+        self.assertIn("crop=266:164:", fzoom)
+
+        # 5. Test build_stack_filter with swap=False and swap=True
+        stack_noswap = render.build_stack_filter(cam, 0.35, swap=False)
+        self.assertIn("[c][g]vstack=inputs=2", stack_noswap)
+        self.assertIn("scale=1080:672:flags=lanczos", stack_noswap)
+        self.assertIn("crop=1080:1248", stack_noswap)
+
+        stack_swap = render.build_stack_filter(cam, 0.35, swap=True)
+        self.assertIn("[g][c]vstack=inputs=2", stack_swap)
+        self.assertIn("scale=1080:672:flags=lanczos", stack_swap)
+        self.assertIn("crop=1080:1248", stack_noswap)
+
+        # 6. Test hook placement at the seam (clearing the forehead)
+        # swap=False: seam at cam_h (672) -> hook_y = 672 - 90 = 582
+        hook_y_noswap = render._hook_y("stack", 300, facecam=cam, split_ratio=0.35, cam_swap=False)
+        self.assertEqual(hook_y_noswap, 582)
+
+        # swap=True: seam at game_h (1248) -> hook_y = 1248 - 90 = 1158
+        hook_y_swap = render._hook_y("stack", 300, facecam=cam, split_ratio=0.35, cam_swap=True)
+        self.assertEqual(hook_y_swap, 1158)
+        print("PASS test_cover_crop_and_stack_filters")
+
+    def test_face_center_and_focus_detection(self):
+        """Test face center detection helper and fallback behavior."""
+        import numpy as np
+        from studio import facecam
+
+        # Black frame has no face -> returns None
+        black = np.zeros((720, 1280, 3), dtype=np.uint8)
+        fc = facecam.face_center(black, (100, 100, 300, 300))
+        self.assertIsNone(fc)
+
+        # Missing file returns None safely
+        res = facecam.find_clip_face_focus(self.temp_dir / "nonexistent.mp4", (100, 100, 300, 300), 0.0, 2.0)
+        self.assertIsNone(res)
+        print("PASS test_face_center_and_focus_detection")
+
+    def test_all_six_stack_render_combinations(self):
+        """Test rendering all 6 combinations of (35/65, 40/60, 50/50) x (swap=False, swap=True)."""
+        import subprocess
+        from studio import media
+
+        # Generate a 2.0-second synthetic test video with sine audio
+        src_path = self.temp_dir / "synthetic_test.mp4"
+        cmd = [
+            "ffmpeg", "-y", "-v", "error",
+            "-f", "lavfi", "-i", "testsrc=size=1920x1080:rate=30",
+            "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
+            "-t", "2.0",
+            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            str(src_path)
+        ]
+        subprocess.run(cmd, check=True)
+        self.assertTrue(src_path.is_file())
+
+        out_dir = self.temp_dir / "rendered_clips"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        combinations = [
+            (0.35, False),
+            (0.35, True),
+            (0.40, False),
+            (0.40, True),
+            (0.50, False),
+            (0.50, True)
+        ]
+
+        words = [{"text": "TEST", "start": 0.2, "end": 0.8}, {"text": "STACK", "start": 0.9, "end": 1.5}]
+        facecam_box = [100, 80, 400, 400]
+
+        for ratio, swap in combinations:
+            tag = f"r{int(ratio*100)}_{'swap' if swap else 'noswap'}"
+            clip_meta = {
+                "id": tag,
+                "start": 0.0,
+                "end": 2.0,
+                "layout": "stack",
+                "split_ratio": ratio,
+                "cam_swap": swap,
+                "facecam": facecam_box,
+                "face_zoom": 1.0,
+                "hook": f"Hook {tag}",
+                "caption": {"style": "bounce", "font_size": 90, "y_pos": 1400.0, "enabled": True},
+                "audio": {"meme": False, "music": False}
+            }
+
+            # 1. Test Final Render
+            res_final = render.render_clip(
+                src=src_path,
+                out_dir=out_dir,
+                name=f"clip_{tag}",
+                clip=clip_meta,
+                words=words,
+                src_w=1920,
+                src_h=1080,
+                quality="final"
+            )
+            final_mp4 = out_dir / res_final["file"]
+            final_jpg = out_dir / res_final["cover"]
+            self.assertTrue(final_mp4.is_file(), f"Final MP4 missing for {tag}")
+            self.assertTrue(final_jpg.is_file(), f"Final JPG cover missing for {tag}")
+            self.assertGreater(final_jpg.stat().st_size, 100, f"JPG cover empty for {tag}")
+
+            # Verify exact dimensions 1080x1920
+            info = media.probe(final_mp4)
+            self.assertEqual(info["width"], 1080, f"Width should be 1080 for {tag}")
+            self.assertEqual(info["height"], 1920, f"Height should be 1920 for {tag}")
+
+        # 2. Test Draft Render at 540x960
+        draft_meta = {
+            "id": "draft_test",
+            "start": 0.0,
+            "end": 2.0,
+            "layout": "stack",
+            "split_ratio": 0.35,
+            "cam_swap": False,
+            "facecam": facecam_box,
+            "hook": "Draft Hook",
+            "caption": {"style": "bounce", "font_size": 90, "y_pos": 1400.0, "enabled": True},
+            "audio": {"meme": False, "music": False}
+        }
+        res_draft = render.render_clip(
+            src=src_path,
+            out_dir=out_dir,
+            name="clip_draft_test",
+            clip=draft_meta,
+            words=words,
+            src_w=1920,
+            src_h=1080,
+            quality="draft"
+        )
+        draft_mp4 = out_dir / res_draft["file"]
+        draft_jpg = out_dir / res_draft["cover"]
+        self.assertTrue(draft_mp4.is_file())
+        self.assertTrue(draft_jpg.is_file())
+        self.assertTrue(res_draft.get("draft"))
+
+        info_draft = media.probe(draft_mp4)
+        self.assertEqual(info_draft["width"], 540)
+        self.assertEqual(info_draft["height"], 960)
+
+        print("PASS test_all_six_stack_render_combinations")
+
 
 if __name__ == "__main__":
     unittest.main()

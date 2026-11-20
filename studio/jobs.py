@@ -628,6 +628,13 @@ def render_one(job, clip, words, quality="final"):
         # Ensure {cid}_edit.json exists
         edit_file = d / "clips" / f"{clip['id']}_edit.json"
         if not edit_file.is_file():
+            if clip.get("facecam") and not clip.get("facecam_focus") and src.is_file():
+                try:
+                    foc = facecam.find_clip_face_focus(src, clip["facecam"], clip["start"], clip["end"])
+                    if foc:
+                        clip["facecam_focus"] = foc
+                except Exception:
+                    pass
             ed = edit.init_edit(job, clip, near, clip.get("facecam"))
             edit.save_edit(edit_file, ed)
         else:
@@ -1249,6 +1256,14 @@ def _run_job(job):
                     face = _facecam(job)
                 if face:
                     c["facecam"] = face
+
+            if c.get("facecam") and job.get("source_path"):
+                try:
+                    fc_focus = facecam.find_clip_face_focus(job["source_path"], c["facecam"], c["start"], c["end"])
+                    if fc_focus:
+                        c["facecam_focus"] = fc_focus
+                except Exception:
+                    pass
 
             ed = edit.init_edit(job, c, words, c.get("facecam"))
             (d / "clips").mkdir(parents=True, exist_ok=True)

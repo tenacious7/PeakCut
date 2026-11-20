@@ -3298,6 +3298,13 @@ function collectClipEdit() {
 
   const layout = $("#dlg_layout") ? $("#dlg_layout").value : "blur";
   const splitRatio = $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.40;
+  const camSwap = $("#dlg_cam_swap") ? $("#dlg_cam_swap").checked : false;
+
+  let facecam = D.edit?.facecam ? JSON.parse(JSON.stringify(D.edit.facecam)) : null;
+  if (facecam) {
+    const faceZoom = $("#dlg_face_zoom") ? Number($("#dlg_face_zoom").value) : (facecam.zoom || 1.0);
+    facecam.zoom = faceZoom;
+  }
 
   const memeVal = $("#dlg_meme") ? $("#dlg_meme").value : "";
   const musicVal = $("#dlg_music") ? $("#dlg_music").value : "";
@@ -3320,7 +3327,9 @@ function collectClipEdit() {
     end,
     layout,
     split_ratio: splitRatio,
-    facecam: D.edit?.facecam || null,
+    cam_swap: camSwap,
+    facecam: facecam,
+    facecam_override: D.edit?.facecam_override || false,
     caption: {
       enabled: capEnabled,
       style: capStyle,
@@ -3350,6 +3359,7 @@ function collectGlobalPatch() {
   return {
     layout: ed.layout,
     split_ratio: ed.split_ratio,
+    cam_swap: ed.cam_swap,
     caption: {
       enabled: ed.caption.enabled,
       style: ed.caption.style,
@@ -3368,7 +3378,7 @@ function collectGlobalPatch() {
 }
 
 function syncLiveOverlay() {
-  const vwrap = $("#vwrap"), hookBox = $("#liveHookBox"), capBox = $("#liveCapBox");
+  const vwrap = $("#vwrap"), hookBox = $("#liveHookBox"), capBox = $("#liveCapBox"), seamEl = $("#liveStackSeam");
   if (!vwrap || !hookBox) return;
 
   const width = vwrap.clientWidth || 320;
@@ -3400,6 +3410,14 @@ function syncLiveOverlay() {
     capBox.style.display = capEnabled ? "block" : "none";
     capBox.style.fontSize = Math.max(11, Math.round(capSize * scale * 2.2)) + "px";
     capBox.style.top = ((capY / 1920) * 100) + "%";
+  }
+
+  if (seamEl) {
+    const isStack = ($("#dlg_layout") ? $("#dlg_layout").value : "blur") === "stack";
+    const sr = $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.40;
+    const isSwap = $("#dlg_cam_swap") ? $("#dlg_cam_swap").checked : false;
+    seamEl.style.display = isStack ? "block" : "none";
+    seamEl.style.top = ((isSwap ? (1 - sr) : sr) * 100) + "%";
   }
 }
 
@@ -3451,6 +3469,7 @@ function drawClipDlg(full) {
   const cap = ed.caption || { enabled: c.captions !== false, style: c.style || "bounce", font_size: 132, y_pos: 1630, words: c.words || [] };
   const layout = ed.layout || c.layout || "blur";
   const splitRatio = ed.split_ratio != null ? ed.split_ratio : (c.split_ratio || 0.40);
+  const camSwap = ed.cam_swap != null ? !!ed.cam_swap : !!c.cam_swap;
   const memeVal = ed.audio ? (ed.audio.meme_mood || (ed.audio.meme ? "horn" : "")) : (c.meme || "");
   const musicVal = ed.audio ? (ed.audio.music_bed || (ed.audio.music ? "upbeat" : "")) : (c.music || "");
   const startVal = ed.start != null ? ed.start : c.start;
@@ -3477,6 +3496,9 @@ function drawClipDlg(full) {
     stageHtml = `<div class="video-preview-wrap" id="vwrap">
       <video id="dlgVideo" src="${videoFile}" poster="${posterFile}" controls playsinline preload="metadata"></video>
       <div class="live-overlay-container" id="liveOverlay">
+        <div id="liveStackSeam" style="position:absolute;left:0;right:0;border-bottom:2px dashed rgba(255,102,0,0.6);pointer-events:none;z-index:5;top:${((camSwap ? (1 - splitRatio) : splitRatio) * 100)}%;display:${layout === 'stack' ? 'block' : 'none'}">
+          <span style="position:absolute;right:8px;bottom:2px;font-size:10px;font-weight:700;color:#fff;background:rgba(0,0,0,0.6);padding:1px 6px;border-radius:3px">SEAM</span>
+        </div>
         <div id="liveHookBox" class="live-hook-box ${hk.style === 'nobox' ? 'nobox' : ''}" style="top:${(hk.y_pos/1920)*100}%;display:${hk.enabled !== false ? 'block' : 'none'}">
           ${esc(hk.text || "BIG TEXT PREVIEW")}
         </div>
@@ -3540,8 +3562,9 @@ function drawClipDlg(full) {
               <span>Vertical Position (Y): <b id="hookYVal" style="color:var(--brand-ink)">${hk.y_pos || 300}px</b></span>
             </div>
             <input type="range" id="dlg_hook_y" min="80" max="1750" step="10" value="${hk.y_pos || 300}" style="width:100%">
-            <div style="display:flex;gap:4px;margin-top:4px">
+            <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">
               <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 220) < 50 ? 'active' : ''}" data-hook-pos="220">Top</button>
+              <button type="button" class="cap-anchor-btn" data-hook-pos="seam" title="Place Hook right at the panel seam">On Seam</button>
               <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 400) < 50 ? 'active' : ''}" data-hook-pos="400">Upper</button>
               <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 960) < 50 ? 'active' : ''}" data-hook-pos="960">Middle</button>
               <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 1300) < 50 ? 'active' : ''}" data-hook-pos="1300">Above Captions</button>
@@ -3623,7 +3646,43 @@ function drawClipDlg(full) {
                 <button type="button" class="split-preset-btn ${splitRatio === 0.40 ? 'active' : ''}" data-dlg-ratio="0.40">40/60</button>
                 <button type="button" class="split-preset-btn ${splitRatio === 0.50 ? 'active' : ''}" data-dlg-ratio="0.50">50/50</button>
               </div>
+              <label class="ck" style="margin-top:6px;font-size:11px;display:flex;align-items:center;gap:4px">
+                <input type="checkbox" id="dlg_cam_swap" ${camSwap ? 'checked' : ''}> Swap (Gameplay on top)
+              </label>
               <input type="hidden" id="dlg_split_ratio" value="${splitRatio}">
+            </div>
+          </div>
+
+          <!-- Facecam Zoom & Nudge Focus -->
+          <div id="dlgFaceControls" style="display:${(layout === 'stack' || layout === 'gameplay' || !!ed.facecam) ? 'block' : 'none'};margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <span style="font-size:11px;font-weight:700;color:var(--brand-ink)">Facecam Zoom &amp; Nudge Focus</span>
+              <button type="button" class="btn sm ghost" data-act="applyfaceall" style="padding:2px 8px;font-size:11px" title="Apply facecam zoom to all clips">⚡ Apply zoom to all</button>
+            </div>
+            <div style="margin-bottom:6px">
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px">
+                <span>Zoom: <b id="faceZoomVal" style="color:var(--brand-ink)">${(ed.facecam?.zoom || 1.0).toFixed(2)}x</b></span>
+                <div style="display:flex;gap:4px">
+                  <button type="button" class="btn xs ghost" data-face-zoom="1.0">Fit (1.0x)</button>
+                  <button type="button" class="btn xs ghost" data-face-zoom="1.25">1.25x</button>
+                  <button type="button" class="btn xs ghost" data-face-zoom="1.5">1.5x</button>
+                  <button type="button" class="btn xs ghost" data-face-zoom="2.0">2.0x</button>
+                </div>
+              </div>
+              <input type="range" id="dlg_face_zoom" min="1.0" max="2.5" step="0.05" value="${ed.facecam?.zoom || 1.0}" style="width:100%">
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--dim);margin-bottom:4px">
+                <span>Face Focus: <b id="faceFocusVal" style="color:var(--brand-ink)">${ed.facecam?.focus ? `(${ed.facecam.focus[0]}, ${ed.facecam.focus[1]})` : 'Auto Center'}</b></span>
+                <button type="button" class="btn xs ghost" data-act="resetfocus" title="Reset to auto box center">Reset Center</button>
+              </div>
+              <div style="display:flex;gap:4px;align-items:center">
+                <span style="font-size:11px;color:var(--dim)">Nudge:</span>
+                <button type="button" class="btn xs" data-nudge-focus="-30,0" title="Nudge face focus Left">← Left</button>
+                <button type="button" class="btn xs" data-nudge-focus="30,0" title="Nudge face focus Right">Right →</button>
+                <button type="button" class="btn xs" data-nudge-focus="0,-30" title="Nudge face focus Up">↑ Up</button>
+                <button type="button" class="btn xs" data-nudge-focus="0,30" title="Nudge face focus Down">Down ↓</button>
+              </div>
             </div>
           </div>
         </div>
@@ -3715,7 +3774,16 @@ function drawClipDlg(full) {
     }));
     $$("#clipdlg [data-hook-pos]").forEach(b => b.addEventListener("click", () => {
       $$("#clipdlg [data-hook-pos]").forEach(x => x.classList.toggle("active", x === b));
-      if ($("#dlg_hook_y")) { $("#dlg_hook_y").value = b.dataset.hookPos; syncLiveOverlay(); }
+      if (b.dataset.hookPos === "seam") {
+        const sr = Number($("#dlg_split_ratio") ? $("#dlg_split_ratio").value : 0.40);
+        const isSwap = $("#dlg_cam_swap") ? $("#dlg_cam_swap").checked : false;
+        const camH = Math.round(1920 * sr / 2) * 2;
+        const gameH = 1920 - camH;
+        const seamY = isSwap ? (gameH - 90) : (camH - 90);
+        if ($("#dlg_hook_y")) { $("#dlg_hook_y").value = Math.max(80, seamY); syncLiveOverlay(); }
+      } else {
+        if ($("#dlg_hook_y")) { $("#dlg_hook_y").value = b.dataset.hookPos; syncLiveOverlay(); }
+      }
     }));
     $$("#clipdlg [data-cap-size]").forEach(b => b.addEventListener("click", () => {
       if ($("#dlg_cap_size")) { $("#dlg_cap_size").value = b.dataset.capSize; syncLiveOverlay(); }
@@ -3729,10 +3797,67 @@ function drawClipDlg(full) {
       const r = Number(b.dataset.dlgRatio);
       if ($("#dlg_split_ratio")) $("#dlg_split_ratio").value = r;
       if ($("#dlgSplitRatioText")) $("#dlgSplitRatioText").textContent = Math.round(r * 100) + "% / " + Math.round((1 - r) * 100) + "%";
+      const isSwap = $("#dlg_cam_swap") ? $("#dlg_cam_swap").checked : false;
+      const camH = Math.round(1920 * r / 2) * 2;
+      const gameH = 1920 - camH;
+      const seamY = isSwap ? (gameH - 90) : (camH - 90);
+      const currHookY = $("#dlg_hook_y") ? Number($("#dlg_hook_y").value) : 300;
+      if (Math.abs(currHookY - seamY) < 180 && $("#dlg_hook_y")) {
+        $("#dlg_hook_y").value = Math.max(80, seamY);
+      }
+      syncLiveOverlay();
     }));
+    $("#dlg_cam_swap")?.addEventListener("change", () => {
+      const isStack = ($("#dlg_layout") ? $("#dlg_layout").value : "blur") === "stack";
+      if (isStack) {
+        const sr = Number($("#dlg_split_ratio") ? $("#dlg_split_ratio").value : 0.40);
+        const isSwap = $("#dlg_cam_swap") ? $("#dlg_cam_swap").checked : false;
+        const camH = Math.round(1920 * sr / 2) * 2;
+        const gameH = 1920 - camH;
+        const seamY = isSwap ? (gameH - 90) : (camH - 90);
+        const currHookY = $("#dlg_hook_y") ? Number($("#dlg_hook_y").value) : 300;
+        if (Math.abs(currHookY - seamY) < 180 && $("#dlg_hook_y")) {
+          $("#dlg_hook_y").value = Math.max(80, seamY);
+        }
+      }
+      syncLiveOverlay();
+    });
+    $("#dlg_face_zoom")?.addEventListener("input", e => {
+      const z = Number(e.target.value);
+      if ($("#faceZoomVal")) $("#faceZoomVal").textContent = z.toFixed(2) + "x";
+    });
+    $$("#clipdlg [data-face-zoom]").forEach(btn => btn.addEventListener("click", () => {
+      const z = Number(btn.dataset.faceZoom);
+      if ($("#dlg_face_zoom")) {
+        $("#dlg_face_zoom").value = z;
+        if ($("#faceZoomVal")) $("#faceZoomVal").textContent = z.toFixed(2) + "x";
+      }
+    }));
+    $$("#clipdlg [data-nudge-focus]").forEach(btn => btn.addEventListener("click", () => {
+      const parts = btn.dataset.nudgeFocus.split(",").map(Number);
+      if (!D.edit) D.edit = {};
+      if (!D.edit.facecam) D.edit.facecam = {x: 0, y: 0, w: 400, h: 300};
+      const fc = D.edit.facecam;
+      if (!fc.focus) {
+        fc.focus = [Math.round(fc.x + fc.w / 2), Math.round(fc.y + fc.h / 2)];
+      }
+      fc.focus[0] += parts[0];
+      fc.focus[1] += parts[1];
+      if ($("#faceFocusVal")) $("#faceFocusVal").textContent = `(${fc.focus[0]}, ${fc.focus[1]})`;
+      toast(`Face focus nudged to (${fc.focus[0]}, ${fc.focus[1]}). Click 'Save Draft' to preview.`, "ok");
+    }));
+    $("#clipdlg [data-act='resetfocus']")?.addEventListener("click", () => {
+      if (D.edit?.facecam) {
+        D.edit.facecam.focus = null;
+        if ($("#faceFocusVal")) $("#faceFocusVal").textContent = "Auto Center";
+        toast("Face focus reset to auto center. Click 'Save Draft' to preview.", "ok");
+      }
+    });
     $("#dlg_layout")?.addEventListener("change", e => {
       const isStack = e.target.value === "stack";
       if ($("#dlgStackControls")) $("#dlgStackControls").style.display = isStack ? "block" : "none";
+      if ($("#dlgFaceControls")) $("#dlgFaceControls").style.display = (isStack || e.target.value === "gameplay") ? "block" : "none";
+      syncLiveOverlay();
     });
 
     setupOverlayDraggables();
@@ -4329,10 +4454,25 @@ document.addEventListener("click", async e => {
       try {
         const patch = {
           layout: $("#dlg_layout").value,
-          split_ratio: Number($("#dlg_split_ratio")?.value || 0.40)
+          split_ratio: Number($("#dlg_split_ratio")?.value || 0.40),
+          cam_swap: $("#dlg_cam_swap") ? $("#dlg_cam_swap").checked : false
         };
         await send(`/api/jobs/${encodeURIComponent(D.jid)}/apply-to-all`, patch, "POST");
         toast("Layout settings applied to all clips in this video", "ok");
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
+      return;
+    }
+    if (a === "applyfaceall") {
+      b.disabled = true;
+      try {
+        const patch = {
+          facecam: {
+            zoom: Number($("#dlg_face_zoom")?.value || 1.0)
+          }
+        };
+        await send(`/api/jobs/${encodeURIComponent(D.jid)}/apply-to-all`, patch, "POST");
+        toast("Facecam zoom applied to all pending clips", "ok");
       } catch (err) { toast(err.message, "bad"); }
       finally { b.disabled = false; }
       return;

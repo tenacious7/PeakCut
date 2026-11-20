@@ -1,0 +1,1 @@
+rapidocr-onnxruntime==1.4.4  # optional: vision.py game banners (WASTED, MISSION PASSED). Install: PY -m pip install -r requirements-vision.txt

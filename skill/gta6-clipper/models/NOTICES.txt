@@ -1,0 +1,6 @@
+Models shipped with this skill (all free to redistribute):
+- yunet.onnx: YuNet face detector, OpenCV Zoo (github.com/opencv/opencv_zoo), MIT licence.
+- face.tflite: MediaPipe BlazeFace short-range (ai.google.dev/edge/mediapipe), Apache 2.0.
+- object.tflite: MediaPipe EfficientDet-Lite object detector (ai.google.dev/edge/mediapipe), Apache 2.0.
+- face_landmarker.task: MediaPipe Face Landmarker with blendshapes (ai.google.dev/edge/mediapipe), Apache 2.0. Used to see whose mouth moves (active speaker).
+Font: fonts/Montserrat-ExtraBold.ttf, SIL Open Font License 1.1 (fonts/OFL.txt).

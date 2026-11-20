@@ -188,11 +188,20 @@ def _twitch_profile(url: str):
 
 def _ydl_info(url: str) -> dict:
     """Live details from yt-dlp without downloading anything (no formats are fetched)."""
-    import yt_dlp
-    from .live import _Quiet
-    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True, "noplaylist": True,
-                           "logger": _Quiet(), "socket_timeout": 10}) as y:
-        return y.extract_info(url, download=False) or {}
+    from . import media
+    try:
+        with media._ydl({"skip_download": True, "socket_timeout": 10}) as y:
+            return y.extract_info(url, download=False) or {}
+    except Exception as e:
+        if media.is_youtube(url) and media._BOT_CHECK.search(str(e)):
+            try:
+                fallback_opts = {"skip_download": True, "socket_timeout": 10,
+                                 "extractor_args": {"youtube": {"player_client": ["mweb", "android"]}}}
+                with media._ydl(fallback_opts) as y:
+                    return y.extract_info(url, download=False) or {}
+            except Exception:
+                raise e
+        raise
 
 
 def _no_date(title: str) -> str:

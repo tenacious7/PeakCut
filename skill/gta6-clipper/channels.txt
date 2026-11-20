@@ -1,0 +1,15 @@
+# One YouTube channel id per line (find it: youtube.com/@handle -> share -> copy channel id). Text after # is a note.
+# A line 'search: <words>' also checks YouTube search, newest uploads first, most viewed picked first.
+search: GTA 6 reaction  # anyone's fresh reaction videos
+search: playing GTA 6  # launch-week streams and gameplay (from 19 Nov)
+search: GTA 6 gameplay reaction  # reactions to the gameplay, not just the trailers
+UC6VcWc1rAoWdBCM0JxrRQ3A  # Rockstar Games
+UCWsDFcIhY2DBi3GB5uykGXA  # IShowSpeed
+UCvCfpQXRXdJdL07pzTIA6Cw  # Kai Cenat Live
+UCoEmptob-eEGKk18c2VplJg  # Kai Cenat
+UCmDTrq0LNgPodDOFZiSbsww  # xQc
+UCjiXtODGCCulmhwypZAWSag  # Jynxzi
+UC63anZxfVGHUEmfBAf5w7pw  # CaseOh
+UCh2aTKSbIyxpnOsbHsmV-ig  # Agent 00
+# Launch day: Twitch VODs (last 24 h) of the top live channels in this category; live ones are printed with their live.py command
+twitch: Grand Theft Auto VI  # Twitch category, English, 3 VODs

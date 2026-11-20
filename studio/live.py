@@ -11,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import alerts, auth, brain, config, creators, ctx, facecam, games, jobs, load, media, transcribe, usage
+from . import alerts, auth, brain, config, creators, ctx, facecam, games, jobs, load, media, render, transcribe, usage
 
 # ":username!user@host PRIVMSG #channel :the message"
 _NICK = re.compile(r"(?m)^:([A-Za-z0-9_]{2,25})!")
@@ -64,18 +64,32 @@ class _Quiet:
 
 def resolve(url: str) -> dict:
     """Ask yt-dlp for the stream's playable address. Raises NotLive if the channel is offline."""
-    import yt_dlp
-    opts = {"quiet": True, "no_warnings": True, "noplaylist": True, "logger": _Quiet(),
-            "format": "b[height<=720]/bv*[height<=720]+ba/b"}
+    opts = {"format": "b[height<=720]/bv*[height<=720]+ba/b"}
     if media.is_youtube(url) and media.youtube_paused():
         raise NotLive(media.YT_BLOCKED)
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
+        with media._ydl(opts) as ydl:
             info = ydl.extract_info(url, download=False)
     except Exception as e:  # noqa: BLE001
-        if media.note_refusal(url, e):
-            raise NotLive(media.YT_BLOCKED) from e
-        raise NotLive(str(e)[-200:]) from e
+        err_str = str(e).lower()
+        if "live event has ended" in err_str or "not currently live" in err_str or "offline" in err_str:
+            raise NotLive("This live stream has ended or is offline right now.") from e
+        if media.is_youtube(url) and media._BOT_CHECK.search(str(e)):
+            try:
+                fallback_opts = {**opts, "extractor_args": {"youtube": {"player_client": ["mweb", "android"]}}}
+                with media._ydl(fallback_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+            except Exception as e2:
+                err2_str = str(e2).lower()
+                if "live event has ended" in err2_str or "not currently live" in err2_str or "offline" in err2_str:
+                    raise NotLive("This live stream has ended or is offline right now.") from e2
+                if media.note_refusal(url, e2):
+                    raise NotLive(media.YT_BLOCKED) from e2
+                raise NotLive(str(e2)[-200:]) from e2
+        else:
+            if media.note_refusal(url, e):
+                raise NotLive(media.YT_BLOCKED) from e
+            raise NotLive(str(e)[-200:]) from e
     if not info or not info.get("is_live"):
         raise NotLive("This channel is not live right now.")
     fmts = info.get("requested_formats") or [info]
@@ -156,6 +170,7 @@ class Session:
         self.game = ""                # which game this stream is, when it can be told
         self.facecam_box = None       # where the webcam is, found once the first clip is made
         self.facecam_checked = False  # the look is made once, even when it finds nothing
+        self.last_checkpoint = 0.0    # end of the last sequential or manual clip
         self.ai_busy = 0.0            # when the AI check now running was started, 0 when none is
 
     def _ask_ai(self, window=None, why=None):
@@ -189,7 +204,7 @@ class Session:
             box = facecam.detect(src, ask=brain.look_for_facecam)
         except Exception:  # noqa: BLE001 - a missing facecam is not a failure
             return None
-        if not box or box.get("conf") != "high":
+        if not box or box.get("conf") == "none":
             return None
         self.job["facecam"] = [box["x"], box["y"], box["w"], box["h"]]
         return self.job["facecam"]
@@ -567,12 +582,24 @@ class Session:
             c.update(start=round(req["start"], 2), end=round(min(req["end"], self.samples / SR), 2), score=0)
             if req.get("why"):
                 c["reason"] = req["why"]
+            if req.get("layout"):
+                c["layout"] = req["layout"]
+            if req.get("style"):
+                c["style"] = req["style"]
+            if req.get("captions") is not None:
+                c["captions"] = req["captions"]
+            if req.get("cam_delay") is not None:
+                c["cam_delay"] = req["cam_delay"]
             self._add_clip(c)
 
     def _add_clip(self, c):
         self.n += 1
-        c.update(id=f"clip{self.n:03d}", style=self.settings["style"], layout=self.settings["layout"],
-                 captions=self.job["options"].get("captions", True), status="queued", version=0, made_at=time.time())
+        c.update(id=f"clip{self.n:03d}",
+                 style=c.get("style") or self.settings.get("style", "bold_stroke"),
+                 layout=c.get("layout") or self.settings.get("layout", "crop"),
+                 captions=c.get("captions") if c.get("captions") is not None else self.job.get("options", {}).get("captions", True),
+                 cam_delay=float(c.get("cam_delay") if c.get("cam_delay") is not None else self.settings.get("cam_delay", 0.0) or 0.0),
+                 status="queued", version=0, made_at=time.time())
         with self.lock:
             self.job["clips"].append(c)
         jobs.save(self.job)
@@ -600,25 +627,27 @@ class Session:
         src = self.dir / "clips" / f"{clip['id']}.src.ts"
         try:
             media.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(lst),
-                       "-c", "copy", str(src)])
+                       "-c", "copy", "-fflags", "+genpts", str(src)])
         except Exception as e:  # noqa: BLE001
             clip.update(status="error", error=media_safe(e))
             jobs.save(self.job)
             return
         finally:
             lst.unlink(missing_ok=True)
-        # Only the gameplay layout uses a webcam, and only once the clip's own file is written: the
+        # Only the gameplay and stack layouts use a webcam, and only once the clip's own file is written: the
         # webcam is looked for in it, once per stream.
-        if clip.get("layout") == "gameplay":
-            if not self.facecam_checked:
+        if clip.get("layout") in ("gameplay", "stack"):
+            if not self.facecam_checked or not self.facecam_box:
                 self.facecam_box = self._find_facecam(src)
                 self.facecam_checked = True
             if self.facecam_box:
                 clip["facecam"] = self.facecam_box
         dur = segs[-1][2] - segs[0][1]
-        offset = self._align(src, segs[0][1] + self.clock_fix, dur)
+        offset, heard = self._align(src, segs[0][1] + self.clock_fix, dur)
         self.clock_fix = offset - segs[0][1]  # the two clocks drift ~4 s an hour; start the next clip from here
         clip.update(src=str(src), src_offset=round(offset, 2), src_end=round(offset + dur, 2))
+        if heard:
+            clip["src_words"] = heard
         clip["start"] = max(clip["start"], clip["src_offset"])
         clip["end"] = min(clip["end"], clip["src_end"])
         jobs.render_one(self.job, clip, list(self.words))
@@ -628,6 +657,7 @@ class Session:
         clocks that drift apart, so transcribe the clip's own audio and line its words up with the live words.
         Local speech model only: no AI calls."""
         key = lambda w: re.sub(r"[^a-z0-9]", "", w.lower())
+        heard = []
         try:
             wav = src.with_suffix(".wav")
             media.extract_audio(src, wav)
@@ -644,25 +674,96 @@ class Session:
                 if m:
                     diffs.append(min(m, key=lambda s: abs(s - (guess + h["s"]))) - h["s"])
             if len(diffs) >= 4:
-                return float(np.median(diffs))
+                return float(np.median(diffs)), heard
         except Exception:  # noqa: BLE001 - fall back to the piece clock
             pass
-        return guess
+        return guess, heard
 
     def clip_last(self, seconds):
-        end = self.samples / SR
-        if end < 5:
+        return self.clip_range(seconds=seconds)
+
+    def clip_range(self, start=None, end=None, seconds=None, since_last=False, layout=None, style=None, captions=None, cam_delay=None):
+        now = self.samples / SR
+        if now < 3:
             raise ValueError("Nothing has been recorded yet.")
-        self.manual.append({"start": max(0.0, end - seconds), "end": end})
+        buf_min = self.segments[0][1] if self.segments else 0.0
+
+        if since_last:
+            st = max(buf_min, self.last_checkpoint)
+            en = now
+            if en - st < 3:
+                raise ValueError("Not enough new footage has been recorded since the last clip.")
+            if en - st > 180:
+                en = min(now, st + 180)
+            self.last_checkpoint = en
+            start, end = st, en
+        elif start is not None and end is not None:
+            st = max(buf_min, float(start))
+            en = min(now, float(end))
+            if en <= st:
+                raise ValueError("The end of the clip must be after its start.")
+            if en - st < 3:
+                raise ValueError("A clip must be at least 3 seconds long.")
+            if en - st > 180:
+                en = st + 180
+            self.last_checkpoint = max(self.last_checkpoint, en)
+            start, end = st, en
+        elif seconds is not None:
+            sec = max(5.0, min(180.0, float(seconds)))
+            en = now
+            st = max(buf_min, max(0.0, en - sec))
+            self.last_checkpoint = max(self.last_checkpoint, en)
+            start, end = st, en
+        else:
+            raise ValueError("Specify a range or duration to clip.")
+
+        if layout and layout in render.LAYOUTS:
+            self.settings["layout"] = layout
+            self.job.setdefault("options", {})["layout"] = layout
+            if layout in ("gameplay", "stack"):
+                self.facecam_checked = False
+        if style and style in render.STYLES:
+            self.settings["style"] = style
+            self.job.setdefault("options", {})["style"] = style
+        if captions is not None:
+            self.job.setdefault("options", {})["captions"] = bool(captions)
+        if cam_delay is not None:
+            try:
+                cd = round(max(-3.0, min(3.0, float(cam_delay))), 2)
+                self.settings["cam_delay"] = cd
+                self.job.setdefault("options", {})["cam_delay"] = cd
+            except (ValueError, TypeError):
+                pass
+
+        req = {
+            "start": round(start, 2),
+            "end": round(end, 2),
+            "layout": layout or self.settings.get("layout", "crop"),
+            "style": style or self.settings.get("style", "bold_stroke"),
+            "captions": bool(captions) if captions is not None else self.job.get("options", {}).get("captions", True),
+            "cam_delay": float(self.settings.get("cam_delay", 0.0) or 0.0)
+        }
+        self.manual.append(req)
+        return req
 
     def _publish(self):
         elapsed = self.samples / SR
         lines = brain.make_lines([w for w in self.words if w["s"] >= self.t_done - 45])[-5:]
+        b_start = round(self.segments[0][1], 1) if self.segments else 0.0
+        b_end = round(self.segments[-1][2], 1) if self.segments else round(elapsed, 1)
         with self.lock:
             sec = int(elapsed)
             self.job.update(
                 duration=elapsed,
-                live={"elapsed": round(elapsed), "buffer_sec": round(self.segments[-1][2] - self.segments[0][1]) if self.segments else 0,
+                live={"elapsed": round(elapsed),
+                      "buffer_sec": round(self.segments[-1][2] - self.segments[0][1]) if self.segments else 0,
+                      "buffer_start": b_start,
+                      "buffer_end": b_end,
+                      "last_checkpoint": round(self.last_checkpoint, 1),
+                      "layout": self.settings.get("layout", "crop"),
+                      "style": self.settings.get("style", "bold_stroke"),
+                      "captions": bool(self.settings.get("captions", True)),
+                      "cam_delay": float(self.settings.get("cam_delay", 0.0) or 0.0),
                       "lines": [l["text"] for l in lines], "level": [round(x) for x in self.db[-60:]],
                       "chat": [self.chat.get(t, 0) for t in range(max(0, sec - 60), sec)] if self.chat_on or self.chat_total else None,
                       "checks": self.checks, "skipped": self.skipped, "tokens": self.tokens, "words": len(self.words),

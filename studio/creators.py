@@ -6,7 +6,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import config, ctx
+from . import config, ctx, rules
 
 
 def _root() -> Path:
@@ -112,14 +112,52 @@ def forget(uid: str):
 
 
 def all_creators() -> list:
-    return [copy.deepcopy(c) for c in list(_mine().values())]
+    out = []
+    for c in list(_mine().values()):
+        cp = copy.deepcopy(c)
+        cp["clip_rule"] = rules.for_creator(cp)
+        out.append(cp)
+    return out
 
 
 def get(cid):
     if not cid or not re.fullmatch(r"[\w\-]{1,60}", str(cid)):
         return None
     c = _mine().get(str(cid))
-    return copy.deepcopy(c) if c else None
+    if not c:
+        return None
+    cp = copy.deepcopy(c)
+    cp["clip_rule"] = rules.for_creator(cp)
+    return cp
+
+
+def catalog() -> list:
+    f = Path(__file__).resolve().parent / "streamers.json"
+    if not f.exists():
+        return []
+    try:
+        data = json.loads(f.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    res = []
+    seen = set()
+    for lang, items in data.items():
+        if lang.startswith("_") or not isinstance(items, list):
+            continue
+        for s in items:
+            key = (s.get("platform", ""), (s.get("handle") or "").lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            rule = rules.get(s.get("handle", ""), s.get("platform", ""))
+            res.append({
+                "name": s.get("name"),
+                "platform": s.get("platform"),
+                "handle": s.get("handle"),
+                "confidence": s.get("confidence", "high"),
+                "rule": rule,
+            })
+    return res
 
 
 def _write(c):

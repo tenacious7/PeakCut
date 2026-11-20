@@ -1,7 +1,9 @@
 """Getting video in: link download, probing, audio extraction, loudness."""
 import contextlib
 import json
+import os
 import re
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -17,11 +19,16 @@ NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 # YouTube sometimes refuses a server's downloads altogether ("sign in to confirm you're not a bot"). It is a
 # refusal of the server, not of one video, so once it happens YouTube links are turned away at once for a few
 # minutes, with a clear message, instead of each one waiting to fail. Then the next link simply tries again.
-YT_PAUSE = 600
+YT_PAUSE = getattr(config, "YT_PAUSE", 0)
 _yt_refused_until = 0.0
-YT_BLOCKED = ("YouTube isn't letting PeakCut download videos right now. Upload the video file instead, or use a "
-              "Twitch or Kick link. YouTube links will be tried again in a few minutes.")
-_BOT_CHECK = re.compile(r"not a bot|confirm you.?re not|sign in to confirm(?! your age)", re.I)
+YT_BLOCKED = ("YouTube is asking for bot/sign-in verification for this video. "
+              "To fix this, add your YouTube cookies in Settings > YouTube & Cookies, "
+              "or upload the video file directly.")
+_BOT_CHECK = re.compile(
+    r"not a bot|confirm you.?re not|sign in to confirm(?! your age)|"
+    r"use --cookies|Please sign in|HTTP Error 429|The page needs to be reloaded",
+    re.I
+)
 
 
 class YouTubeBlocked(RuntimeError):
@@ -38,6 +45,12 @@ def youtube_paused() -> bool:
     return time.time() < _yt_refused_until
 
 
+def unpause_youtube():
+    """Clear any temporary YouTube pause lock."""
+    global _yt_refused_until
+    _yt_refused_until = 0.0
+
+
 def check_youtube(url: str):
     """Raise YouTubeBlocked straight away if YouTube is refusing this server right now."""
     if is_youtube(url) and youtube_paused():
@@ -47,8 +60,12 @@ def check_youtube(url: str):
 def note_refusal(url: str, err) -> bool:
     """If this error is YouTube refusing the server, pause YouTube links for a while. True if it was."""
     global _yt_refused_until
+    err_str = str(err).lower()
+    if "live event has ended" in err_str or "not currently live" in err_str or "video unavailable" in err_str or "private video" in err_str:
+        return False
     if is_youtube(url) and _BOT_CHECK.search(str(err)):
-        _yt_refused_until = time.time() + YT_PAUSE
+        if YT_PAUSE > 0:
+            _yt_refused_until = time.time() + YT_PAUSE
         return True
     return False
 
@@ -64,6 +81,61 @@ def _youtube_guard(url):
         if note_refusal(url, e):
             raise YouTubeBlocked(YT_BLOCKED) from None
         raise
+
+
+def get_cookie_file() -> Path | None:
+    """Find an active Netscape cookies file from config or the data directory."""
+    if getattr(config, "COOKIES_FILE", ""):
+        p = Path(config.COOKIES_FILE)
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    for name in ("cookies.txt", "youtube_cookies.txt", "youtube.cookies.txt"):
+        p = config.DATA_DIR / name
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def get_browser_cookies() -> str:
+    return (getattr(config, "COOKIES_BROWSER", "") or "").strip().lower()
+
+
+def cookie_status() -> dict:
+    cp = get_cookie_file()
+    paused = youtube_paused()
+    left = max(0, int(_yt_refused_until - time.time())) if paused else 0
+    return {
+        "has_cookies": bool(cp),
+        "file_name": cp.name if cp else "",
+        "size_bytes": cp.stat().st_size if cp else 0,
+        "browser": get_browser_cookies(),
+        "paused": paused,
+        "pause_seconds_left": left,
+        "message": YT_BLOCKED if paused else "",
+    }
+
+
+def save_cookies(text: str) -> dict:
+    """Save Netscape cookies text to data/cookies.txt and unpause YouTube."""
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("Cookie text cannot be empty.")
+    target = config.DATA_DIR / "cookies.txt"
+    target.write_text(text, encoding="utf-8")
+    unpause_youtube()
+    return cookie_status()
+
+
+def remove_cookies() -> dict:
+    """Remove any cookies.txt file from the data folder."""
+    for name in ("cookies.txt", "youtube_cookies.txt", "youtube.cookies.txt"):
+        p = config.DATA_DIR / name
+        if p.exists():
+            try:
+                p.unlink()
+            except OSError:
+                pass
+    return cookie_status()
 
 
 def site_allowed(url: str) -> bool:
@@ -95,12 +167,58 @@ class _Quiet:
     def error(self, m): pass
 
 
+def get_aria2c_path() -> str | None:
+    if not getattr(config, "USE_ARIA2", True):
+        return None
+    w = shutil.which("aria2c")
+    if w:
+        return w
+    local_bin = config.ROOT / "data" / "bin" / ("aria2c.exe" if os.name == "nt" else "aria2c")
+    if local_bin.is_file():
+        return str(local_bin)
+    data_bin = config.DATA_DIR / "bin" / ("aria2c.exe" if os.name == "nt" else "aria2c")
+    if data_bin.is_file():
+        return str(data_bin)
+    if os.name == "nt":
+        lad = os.environ.get("LOCALAPPDATA")
+        if lad:
+            wg = Path(lad) / "Microsoft" / "WinGet" / "Packages"
+            if wg.is_dir():
+                found = list(wg.glob("aria2.aria2_*/aria2-*/aria2c.exe"))
+                if found and found[0].is_file():
+                    return str(found[0])
+    return None
+
+
 def _ydl(opts):
     import yt_dlp
-    # a channel or playlist link is answered as "a list" straight away, never walked video by video
-    return yt_dlp.YoutubeDL({"noplaylist": True, "quiet": True, "no_warnings": True, "logger": _Quiet(),
-                             "extract_flat": "in_playlist", "playlistend": 1, "socket_timeout": 20,
-                             "concurrent_fragment_downloads": 4, **opts})
+    base = {
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": True,
+        "logger": _Quiet(),
+        "extract_flat": "in_playlist",
+        "playlistend": 1,
+        "socket_timeout": 20,
+        "concurrent_fragment_downloads": 8,
+        "http_chunk_size": 10485760,
+        "throttled_rate": "100K",
+        "buffersize": 1048576,
+    }
+    cf = get_cookie_file()
+    if cf and "cookiefile" not in opts:
+        base["cookiefile"] = str(cf)
+    elif get_browser_cookies() and "cookiesfrombrowser" not in opts:
+        base["cookiesfrombrowser"] = (get_browser_cookies(),)
+
+    if "outtmpl" in opts and "download_ranges" not in opts and "external_downloader" not in opts:
+        aria2 = get_aria2c_path()
+        if aria2:
+            base["external_downloader"] = {"default": aria2}
+            base["external_downloader_args"] = {
+                "default": ["-x", "16", "-s", "16", "-k", "1M", "--file-allocation=none", "--summary-interval=0"]
+            }
+    return yt_dlp.YoutubeDL({**base, **opts})
 
 
 def _video_format(height):
@@ -115,13 +233,50 @@ def _biggest(job_dir: Path, stem: str) -> Path:
     return files[0]
 
 
+def _extract_info(url: str, download=False) -> dict:
+    with _youtube_guard(url):
+        try:
+            with _ydl({}) as ydl:
+                return ydl.extract_info(url, download=download)
+        except Exception as e:
+            if is_youtube(url) and _BOT_CHECK.search(str(e)):
+                try:
+                    fallback_opts = {"extractor_args": {"youtube": {"player_client": ["mweb", "android"]}}}
+                    with _ydl(fallback_opts) as ydl:
+                        return ydl.extract_info(url, download=download)
+                except Exception:
+                    raise e
+            raise
+
+
+_INFO_CACHE: dict = {}
+
+
 def info(url: str) -> dict:
     """Title, channel and length, without downloading anything."""
-    with _youtube_guard(url), _ydl({}) as ydl:
-        i = ydl.extract_info(url, download=False)
-    return {"title": i.get("title") or "", "uploader": i.get("uploader") or i.get("channel") or "",
-            "duration": float(i.get("duration") or 0), "is_live": bool(i.get("is_live")),
-            "thumbnail": i.get("thumbnail") or "", "kind": i.get("_type") or "video"}
+    url = (url or "").strip()
+    now = time.time()
+    cached = _INFO_CACHE.get(url)
+    if cached and now - cached[0] < 900:  # 15 minutes cache
+        return dict(cached[1])
+    try:
+        i = _extract_info(url, download=False)
+    except Exception as e:
+        err_str = str(e).lower()
+        if "live event has ended" in err_str or "not currently live" in err_str:
+            raise ValueError("This YouTube live stream has ended. YouTube takes time to process the broadcast into a regular video before it can be clipped.") from e
+        if "private video" in err_str or "sign in if you've been granted access" in err_str:
+            raise ValueError("This video is private on YouTube. Make sure your account has access and cookies are saved.") from e
+        if "members-only" in err_str or "join this channel" in err_str:
+            raise ValueError("This video is for channel members only on YouTube.") from e
+        raise
+    out = {"title": i.get("title") or "", "uploader": i.get("uploader") or i.get("channel") or "",
+           "duration": float(i.get("duration") or 0), "is_live": bool(i.get("is_live")),
+           "thumbnail": i.get("thumbnail") or "", "kind": i.get("_type") or "video"}
+    if len(_INFO_CACHE) > 300:
+        _INFO_CACHE.pop(next(iter(_INFO_CACHE)))
+    _INFO_CACHE[url] = (now, dict(out))
+    return out
 
 
 def youtube_words(url: str):
@@ -130,15 +285,15 @@ def youtube_words(url: str):
     if not is_youtube(url):
         return None
     import json
-    with _youtube_guard(url), _ydl({}) as ydl:
-        i = ydl.extract_info(url, download=False)
-        auto = i.get("automatic_captions") or {}
-        key = next((k for k in auto if k.endswith("-orig")), None)
-        if not key and i.get("language") in auto:
-            key = i["language"]
-        track = next((f for f in auto.get(key) or [] if f.get("ext") == "json3" and f.get("url")), None) if key else None
-        if not track:
-            return None
+    i = _extract_info(url, download=False)
+    auto = i.get("automatic_captions") or {}
+    key = next((k for k in auto if k.endswith("-orig")), None)
+    if not key and i.get("language") in auto:
+        key = i["language"]
+    track = next((f for f in auto.get(key) or [] if f.get("ext") == "json3" and f.get("url")), None) if key else None
+    if not track:
+        return None
+    with _ydl({}) as ydl:
         raw = ydl.urlopen(track["url"]).read(40_000_000)
     return _caption_words(json.loads(raw)), key.replace("-orig", "")
 
@@ -149,15 +304,15 @@ def youtube_english_words(url: str):
     if not is_youtube(url):
         return None
     import json
-    with _youtube_guard(url), _ydl({}) as ydl:
-        i = ydl.extract_info(url, download=False)
-        tracks = []
-        for group in (i.get("subtitles") or {}, i.get("automatic_captions") or {}):
-            for k in ("en", "en-US", "en-GB"):
-                tracks.append(next((f for f in group.get(k) or [] if f.get("ext") == "json3" and f.get("url")), None))
-        track = next((t for t in tracks if t), None)
-        if not track:
-            return None
+    i = _extract_info(url, download=False)
+    tracks = []
+    for group in (i.get("subtitles") or {}, i.get("automatic_captions") or {}):
+        for k in ("en", "en-US", "en-GB"):
+            tracks.append(next((f for f in group.get(k) or [] if f.get("ext") == "json3" and f.get("url")), None))
+    track = next((t for t in tracks if t), None)
+    if not track:
+        return None
+    with _ydl({}) as ydl:
         raw = ydl.urlopen(track["url"]).read(40_000_000)
     words = _caption_words(json.loads(raw))
     return words or None
@@ -242,38 +397,142 @@ def save_thumb(job_dir: Path, url: str = "", video: Path = None) -> bool:
     return False
 
 
-def download_audio(url: str, job_dir: Path, on_progress=None) -> Path:
+class JobPaused(Exception):
+    """Raised when a job is paused by the user."""
+    pass
+
+
+def fmt_bytes(n) -> str:
+    if not n or n <= 0:
+        return ""
+    if n >= 1024 * 1024 * 1024:
+        return f"{n / (1024 * 1024 * 1024):.1f} GB"
+    if n >= 1024 * 1024:
+        return f"{n / (1024 * 1024):.1f} MB"
+    if n >= 1024:
+        return f"{n / 1024:.0f} KB"
+    return f"{int(n)} B"
+
+
+def fmt_eta(seconds) -> str:
+    s = int(seconds or 0)
+    if s <= 0:
+        return ""
+    m, sec = divmod(s, 60)
+    h, m = divmod(m, 60)
+    if h > 0:
+        return f"{h}h {m}m"
+    if m > 0:
+        return f"{m}m {sec:02d}s"
+    return f"{sec}s"
+
+
+def download_audio(url: str, job_dir: Path, on_progress=None, is_paused=None, start=None, end=None) -> Path:
     """Audio only: a few seconds even for long videos, and all the AI needs to pick clips."""
     def hook(d):
-        total = d.get("total_bytes") or d.get("total_bytes_estimate")
-        if on_progress and d.get("status") == "downloading" and total:
-            on_progress(d.get("downloaded_bytes", 0) / total)
+        if is_paused and is_paused():
+            raise JobPaused("Job paused by user")
+        if not on_progress:
+            return
+        status = d.get("status")
+        if status == "downloading":
+            total = d.get("total_bytes") or d.get("total_bytes_estimate")
+            pct = (d.get("downloaded_bytes", 0) / total) if total else 0.0
+            try:
+                on_progress(pct, d)
+            except TypeError:
+                on_progress(pct)
 
-    with _youtube_guard(url), _ydl({"format": "ba[ext=m4a]/ba/worst", "outtmpl": str(job_dir / "audio_src.%(ext)s"),
-               "progress_hooks": [hook]}) as ydl:
-        ydl.download([url])
+    opts = {
+        "format": "ba[ext=m4a]/ba/worst",
+        "outtmpl": str(job_dir / "audio_src.%(ext)s"),
+        "progress_hooks": [hook],
+    }
+    start_sec = max(0.0, float(start or 0.0))
+    end_sec = float(end) if end is not None else None
+    if start_sec > 0 or end_sec is not None:
+        from yt_dlp.utils import download_range_func
+        opts["download_ranges"] = download_range_func(None, [(start_sec, end_sec or float("inf"))])
+        opts["force_keyframes_at_cuts"] = True
+
+    with _youtube_guard(url):
+        try:
+            with _ydl(opts) as ydl:
+                ydl.download([url])
+        except Exception as e:
+            if isinstance(e, JobPaused) or "Job paused" in str(e):
+                raise JobPaused("Job paused by user") from None
+            if is_youtube(url) and _BOT_CHECK.search(str(e)):
+                try:
+                    fallback_opts = {**opts, "extractor_args": {"youtube": {"player_client": ["mweb", "android"]}}}
+                    with _ydl(fallback_opts) as ydl:
+                        ydl.download([url])
+                except Exception:
+                    raise e
+            else:
+                raise
     return _biggest(job_dir, "audio_src")
 
 
 def download(url: str, job_dir: Path, height=720) -> Path:
     """The whole video. Used for shorter videos, where this is quicker than fetching pieces."""
-    with _youtube_guard(url), _ydl({"format": _video_format(height), "merge_output_format": "mp4",
-                                    "outtmpl": str(job_dir / "source.%(ext)s")}) as ydl:
-        ydl.download([url])
+    opts = {"format": _video_format(height), "merge_output_format": "mp4",
+            "outtmpl": str(job_dir / "source.%(ext)s")}
+    with _youtube_guard(url):
+        try:
+            with _ydl(opts) as ydl:
+                ydl.download([url])
+        except Exception as e:
+            if is_youtube(url) and _BOT_CHECK.search(str(e)):
+                try:
+                    fallback_opts = {**opts, "extractor_args": {"youtube": {"player_client": ["mweb", "android"]}}}
+                    with _ydl(fallback_opts) as ydl:
+                        ydl.download([url])
+                except Exception:
+                    raise e
+            else:
+                raise
     return _biggest(job_dir, "source")
 
 
-def download_section(url: str, out_dir: Path, stem: str, start: float, end: float, height=720, exact=False) -> Path:
+def download_section(url: str, out_dir: Path, stem: str, start: float, end: float, height=720, exact=False,
+                     on_progress=None, is_paused=None) -> Path:
     """Just one stretch of the video. The cut lands on a keyframe, so find_offset() pins the true start; with
     exact=True the cut is made at exactly `start` instead (slower), for when there is nothing to match against."""
     from yt_dlp.utils import download_range_func
     out_dir.mkdir(parents=True, exist_ok=True)
+    def hook(d):
+        if is_paused and is_paused():
+            raise JobPaused("Job paused by user")
+        if on_progress and d.get("status") == "downloading":
+            total = d.get("total_bytes") or d.get("total_bytes_estimate")
+            pct = (d.get("downloaded_bytes", 0) / total) if total else 0.0
+            try:
+                on_progress(pct, d)
+            except TypeError:
+                on_progress(pct)
+
     opts = {"format": _video_format(height), "merge_output_format": "mp4", "outtmpl": str(out_dir / (stem + ".%(ext)s")),
-            "download_ranges": download_range_func(None, [(max(0.0, start), end)])}
+            "download_ranges": download_range_func(None, [(max(0.0, start), end)]),
+            "progress_hooks": [hook]}
     if exact:
         opts["force_keyframes_at_cuts"] = True
-    with _youtube_guard(url), _ydl(opts) as ydl:
-        ydl.download([url])
+    with _youtube_guard(url):
+        try:
+            with _ydl(opts) as ydl:
+                ydl.download([url])
+        except Exception as e:
+            if isinstance(e, JobPaused) or "Job paused" in str(e):
+                raise JobPaused("Job paused by user") from None
+            if is_youtube(url) and _BOT_CHECK.search(str(e)):
+                try:
+                    fallback_opts = {**opts, "extractor_args": {"youtube": {"player_client": ["mweb", "android"]}}}
+                    with _ydl(fallback_opts) as ydl:
+                        ydl.download([url])
+                except Exception:
+                    raise e
+            else:
+                raise
     return _biggest(out_dir, stem)
 
 

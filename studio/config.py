@@ -124,6 +124,9 @@ FONTS_DIR = DATA_DIR / "fonts"          # caption fonts, copied from studio/font
 # YouTube already has a word-by-word transcript of most videos. With this on, that is what the AI reads to find the
 # clips (seconds instead of transcribing hours), and our own model is run only on the clips themselves.
 YT_TRANSCRIPT = env("PEAKCUT_YT_TRANSCRIPT", "1") != "0"
+COOKIES_FILE = env("PEAKCUT_COOKIES_FILE", "")
+COOKIES_BROWSER = env("PEAKCUT_COOKIES_BROWSER", "")
+YT_PAUSE = int(env("PEAKCUT_YT_PAUSE", "0"))
 # the compact model for processors; a machine with a graphics card sets PEAKCUT_ASR_MODEL to the full-precision one
 ASR_MODEL_NAME = env("PEAKCUT_ASR_MODEL", "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8")
 ASR_MODEL_DIR = MODELS_DIR / ASR_MODEL_NAME
@@ -246,3 +249,13 @@ def _read_google_client() -> tuple:
 # ---------------------------------------------------------------- video
 MAX_SOURCE_HEIGHT = 1080
 OUT_W, OUT_H, OUT_FPS = 1080, 1920, 30
+# Videos longer than this (seconds) download only the required clip sections rather than the full multi-GB video
+LONG_VIDEO = int(env("PEAKCUT_LONG_VIDEO_MIN", "3")) * 60
+# Acceleration with aria2 multi-connection downloader if available
+USE_ARIA2 = env("PEAKCUT_USE_ARIA2", "1") != "0"
+# Bypass queue artificial holds/delays to start downloading immediately upon pasting
+BYPASS_QUEUE_HOLD = env("PEAKCUT_BYPASS_QUEUE_HOLD", "1") != "0"
+# GPU hardware acceleration for video rendering (NVENC, QSV, AMF)
+USE_GPU = env("PEAKCUT_USE_GPU", "1") != "0"
+
+

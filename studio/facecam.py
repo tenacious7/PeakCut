@@ -365,3 +365,88 @@ def detect(path: str | Path, ask=None) -> dict | None:
     if not found:
         return None
     return _finish(path, found[0], w, h, still)
+
+
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+
+_face_cascade = None
+
+
+def _get_cascade():
+    global _face_cascade
+    if _face_cascade is None and cv2 is not None:
+        try:
+            cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+            det = cv2.CascadeClassifier(cascade_path)
+            if not det.empty():
+                _face_cascade = det
+            else:
+                _face_cascade = False
+        except Exception:
+            _face_cascade = False
+    return _face_cascade if _face_cascade is not False else None
+
+
+def face_center(frame: np.ndarray, cam: tuple | list) -> tuple[int, int] | None:
+    """Detect dominant face center (cx, cy) inside webcam box in source pixels.
+    Returns (cx, cy) or None if no face is detected."""
+    if cv2 is None or frame is None or not cam or len(cam) != 4:
+        return None
+    det = _get_cascade()
+    if det is None:
+        return None
+    try:
+        x, y, w, h = (int(v) for v in cam)
+        fh_max, fw_max = frame.shape[:2]
+        x0 = max(0, min(fw_max - 1, x))
+        y0 = max(0, min(fh_max - 1, y))
+        w0 = max(1, min(fw_max - x0, w))
+        h0 = max(1, min(fh_max - y0, h))
+        sub = frame[y0:y0+h0, x0:x0+w0]
+        if sub.size == 0 or w0 < 20 or h0 < 20:
+            return None
+        if len(sub.shape) == 3:
+            gray = cv2.cvtColor(sub, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = sub
+        min_dim = max(20, int(min(w0, h0) * 0.15))
+        faces = det.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=5, minSize=(min_dim, min_dim))
+        if len(faces) == 0:
+            return None
+        fx, fy, fw, fh = max(faces, key=lambda r: r[2] * r[3])
+        return (int(round(x0 + fx + fw / 2)), int(round(y0 + fy + fh / 2)))
+    except Exception:
+        return None
+
+
+def find_clip_face_focus(src_path: str | Path, cam: tuple | list, start: float, end: float, count: int = 4) -> list[int] | None:
+    """Sample count frames in [start, end], detect face center, and return median [cx, cy] or None."""
+    if cv2 is None or not cam or len(cam) != 4:
+        return None
+    try:
+        dur = max(0.5, float(end - start))
+        pts = [start + dur * (i + 1) / (count + 1) for i in range(count)]
+        cap = cv2.VideoCapture(str(src_path))
+        if not cap.isOpened():
+            return None
+        centers = []
+        for t in pts:
+            cap.set(cv2.CAP_PROP_POS_MSEC, max(0.0, t * 1000.0))
+            ret, frame = cap.read()
+            if not ret or frame is None:
+                continue
+            fc = face_center(frame, cam)
+            if fc:
+                centers.append(fc)
+        cap.release()
+        if not centers:
+            return None
+        med_x = int(round(float(np.median([c[0] for c in centers]))))
+        med_y = int(round(float(np.median([c[1] for c in centers]))))
+        return [med_x, med_y]
+    except Exception:
+        return None
+

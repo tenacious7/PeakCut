@@ -9,7 +9,9 @@ from pathlib import Path
 GLOBAL_FIELDS = {
     "layout",
     "split_ratio",
+    "cam_swap",
     "facecam",  # job-level override
+    "facecam.zoom",
     "caption.enabled",
     "caption.style",
     "caption.font_size",
@@ -32,6 +34,7 @@ PER_CLIP_FIELDS = {
     "hook.text",
     "caption.words",
     "facecam_override",
+    "facecam.focus",
 }
 
 ALLOWED_LAYOUTS = {"blur", "zoom", "crop", "gameplay", "stack"}
@@ -44,6 +47,7 @@ def default_edit(start=0.0, end=30.0, layout="blur") -> dict:
         "end": round(float(end), 2),
         "layout": layout if layout in ALLOWED_LAYOUTS else "blur",
         "split_ratio": 0.40,
+        "cam_swap": False,
         "facecam": None,
         "facecam_override": False,
         "caption": {
@@ -82,6 +86,7 @@ def init_edit(job: dict, clip: dict, words: list = None, facecam: list = None) -
 
     split_ratio = float(clip.get("split_ratio") or opts.get("split_ratio") or 0.40)
     split_ratio = round(max(0.20, min(0.80, split_ratio)), 2)
+    cam_swap = bool(clip.get("cam_swap") or opts.get("cam_swap", False))
 
     fc_raw = clip.get("facecam") or facecam or opts.get("facecam") or job.get("facecam")
     fc_dict = None
@@ -105,6 +110,19 @@ def init_edit(job: dict, clip: dict, words: list = None, facecam: list = None) -
                 "w": max(20, int(fc_raw[2])),
                 "h": max(20, int(fc_raw[3])),
             }
+    if fc_dict:
+        focus = fc_raw.get("focus") if isinstance(fc_raw, dict) else clip.get("facecam_focus")
+        if focus and isinstance(focus, (list, tuple)) and len(focus) == 2:
+            try:
+                fc_dict["focus"] = [int(focus[0]), int(focus[1])]
+            except (ValueError, TypeError):
+                fc_dict["focus"] = None
+        else:
+            fc_dict["focus"] = None
+        try:
+            fc_dict["zoom"] = round(max(1.0, min(3.0, float(fc_raw.get("zoom", 1.0) if isinstance(fc_raw, dict) else (clip.get("facecam_zoom") or 1.0)))), 2)
+        except (ValueError, TypeError):
+            fc_dict["zoom"] = 1.0
 
     # Normalize words
     cap_words = []
@@ -118,7 +136,13 @@ def init_edit(job: dict, clip: dict, words: list = None, facecam: list = None) -
 
     hook_text = str(clip.get("hook") or "").strip()
     hook_enabled = bool(hook_text)
-    hook_y = float(clip.get("hook_y") or 300.0)
+    if layout == "stack":
+        cam_h = round(1920 * split_ratio / 2) * 2
+        game_h = 1920 - cam_h
+        seam_y = game_h if cam_swap else cam_h
+        hook_y = float(clip.get("hook_y") or max(80, seam_y - 90))
+    else:
+        hook_y = float(clip.get("hook_y") or 300.0)
     hook_style = str(clip.get("hook_style") or "default")
     hook_font_size = int(clip.get("hook_font_size") or 96)
 
@@ -135,6 +159,7 @@ def init_edit(job: dict, clip: dict, words: list = None, facecam: list = None) -
         "end": end,
         "layout": layout,
         "split_ratio": split_ratio,
+        "cam_swap": cam_swap,
         "facecam": fc_dict,
         "facecam_override": bool(clip.get("facecam_override", False)),
         "caption": {
@@ -196,6 +221,8 @@ def validate_edit(data: dict, src_w=1920, src_h=1080) -> dict:
     except (ValueError, TypeError):
         pass
 
+    out["cam_swap"] = bool(data.get("cam_swap", False))
+
     # Facecam
     fc = data.get("facecam")
     if fc is None:
@@ -206,7 +233,19 @@ def validate_edit(data: dict, src_w=1920, src_h=1080) -> dict:
             y = max(0, min(src_h - 20, int(fc["y"])))
             w = max(20, min(src_w - x, int(fc["w"])))
             h = max(20, min(src_h - y, int(fc["h"])))
-            out["facecam"] = {"x": x, "y": y, "w": w, "h": h}
+            focus = None
+            if fc.get("focus") and isinstance(fc["focus"], (list, tuple)) and len(fc["focus"]) == 2:
+                try:
+                    fx = max(0, min(src_w, int(fc["focus"][0])))
+                    fy = max(0, min(src_h, int(fc["focus"][1])))
+                    focus = [fx, fy]
+                except (ValueError, TypeError):
+                    focus = None
+            try:
+                zoom = max(1.0, min(3.0, float(fc.get("zoom", 1.0))))
+            except (ValueError, TypeError):
+                zoom = 1.0
+            out["facecam"] = {"x": x, "y": y, "w": w, "h": h, "focus": focus, "zoom": round(zoom, 2)}
         except (ValueError, TypeError):
             out["facecam"] = None
     out["facecam_override"] = bool(data.get("facecam_override", False))
@@ -283,7 +322,7 @@ def deep_merge_global(target: dict, patch: dict) -> dict:
     if not isinstance(patch, dict):
         return res
 
-    # Layout & Split ratio
+    # Layout & Split ratio & Panel swap
     if "layout" in patch and patch["layout"] in ALLOWED_LAYOUTS:
         res["layout"] = patch["layout"]
     if "split_ratio" in patch:
@@ -292,17 +331,32 @@ def deep_merge_global(target: dict, patch: dict) -> dict:
             res["split_ratio"] = round(max(0.20, min(0.80, sr)), 2)
         except (ValueError, TypeError):
             pass
+    if "cam_swap" in patch:
+        res["cam_swap"] = bool(patch["cam_swap"])
 
-    # Global facecam override (only applied if clip does not have a per-clip override)
-    if "facecam" in patch and not res.get("facecam_override", False):
+    # Global facecam override and style (zoom is global style; x/y/w/h apply if no per-clip override)
+    if "facecam" in patch:
         fc = patch["facecam"]
-        if fc is None:
+        if fc is None and not res.get("facecam_override", False):
             res["facecam"] = None
-        elif isinstance(fc, dict) and all(k in fc for k in ("x", "y", "w", "h")):
-            try:
-                res["facecam"] = {k: int(fc[k]) for k in ("x", "y", "w", "h")}
-            except (ValueError, TypeError):
-                pass
+        elif isinstance(fc, dict):
+            if res.get("facecam") is None and not res.get("facecam_override", False):
+                res["facecam"] = copy.deepcopy(fc)
+            elif isinstance(res.get("facecam"), dict):
+                if "zoom" in fc:
+                    try:
+                        res["facecam"]["zoom"] = round(max(1.0, min(3.0, float(fc["zoom"]))), 2)
+                    except (ValueError, TypeError):
+                        pass
+                if not res.get("facecam_override", False):
+                    for k in ("x", "y", "w", "h"):
+                        if k in fc:
+                            try:
+                                res["facecam"][k] = int(fc[k])
+                            except (ValueError, TypeError):
+                                pass
+                    if "focus" in fc and fc["focus"] is not None:
+                        res["facecam"]["focus"] = fc["focus"]
 
     # Caption global fields
     if "caption" in patch and isinstance(patch["caption"], dict):
