@@ -1042,6 +1042,7 @@ def update_clip_edit(cid: str, body: dict = Body(...), jid: str = None):
     clip["end"] = valid["end"]
     clip["layout"] = valid["layout"]
     clip["split_ratio"] = valid["split_ratio"]
+    clip["split_divider"] = bool(valid.get("split_divider", True))
     clip["cam_swap"] = bool(valid.get("cam_swap", False))
     if "hook" in valid:
         clip["hook"] = valid["hook"].get("text", "")

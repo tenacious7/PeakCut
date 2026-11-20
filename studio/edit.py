@@ -6,11 +6,15 @@ import json
 import math
 from pathlib import Path
 
-from . import roman
+from . import config, roman
+
+DEFAULT_SPLIT_RATIO = 0.35
+DEFAULT_SPLIT_DIVIDER = True
 
 GLOBAL_FIELDS = {
     "layout",
     "split_ratio",
+    "split_divider",
     "cam_swap",
     "facecam",  # job-level override
     "facecam.zoom",
@@ -42,13 +46,44 @@ PER_CLIP_FIELDS = {
 ALLOWED_LAYOUTS = {"blur", "zoom", "crop", "gameplay", "stack"}
 
 
+def _stack_defaults(split_ratio: float = DEFAULT_SPLIT_RATIO, cam_swap: bool = False,
+                    split_divider: bool = DEFAULT_SPLIT_DIVIDER) -> tuple[float, float]:
+    """Proportional (hook_y, cap_y) for stack layout based on configured output height."""
+    oh = max(2, int(getattr(config, "OUT_H", 1920) or 1920))
+    ratio = max(0.20, min(0.80, float(DEFAULT_SPLIT_RATIO if split_ratio is None else split_ratio)))
+    cam_h = max(2, min(oh - 2, int(round(oh * ratio / 2.0)) * 2))
+    game_h = oh - cam_h
+    div_h = max(2, int(round(oh * 0.003 / 2.0)) * 2) if split_divider else 0
+    half_div = div_h / 2.0
+    pad = max(6, int(round(oh * 0.008)))
+    hook_off = int(round(oh * 0.042))
+    if cam_swap:
+        cam_top, cam_bot = game_h, oh
+        game_top = 0
+        hook_y = round(min(cam_bot - pad, cam_top + half_div + hook_off), 1)
+        cap_y = round(game_top + game_h * 0.80, 1)
+    else:
+        cam_top, cam_bot = 0, cam_h
+        game_top = cam_h
+        hook_y = round(max(cam_top + pad, cam_bot - half_div - hook_off), 1)
+        cap_y = round(game_top + game_h * 0.77, 1)
+    return hook_y, cap_y
+
+
 def default_edit(start=0.0, end=30.0, layout="blur") -> dict:
+    oh = max(2, int(getattr(config, "OUT_H", 1920) or 1920))
+    if layout == "stack":
+        def_hook_y, def_cap_y = _stack_defaults(DEFAULT_SPLIT_RATIO, False, DEFAULT_SPLIT_DIVIDER)
+    else:
+        def_hook_y = round(oh * (300.0 / 1920.0), 1)
+        def_cap_y = round(oh * (1630.0 / 1920.0), 1)
     return {
         "version": 1,
         "start": round(float(start), 2),
         "end": round(float(end), 2),
         "layout": layout if layout in ALLOWED_LAYOUTS else "blur",
-        "split_ratio": 0.40,
+        "split_ratio": DEFAULT_SPLIT_RATIO,
+        "split_divider": DEFAULT_SPLIT_DIVIDER,
         "cam_swap": False,
         "facecam": None,
         "facecam_override": False,
@@ -56,14 +91,14 @@ def default_edit(start=0.0, end=30.0, layout="blur") -> dict:
             "enabled": True,
             "style": "bounce",
             "font_size": 132,
-            "y_pos": 1630.0,
+            "y_pos": def_cap_y,
             "words": []
         },
         "hook": {
             "enabled": True,
             "text": "",
             "font_size": 96,
-            "y_pos": 300.0,
+            "y_pos": def_hook_y,
             "style": "default"
         },
         "audio": {
@@ -86,8 +121,10 @@ def init_edit(job: dict, clip: dict, words: list = None, facecam: list = None) -
     if layout not in ALLOWED_LAYOUTS:
         layout = "blur"
 
-    split_ratio = float(clip.get("split_ratio") or opts.get("split_ratio") or 0.40)
+    raw_sr = clip.get("split_ratio") if clip.get("split_ratio") is not None else opts.get("split_ratio")
+    split_ratio = float(raw_sr if raw_sr is not None else DEFAULT_SPLIT_RATIO)
     split_ratio = round(max(0.20, min(0.80, split_ratio)), 2)
+    split_divider = bool(clip.get("split_divider", opts.get("split_divider", DEFAULT_SPLIT_DIVIDER)))
     cam_swap = bool(clip.get("cam_swap") or opts.get("cam_swap", False))
 
     fc_raw = clip.get("facecam") or facecam or opts.get("facecam") or job.get("facecam")
@@ -144,19 +181,19 @@ def init_edit(job: dict, clip: dict, words: list = None, facecam: list = None) -
     if roman.needs_roman(hook_text):
         hook_text = roman.to_roman(hook_text)
     hook_enabled = bool(clip.get("hook_enabled", bool(hook_text)))
+    oh = max(2, int(getattr(config, "OUT_H", 1920) or 1920))
     if layout == "stack":
-        cam_h = 768
-        game_h = 1920 - cam_h
-        seam_y = game_h if cam_swap else cam_h
-        hook_y = float(clip.get("hook_y") or seam_y)
+        def_hook_y, def_cap_y = _stack_defaults(split_ratio, cam_swap, split_divider)
+        hook_y = float(clip["hook_y"]) if clip.get("hook_y") is not None else def_hook_y
     else:
-        hook_y = float(clip.get("hook_y") or 300.0)
+        def_cap_y = round(oh * (1630.0 / 1920.0), 1)
+        hook_y = float(clip["hook_y"]) if clip.get("hook_y") is not None else round(oh * (300.0 / 1920.0), 1)
     hook_style = str(clip.get("hook_style") or "default")
     hook_font_size = int(clip.get("hook_font_size") or 96)
 
     cap_style = clip.get("style") or opts.get("style") or "bounce"
     cap_enabled = clip.get("captions", opts.get("captions", True))
-    cap_y = float(clip.get("cap_y") or 1630.0)
+    cap_y = float(clip["cap_y"]) if clip.get("cap_y") is not None else def_cap_y
 
     meme_val = clip.get("meme") or opts.get("meme") or "none"
     music_val = clip.get("music") or opts.get("music") or "none"
@@ -167,6 +204,7 @@ def init_edit(job: dict, clip: dict, words: list = None, facecam: list = None) -
         "end": end,
         "layout": layout,
         "split_ratio": split_ratio,
+        "split_divider": split_divider,
         "cam_swap": cam_swap,
         "facecam": fc_dict,
         "facecam_override": bool(clip.get("facecam_override", False)),
@@ -220,13 +258,14 @@ def validate_edit(data: dict, src_w=1920, src_h=1080) -> dict:
     if lay in ALLOWED_LAYOUTS:
         out["layout"] = lay
 
-    # Split ratio
+    # Split ratio & divider
     try:
-        sr = float(data.get("split_ratio", 0.40))
+        sr = float(data.get("split_ratio", DEFAULT_SPLIT_RATIO))
         out["split_ratio"] = round(max(0.20, min(0.80, sr)), 2)
     except (ValueError, TypeError):
         pass
 
+    out["split_divider"] = bool(data.get("split_divider", DEFAULT_SPLIT_DIVIDER))
     out["cam_swap"] = bool(data.get("cam_swap", False))
 
     # Facecam
@@ -265,9 +304,12 @@ def validate_edit(data: dict, src_w=1920, src_h=1080) -> dict:
         out["caption"]["font_size"] = max(40, min(240, fs))
     except (ValueError, TypeError):
         pass
+    oh = max(2, int(getattr(config, "OUT_H", 1920) or 1920))
+    cap_min_y = round(oh * (100.0 / 1920.0), 1)
+    cap_max_y = round(oh * (1820.0 / 1920.0), 1)
     try:
-        yp = float(cap.get("y_pos", 1630.0))
-        out["caption"]["y_pos"] = round(max(100.0, min(1820.0, yp)), 1)
+        yp = float(cap.get("y_pos", round(oh * (1630.0 / 1920.0), 1)))
+        out["caption"]["y_pos"] = round(max(cap_min_y, min(cap_max_y, yp)), 1)
     except (ValueError, TypeError):
         pass
 
@@ -300,9 +342,11 @@ def validate_edit(data: dict, src_w=1920, src_h=1080) -> dict:
         out["hook"]["font_size"] = max(36, min(160, hfs))
     except (ValueError, TypeError):
         pass
+    hook_min_y = round(oh * (50.0 / 1920.0), 1)
+    hook_max_y = round(oh * (1800.0 / 1920.0), 1)
     try:
-        hyp = float(hk.get("y_pos", 300.0))
-        out["hook"]["y_pos"] = round(max(50.0, min(1800.0, hyp)), 1)
+        hyp = float(hk.get("y_pos", round(oh * (300.0 / 1920.0), 1)))
+        out["hook"]["y_pos"] = round(max(hook_min_y, min(hook_max_y, hyp)), 1)
     except (ValueError, TypeError):
         pass
     out["hook"]["style"] = str(hk.get("style", "default"))
@@ -333,7 +377,7 @@ def deep_merge_global(target: dict, patch: dict) -> dict:
     if not isinstance(patch, dict):
         return res
 
-    # Layout & Split ratio & Panel swap
+    # Layout & Split ratio & Divider & Panel swap
     if "layout" in patch and patch["layout"] in ALLOWED_LAYOUTS:
         res["layout"] = patch["layout"]
     if "split_ratio" in patch:
@@ -342,6 +386,8 @@ def deep_merge_global(target: dict, patch: dict) -> dict:
             res["split_ratio"] = round(max(0.20, min(0.80, sr)), 2)
         except (ValueError, TypeError):
             pass
+    if "split_divider" in patch:
+        res["split_divider"] = bool(patch["split_divider"])
     if "cam_swap" in patch:
         res["cam_swap"] = bool(patch["cam_swap"])
 
@@ -382,8 +428,9 @@ def deep_merge_global(target: dict, patch: dict) -> dict:
             except (ValueError, TypeError):
                 pass
         if "y_pos" in p_cap:
+            oh = max(2, int(getattr(config, "OUT_H", 1920) or 1920))
             try:
-                res["caption"]["y_pos"] = round(max(100.0, min(1820.0, float(p_cap["y_pos"]))), 1)
+                res["caption"]["y_pos"] = round(max(round(oh * (100.0 / 1920.0), 1), min(round(oh * (1820.0 / 1920.0), 1), float(p_cap["y_pos"]))), 1)
             except (ValueError, TypeError):
                 pass
         # Note: p_cap["words"] is PER-CLIP and intentionally IGNORED here!
@@ -399,8 +446,9 @@ def deep_merge_global(target: dict, patch: dict) -> dict:
             except (ValueError, TypeError):
                 pass
         if "y_pos" in p_hk:
+            oh = max(2, int(getattr(config, "OUT_H", 1920) or 1920))
             try:
-                res["hook"]["y_pos"] = round(max(50.0, min(1800.0, float(p_hk["y_pos"]))), 1)
+                res["hook"]["y_pos"] = round(max(round(oh * (50.0 / 1920.0), 1), min(round(oh * (1800.0 / 1920.0), 1), float(p_hk["y_pos"]))), 1)
             except (ValueError, TypeError):
                 pass
         if "style" in p_hk and p_hk["style"]:

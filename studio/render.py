@@ -1,4 +1,5 @@
 """Turns a time range into a vertical clip: 9:16 layout, bouncy word captions, hook title, cover."""
+import json
 import re
 import shutil
 import subprocess
@@ -9,6 +10,9 @@ from . import config, edit, roman
 from .media import NO_WINDOW, run
 
 W, H = config.OUT_W, config.OUT_H
+DEFAULT_SPLIT_RATIO = 0.35
+DEFAULT_SPLIT_DIVIDER = True
+STACK_CAM_INSET = 0.035   # trims ~3.5% off webcam edges to remove rounded bezels / corner bleed
 
 # ASS colours are &HBBGGRR. `size` is the ASS font size (line height); _Font turns it into real pixels.
 STYLES = {
@@ -126,44 +130,138 @@ def _groups(words, per):
     return out
 
 
-def geometry(src_w, src_h, layout):
-    """Where the video sits in the 1080x1920 frame, and where hook and captions go."""
+def stack_layout_metrics(out_w: int = None, out_h: int = None, split_ratio: float = DEFAULT_SPLIT_RATIO,
+                         cam_swap: bool = False, divider: bool = DEFAULT_SPLIT_DIVIDER) -> dict:
+    """Compute proportional split-screen section geometry dynamically from output resolution."""
+    ow = max(2, int(out_w or config.OUT_W or W))
+    oh = max(2, int(out_h or config.OUT_H or H))
+    ow -= ow % 2
+    oh -= oh % 2
+    ratio = max(0.20, min(0.80, float(DEFAULT_SPLIT_RATIO if split_ratio is None else split_ratio)))
+
+    cam_h = max(2, min(oh - 2, int(round(oh * ratio / 2.0)) * 2))
+    game_h = oh - cam_h
+
+    if cam_swap:
+        game_top, game_bottom = 0, game_h
+        cam_top, cam_bottom = game_h, oh
+        seam_y = game_h
+    else:
+        cam_top, cam_bottom = 0, cam_h
+        game_top, game_bottom = cam_h, oh
+        seam_y = cam_h
+
+    divider_h = max(2, int(round(oh * 0.003 / 2.0)) * 2) if divider else 0
+    half_div = divider_h / 2.0
+    pad = max(6, int(round(oh * 0.008)))
+
+    # Keep facecam labels (e.g. "JST") strictly inside the facecam section, resting cleanly near the seam
+    hook_offset = int(round(oh * 0.042))
+    if cam_swap:
+        hook_bounds = (float(cam_top + half_div + pad), float(cam_bottom - pad))
+        hook_y = float(min(hook_bounds[1], cam_top + half_div + hook_offset))
+    else:
+        hook_bounds = (float(cam_top + pad), float(cam_bottom - half_div - pad))
+        hook_y = float(max(hook_bounds[0], cam_bottom - half_div - hook_offset))
+
+    # Keep subtitles centered inside the gameplay section with clean bottom spacing (~15% margin on default 35/65)
+    cap_frac = 0.80 if cam_swap else 0.77
+    cap_y = round(game_top + game_h * cap_frac, 1)
+    cap_bounds = (
+        float(game_top + max(12, int(round(game_h * 0.10)))),
+        float(game_bottom - max(12, int(round(game_h * 0.09)))),
+    )
+
+    return {
+        "out_w": ow,
+        "out_h": oh,
+        "ratio": ratio,
+        "cam_h": cam_h,
+        "game_h": game_h,
+        "cam_top": cam_top,
+        "cam_bottom": cam_bottom,
+        "game_top": game_top,
+        "game_bottom": game_bottom,
+        "seam_y": seam_y,
+        "divider_h": divider_h,
+        "hook_y": round(hook_y, 1),
+        "hook_bounds": hook_bounds,
+        "cap_y": cap_y,
+        "cap_bounds": cap_bounds,
+    }
+
+
+def geometry(src_w, src_h, layout, out_w=None, out_h=None, split_ratio=DEFAULT_SPLIT_RATIO,
+             cam_swap=False, divider=DEFAULT_SPLIT_DIVIDER):
+    """Where the video sits in the output frame, and where hook and captions go (proportional to resolution)."""
+    ow = max(2, int(out_w or config.OUT_W or W))
+    oh = max(2, int(out_h or config.OUT_H or H))
     if src_h >= src_w and layout not in ("crop", "gameplay", "stack"):
         layout = "crop"  # already vertical or square: nothing to gain from a blurred fill
     if layout == "blur":
-        fg_h = min(H, int(round(W * src_h / src_w / 2)) * 2)
+        fg_h = min(oh, int(round(ow * src_h / max(1, src_w) / 2)) * 2)
     elif layout == "zoom":
-        fg_h = 1000
+        fg_h = int(round(oh * (1000.0 / 1920.0) / 2)) * 2
     elif layout == "stack":
-        return layout, H, 330, 890
+        m = stack_layout_metrics(ow, oh, split_ratio=split_ratio, cam_swap=cam_swap, divider=divider)
+        return layout, oh, m["hook_y"], m["cap_y"]
     else:
-        fg_h = H
-    top = (H - fg_h) // 2
+        fg_h = oh
+    top = (oh - fg_h) // 2
     if layout in ("crop", "gameplay"):
-        return layout, fg_h, 300, 1380
-    return layout, fg_h, max(230, top - 190), min(1640, top + fg_h + 180)
+        return layout, fg_h, round(oh * (300.0 / 1920.0), 1), round(oh * (1380.0 / 1920.0), 1)
+    return (layout, fg_h,
+            max(round(oh * (230.0 / 1920.0), 1), top - round(oh * (190.0 / 1920.0), 1)),
+            min(round(oh * (1640.0 / 1920.0), 1), top + fg_h + round(oh * (180.0 / 1920.0), 1)))
 
 
-def _hook_events(hook, dur, y, font_size=None, style=None, enabled=True):
-    """The heading: dark text in a white rounded box that fits it, on one line or two balanced ones."""
+def _hook_events(hook, dur, y, font_size=None, style=None, enabled=True, out_w=None, out_h=None, bounds=None):
+    """The heading: dark text in a white rounded box that fits it, on one line or two balanced ones.
+
+    If `bounds=(min_y, max_y)` is provided, the entire badge is strictly contained inside `[min_y, max_y]`
+    so it never overflows outside its assigned section."""
     if not enabled or not hook:
         return []
+    ow = max(2, int(out_w or config.OUT_W or W))
+    scale = ow / 1080.0
+    max_w = HOOK["max_w"] * scale
+    pad_x = HOOK["pad_x"] * scale
+    pad_y = HOOK["pad_y"] * scale
+    radius = HOOK["radius"] * scale
+
     f = _Font.get(HOOK["font"])
-    size = int(font_size) if font_size else HOOK["size"]
+    size = int(round((int(font_size) if font_size else HOOK["size"]) * scale))
+    min_size = max(18, int(round(36 * scale)))
     words = hook.split()
     if not words:
         return []
     lines = [" ".join(words)]
-    if f.width(lines[0], size) > HOOK["max_w"] and len(words) > 1:      # two lines, split where they come out most even
+    if f.width(lines[0], size) > max_w and len(words) > 1:      # two lines, split where they come out most even
         cut = min(range(1, len(words)), key=lambda i: max(f.width(" ".join(words[:i]), size), f.width(" ".join(words[i:]), size)))
         lines = [" ".join(words[:cut]), " ".join(words[cut:])]
     widest = max(f.width(l, size) for l in lines)
-    if widest > HOOK["max_w"]:
-        size = max(36, int(size * HOOK["max_w"] / widest))
+    if widest > max_w:
+        size = max(min_size, int(size * max_w / widest))
         widest = max(f.width(l, size) for l in lines)
     line_h = f.em(size) * 1.16
-    bw, bh = widest + 2 * HOOK["pad_x"], line_h * len(lines) + 2 * HOOK["pad_y"]
-    x0, y0, r = (W - bw) / 2, y - bh / 2, min(HOOK["radius"], bh / 2)
+    bw, bh = widest + 2 * pad_x, line_h * len(lines) + 2 * pad_y
+
+    # Enforce strict section containment if bounds are supplied
+    if bounds and len(bounds) == 2:
+        min_y, max_y = float(bounds[0]), float(bounds[1])
+        avail_h = max(16.0, max_y - min_y)
+        if bh > avail_h:
+            shrink = avail_h / bh
+            size = max(min_size, int(size * shrink))
+            pad_x *= shrink
+            pad_y *= shrink
+            radius *= shrink
+            widest = max(f.width(l, size) for l in lines)
+            line_h = f.em(size) * 1.16
+            bw, bh = widest + 2 * pad_x, line_h * len(lines) + 2 * pad_y
+        y = max(min_y + bh / 2.0, min(max_y - bh / 2.0, float(y)))
+
+    x0, y0, r = (ow - bw) / 2, y - bh / 2, min(radius, bh / 2)
     x1, y1 = x0 + bw, y0 + bh
     n = lambda v: f"{v:.0f}"                                                         # noqa: E731
     box = (f"m {n(x0 + r)} {n(y0)} l {n(x1 - r)} {n(y0)} b {n(x1)} {n(y0)} {n(x1)} {n(y0)} {n(x1)} {n(y0 + r)} "
@@ -178,16 +276,23 @@ def _hook_events(hook, dur, y, font_size=None, style=None, enabled=True):
         cy = y - line_h * (len(lines) - 1) / 2 + i * line_h - f.cap_shift(size)
         ink = HOOK['ink'] if style != "nobox" else "FFFFFF"
         extra = f"\\c&H{ink}&" if style == "nobox" else ""
-        ev.append(f"Dialogue: 4,{span},Hook,,0,0,0,,{{\\an5\\pos({W // 2},{cy:.0f})\\fad(160,0)\\fs{size}{extra}}}{line}")
+        ev.append(f"Dialogue: 4,{span},Hook,,0,0,0,,{{\\an5\\pos({ow // 2},{cy:.0f})\\fad(160,0)\\fs{size}{extra}}}{line}")
     return ev
 
 
 def build_ass(words, start, end, hook, style_name, highlight, hook_y, cap_y,
               cap_font_size=None, hook_font_size=None, hook_style=None,
-              hook_enabled=True, cap_enabled=True) -> str:
+              hook_enabled=True, cap_enabled=True, out_w=None, out_h=None, hook_bounds=None) -> str:
+    ow = max(2, int(out_w or config.OUT_W or W))
+    oh = max(2, int(out_h or config.OUT_H or H))
+    scale = ow / 1080.0
+    cap_max_w = CAP_MAX_W * scale
+
     st = STYLES.get(style_name, STYLES["bounce"])
-    cap_sz = int(cap_font_size) if cap_font_size else st['size']
-    hk_sz = int(hook_font_size) if hook_font_size else HOOK['size']
+    cap_sz = int(round((int(cap_font_size) if cap_font_size else st['size']) * scale))
+    hk_sz = int(round((int(hook_font_size) if hook_font_size else HOOK['size']) * scale))
+    outline_px = max(2, int(round(st['outline'] * scale)))
+
     norm_words = []
     for w in words:
         txt = str(w.get("w") if "w" in w else w.get("text", ""))
@@ -200,21 +305,22 @@ def build_ass(words, start, end, hook, style_name, highlight, hook_y, cap_y,
     strong = {_key(h) for h in highlight if _key(h)}
     head = f"""[Script Info]
 ScriptType: v4.00+
-PlayResX: {W}
-PlayResY: {H}
+PlayResX: {ow}
+PlayResY: {oh}
 WrapStyle: 2
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Cap,{st['font']},{cap_sz},&H00{st['base']},&H00{st['base']},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,{st['outline']},0,5,0,0,0,1
+Style: Cap,{st['font']},{cap_sz},&H00{st['base']},&H00{st['base']},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,{outline_px},0,5,0,0,0,1
 Style: Hook,{HOOK['font']},{hk_sz},&H00{HOOK['ink']},&H00{HOOK['ink']},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     dur = end - start
-    ev = _hook_events(_clean(hook), dur, hook_y, font_size=hk_sz, style=hook_style, enabled=hook_enabled)
+    ev = _hook_events(_clean(hook), dur, hook_y, font_size=hook_font_size or HOOK['size'],
+                      style=hook_style, enabled=hook_enabled, out_w=ow, out_h=oh, bounds=hook_bounds)
     if not cap_enabled:
         return head + "\n".join(ev)
     f = _Font.get(st["font"])
@@ -223,6 +329,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     for i, w in enumerate(inside[:-1]):
         w["e"] = max(w["s"], min(w["e"], inside[i + 1]["s"]))
     groups = _groups(inside, st["per"])
+    min_cap_sz = max(18, int(round(36 * scale)))
     for gi, g in enumerate(groups):
         g_start = max(0.0, g[0]["s"] - start)
         g_end = min(g[-1]["e"] + 0.25, groups[gi + 1][0]["s"] if gi + 1 < len(groups) else end) - start
@@ -236,22 +343,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             # A script the caption font cannot draw (Japanese, Thai, Chinese...): its words cannot be measured, so
             # they are not placed one by one. The line is drawn whole and centred, in a font the system has for it.
             line = " ".join(texts)
-            fs = max(44, min(int(st["size"] * 0.7), int(1500 / max(1, len(line)) * 1.6)))
-            ev.append(f"Dialogue: 1,{_ts(g_start)},{_ts(g_end)},Cap,,60,60,0,,{{\\an5\\pos({W // 2},{cap_y:.0f})\\q0\\fs{fs}}}{line}")
+            fs = max(int(round(44 * scale)), min(int(cap_sz * 0.7), int(1500 * scale / max(1, len(line)) * 1.6)))
+            margin_lr = int(round(60 * scale))
+            ev.append(f"Dialogue: 1,{_ts(g_start)},{_ts(g_end)},Cap,,{margin_lr},{margin_lr},0,,{{\\an5\\pos({ow // 2},{cap_y:.0f})\\q0\\fs{fs}}}{line}")
             continue
         size = cap_sz
-        gap = f.width("n n", size) - 2 * f.width("n", size) + (2 * st["outline"] + 6) * size / max(1, st["size"])   # a space, plus room for both outlines
+        gap = f.width("n n", size) - 2 * f.width("n", size) + (2 * outline_px + 6 * scale) * size / max(1, st["size"] * scale)   # a space, plus room for both outlines
         total = sum(f.width(t, size) for t in texts) + gap * (len(texts) - 1)
-        if total > CAP_MAX_W:                                  # a long phrase: shrink it to fit, never run off the frame
-            size = max(36, int(size * CAP_MAX_W / total))
-            gap = f.width("n n", size) - 2 * f.width("n", size) + (2 * st["outline"] + 6) * size / max(1, st["size"])   # a space, plus room for both outlines
+        if total > cap_max_w:                                  # a long phrase: shrink it to fit, never run off the frame
+            size = max(min_cap_sz, int(size * cap_max_w / total))
+            gap = f.width("n n", size) - 2 * f.width("n", size) + (2 * outline_px + 6 * scale) * size / max(1, st["size"] * scale)
             total = sum(f.width(t, size) for t in texts) + gap * (len(texts) - 1)
         cy = cap_y - f.cap_shift(size)
-        x = (W - total) / 2
+        x = (ow - total) / 2
         p = st["pop"]
         for i, (w, t) in enumerate(zip(g, texts)):
             wd = f.width(t, size)
-            p = max(104, min(st["pop"], 100 + int(2200 / max(wd, 1))))   # long words grow less, so they never touch their neighbours
+            p = max(104, min(st["pop"], 100 + int(2200 * scale / max(wd, 1))))   # long words grow less, so they never touch their neighbours
             pos = f"\\an5\\pos({x + wd / 2:.0f},{cy:.0f})\\fs{size}"
             x += wd + gap
             a = max(g_start, w["s"] - start)
@@ -272,24 +380,49 @@ PIP_W = 380            # how wide the facecam is in the 1080-wide frame
 PIP_MARGIN = 26
 
 
-def cover_crop_filter(cam, panel_w, panel_h, face=None, headroom=0.42, zoom=1.0):
+def cover_crop_filter(cam, panel_w, panel_h, face=None, headroom=0.42, zoom=1.0, inset=0.0, src_w=None, src_h=None):
     """
     cam  = (x, y, w, h) facecam box in source pixels
     face = (cx, cy) face center in source pixels, optional (falls back to box center)
-    Returns an ffmpeg filter that fills panel_w x panel_h with NO gaps and NO stretch.
+    inset = fractional inward edge trim (e.g. 0.035) to strip rounded webcam bezels / corner bleed
+    Returns an ffmpeg filter that fills panel_w x panel_h edge-to-edge with NO gaps and NO stretch.
     """
     x, y, w, h = (int(v) for v in cam)
+    if src_w and src_h and src_w > 0 and src_h > 0:
+        x = max(0, min(x, int(src_w) - 20))
+        y = max(0, min(y, int(src_h) - 20))
+        w = max(20, min(w, int(src_w) - x))
+        h = max(20, min(h, int(src_h) - y))
+    else:
+        x = max(0, x)
+        y = max(0, y)
+        w = max(20, w)
+        h = max(20, h)
+
+    # Optional inward inset trims rounded webcam corners, dark bezels, and slight edge slop
+    inset_val = max(0.0, min(0.15, float(inset or 0.0)))
+    if inset_val > 0.0:
+        dx = int(round(w * inset_val))
+        dy = int(round(h * inset_val))
+        if w - 2 * dx >= 40 and h - 2 * dy >= 40:
+            x += dx
+            y += dy
+            w -= 2 * dx
+            h -= 2 * dy
+
+    panel_w = max(2, int(panel_w) - (int(panel_w) % 2))
+    panel_h = max(2, int(panel_h) - (int(panel_h) % 2))
     target = panel_w / panel_h
 
-    # biggest window inside the cam box with the panel's aspect ratio
+    # Biggest aspect-matched window strictly inside the cam box (zero stretch, zero black bars)
     if w / h > target:          # cam wider than panel -> trim sides
         cw, ch = int(round(h * target)), h
     else:                       # cam taller than panel -> trim top/bottom
         cw, ch = w, int(round(w / target))
-    cw -= cw % 2
-    ch -= ch % 2
+    cw = max(2, min(w, cw - (cw % 2)))
+    ch = max(2, min(h, ch - (ch % 2)))
 
-    # zoom in if requested (shrinks cw/ch before clamp)
+    # Zoom in if requested (shrinks cw/ch before clamping inside cam bounds)
     zoom_val = max(1.0, min(3.0, float(zoom or 1.0)))
     if zoom_val > 1.0:
         cw = int(round(cw / zoom_val))
@@ -301,18 +434,25 @@ def cover_crop_filter(cam, panel_w, panel_h, face=None, headroom=0.42, zoom=1.0)
 
     fcx, fcy = face if face else (x + w / 2, y + h / 2)
     cx = int(round(fcx - cw / 2))
-    cy = int(round(fcy - ch * headroom))   # face sits ~42% down the panel, so there's room for the hook
+    cy = int(round(fcy - ch * headroom))   # face sits ~42% down the panel, leaving room below for the label
     cx = max(x, min(cx, x + w - cw))
     cy = max(y, min(cy, y + h - ch))
 
     return f"crop={cw}:{ch}:{cx}:{cy},scale={panel_w}:{panel_h}:flags=lanczos,setsar=1"
 
 
-def build_stack_filter(cam, ratio=0.40, swap=False, face=None, W=1080, H=1920, cam_delay=0.0, zoom=1.0):
-    cam_h = round(H * (ratio or 0.40) / 2) * 2
-    game_h = H - cam_h
-    cam_f = cover_crop_filter(cam, W, cam_h, face=face, zoom=zoom)
-    game_f = f"scale={W}:{game_h}:force_original_aspect_ratio=increase,crop={W}:{game_h},setsar=1"
+def build_stack_filter(cam, ratio=DEFAULT_SPLIT_RATIO, swap=False, face=None, W=None, H=None,
+                       cam_delay=0.0, zoom=1.0, divider=DEFAULT_SPLIT_DIVIDER,
+                       cam_inset=STACK_CAM_INSET, src_w=None, src_h=None):
+    """Build a clean, gap-free, edge-to-edge 9:16 split-screen FFmpeg filter graph.
+
+    Default: top 35% facecam, bottom 65% gameplay, optional subtle divider at the seam."""
+    m = stack_layout_metrics(out_w=W, out_h=H, split_ratio=ratio, cam_swap=swap, divider=divider)
+    out_w, out_h = m["out_w"], m["out_h"]
+    cam_h, game_h = m["cam_h"], m["game_h"]
+
+    cam_f = cover_crop_filter(cam, out_w, cam_h, face=face, zoom=zoom, inset=cam_inset, src_w=src_w, src_h=src_h)
+    game_f = f"scale={out_w}:{game_h}:force_original_aspect_ratio=increase:flags=lanczos,crop={out_w}:{game_h},setsar=1"
 
     delay_f = ""
     if cam_delay and abs(cam_delay) >= 0.02:
@@ -321,18 +461,32 @@ def build_stack_filter(cam, ratio=0.40, swap=False, face=None, W=1080, H=1920, c
         else:
             delay_f = f"trim=start={-cam_delay:.3f},"
 
-    if swap:   # gameplay on top
+    div_f = ""
+    if divider and m["divider_h"] > 0:
+        div_y = max(0, min(out_h - m["divider_h"], m["seam_y"] - m["divider_h"] // 2))
+        div_f = f",drawbox=x=0:y={div_y}:w={out_w}:h={m['divider_h']}:color=0x0B0B0D@0.95:t=fill"
+
+    if swap:   # gameplay on top, facecam below
         return (f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},split=2[g0][c0];"
                 f"[g0]{game_f},setpts=PTS-STARTPTS[g];"
                 f"[c0]{cam_f},{delay_f}setpts=PTS-STARTPTS[c];"
-                f"[g][c]vstack=inputs=2,setsar=1,setpts=PTS-STARTPTS[v0];")
+                f"[g][c]vstack=inputs=2,setsar=1{div_f},setpts=PTS-STARTPTS[v0];")
     return (f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},split=2[c0][g0];"
             f"[c0]{cam_f},{delay_f}setpts=PTS-STARTPTS[c];"
             f"[g0]{game_f},setpts=PTS-STARTPTS[g];"
-            f"[c][g]vstack=inputs=2,setsar=1,setpts=PTS-STARTPTS[v0];")
+            f"[c][g]vstack=inputs=2,setsar=1{div_f},setpts=PTS-STARTPTS[v0];")
 
 
-def _filter(layout, fg_h, facecam=None, cam_delay=0.0, split_ratio=0.4, cam_swap=False, focus=None, zoom=1.0):
+def _filter(layout, fg_h, facecam=None, cam_delay=0.0, split_ratio=DEFAULT_SPLIT_RATIO,
+            cam_swap=False, focus=None, zoom=1.0, divider=DEFAULT_SPLIT_DIVIDER,
+            out_w=None, out_h=None, src_w=None, src_h=None):
+    ow = max(2, int(out_w or config.OUT_W or W))
+    oh = max(2, int(out_h or config.OUT_H or H))
+    ow -= ow % 2
+    oh -= oh % 2
+    pip_w = max(2, int(round(ow * (PIP_W / 1080.0) / 2.0)) * 2)
+    pip_margin = max(2, int(round(ow * (PIP_MARGIN / 1080.0))))
+
     delay_f = ""
     if cam_delay and abs(cam_delay) >= 0.02:
         if cam_delay > 0:
@@ -346,37 +500,44 @@ def _filter(layout, fg_h, facecam=None, cam_delay=0.0, split_ratio=0.4, cam_swap
         # perfect timestamp synchronization and zero frame delay in overlay.
         fx, fy, fw, fh = (int(v) for v in facecam)
         if fw > 8 and fh > 8:
-            pip_h = max(2, int(round(PIP_W * fh / fw / 2)) * 2)
+            pip_h = max(2, int(round(pip_w * fh / fw / 2)) * 2)
             return (f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},split=2[base][fc];"
-                    f"[base]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,setpts=PTS-STARTPTS[b];"
-                    f"[fc]crop={fw}:{fh}:{fx}:{fy},scale={PIP_W}:{pip_h},setsar=1,{delay_f}setpts=PTS-STARTPTS[p];"
-                    f"[b][p]overlay={W - PIP_W - PIP_MARGIN}:{PIP_MARGIN}:eof_action=repeat:shortest=1,setpts=PTS-STARTPTS[v0];")
+                    f"[base]scale={ow}:{oh}:force_original_aspect_ratio=increase,crop={ow}:{oh},setsar=1,setpts=PTS-STARTPTS[b];"
+                    f"[fc]crop={fw}:{fh}:{fx}:{fy},scale={pip_w}:{pip_h},setsar=1,{delay_f}setpts=PTS-STARTPTS[p];"
+                    f"[b][p]overlay={ow - pip_w - pip_margin}:{pip_margin}:eof_action=repeat:shortest=1,setpts=PTS-STARTPTS[v0];")
 
     if layout == "stack":
-        fx, fy, fw, fh = (int(v) for v in facecam) if (facecam and len(facecam) == 4 and facecam[2] > 8 and facecam[3] > 8) else (0, 0, 1920, 960)
-        ratio = max(0.2, min(0.8, float(split_ratio or 0.4)))
-        return build_stack_filter([fx, fy, fw, fh], ratio, swap=cam_swap, face=focus, W=W, H=H, cam_delay=cam_delay, zoom=zoom)
+        sw = int(src_w) if (src_w and src_w > 0) else 1920
+        sh = int(src_h) if (src_h and src_h > 0) else 1080
+        fx, fy, fw, fh = (int(v) for v in facecam) if (facecam and len(facecam) == 4 and facecam[2] > 8 and facecam[3] > 8) else (0, 0, sw, int(round(sh * 0.50)))
+        ratio = max(0.20, min(0.80, float(DEFAULT_SPLIT_RATIO if split_ratio is None else split_ratio)))
+        return build_stack_filter([fx, fy, fw, fh], ratio, swap=cam_swap, face=focus, W=ow, H=oh,
+                                  cam_delay=cam_delay, zoom=zoom, divider=divider, src_w=sw, src_h=sh)
 
     if layout == "crop" or (layout == "gameplay" and not facecam):
-        return f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,setpts=PTS-STARTPTS[v0];"
+        return f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},scale={ow}:{oh}:force_original_aspect_ratio=increase,crop={ow}:{oh},setsar=1,setpts=PTS-STARTPTS[v0];"
+    bg_w = max(2, int(round(ow / 4.0 / 2.0)) * 2)
+    bg_h = max(2, int(round(oh / 4.0 / 2.0)) * 2)
     return (f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},split=2[a][b];"
-            f"[a]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,boxblur=6:2,"
-            f"scale={W}:{H},eq=brightness=-0.14:saturation=1.15,setpts=PTS-STARTPTS[bg];"
-            f"[b]scale={W}:{fg_h}:force_original_aspect_ratio=increase,crop={W}:{fg_h},setpts=PTS-STARTPTS[fg];"
+            f"[a]scale={bg_w}:{bg_h}:force_original_aspect_ratio=increase,crop={bg_w}:{bg_h},boxblur=6:2,"
+            f"scale={ow}:{oh},eq=brightness=-0.14:saturation=1.15,setpts=PTS-STARTPTS[bg];"
+            f"[b]scale={ow}:{fg_h}:force_original_aspect_ratio=increase,crop={ow}:{fg_h},setpts=PTS-STARTPTS[fg];"
             f"[bg][fg]overlay=0:(H-h)/2:eof_action=repeat:shortest=1,setsar=1,setpts=PTS-STARTPTS[v0];")
 
 
-def _hook_y(layout, hook_y, facecam=None, split_ratio=0.40, cam_swap=False):
+def _hook_y(layout, hook_y, facecam=None, split_ratio=DEFAULT_SPLIT_RATIO, cam_swap=False,
+            out_w=None, out_h=None, divider=DEFAULT_SPLIT_DIVIDER):
     """Where the heading goes. In the gameplay layout the webcam sits in the top corner, so a heading
     across the top would run under it: it goes just below the picture instead. In stack layout,
-    it sits right at the seam between the two panels so it overlaps between facecam and video."""
+    it stays cleanly inside the facecam section near the divider without overflowing."""
+    ow = max(2, int(out_w or config.OUT_W or W))
+    oh = max(2, int(out_h or config.OUT_H or H))
     if layout == "gameplay" and facecam and len(facecam) == 4 and facecam[2] > 8:
-        return PIP_MARGIN + int(round(PIP_W * facecam[3] / facecam[2])) + 32
+        pip_w = ow * (PIP_W / 1080.0)
+        pip_margin = ow * (PIP_MARGIN / 1080.0)
+        return round(pip_margin + int(round(pip_w * facecam[3] / facecam[2])) + round(oh * (32.0 / 1920.0)), 1)
     if layout == "stack":
-        cam_h = round(H * (split_ratio or 0.40) / 2) * 2
-        game_h = H - cam_h
-        seam_y = game_h if cam_swap else cam_h
-        return float(seam_y)
+        return stack_layout_metrics(ow, oh, split_ratio=split_ratio, cam_swap=cam_swap, divider=divider)["hook_y"]
     return hook_y
 
 
@@ -401,9 +562,15 @@ def check_nvenc() -> bool:
     return bool(_nvenc_ok)
 
 
-def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, src_w: int, src_h: int, quality: str = "final") -> dict:
+def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, src_w: int, src_h: int,
+                quality: str = "final", out_w: int = None, out_h: int = None) -> dict:
     """Writes <name>.mp4 (or <name>_draft.mp4), <name>.jpg, <name>.ass, etc. into out_dir. Returns file names."""
     out_dir.mkdir(parents=True, exist_ok=True)
+    ow = max(2, int(out_w or clip.get("out_w") or config.OUT_W or W))
+    oh = max(2, int(out_h or clip.get("out_h") or config.OUT_H or H))
+    ow -= ow % 2
+    oh -= oh % 2
+
     edit_file = out_dir / f"{name}_edit.json"
     ed = edit.load_edit(edit_file) if edit_file.is_file() else None
     off = float(clip.get("src_offset", 0.0) or 0.0)
@@ -415,7 +582,8 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
             start = round(start - off, 2)
             end = round(end - off, 2)
         layout = ed.get("layout", "blur")
-        split_ratio = float(ed.get("split_ratio", 0.40) or 0.40)
+        split_ratio = float(ed.get("split_ratio") if ed.get("split_ratio") is not None else DEFAULT_SPLIT_RATIO)
+        split_divider = bool(ed.get("split_divider", clip.get("split_divider", DEFAULT_SPLIT_DIVIDER)))
         fc_obj = ed.get("facecam")
         face = [fc_obj["x"], fc_obj["y"], fc_obj["w"], fc_obj["h"]] if (fc_obj and all(k in fc_obj for k in ("x", "y", "w", "h"))) else None
         face_focus = fc_obj.get("focus") if (fc_obj and isinstance(fc_obj, dict)) else None
@@ -428,7 +596,7 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
             cap_enabled = bool(clip.get("captions", True))
         cap_style = str(cap_conf.get("style", "bounce"))
         cap_font_size = int(cap_conf.get("font_size", 132))
-        cap_y = float(cap_conf.get("y_pos", 1630.0))
+        cap_y = cap_conf.get("y_pos")
         words_to_use = cap_conf.get("words") if cap_conf.get("words") else words
         hook_conf = ed.get("hook") or {}
         if "enabled" in hook_conf:
@@ -437,7 +605,7 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
             hook_enabled = bool(clip.get("hook_enabled", bool(clip.get("hook"))))
         hook_text = str(hook_conf.get("text", "")).strip() if hook_enabled else ""
         hook_font_size = int(hook_conf.get("font_size", 96))
-        hook_y = float(hook_conf.get("y_pos", 300.0))
+        hook_y = hook_conf.get("y_pos")
         hook_style = str(hook_conf.get("style", "default"))
         audio_conf = ed.get("audio") or {}
         audio_opts = {
@@ -454,14 +622,15 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
             start = round(start - off, 2)
             end = round(end - off, 2)
         layout = clip.get("layout", "blur")
-        split_ratio = float(clip.get("split_ratio", 0.40) or 0.40)
+        split_ratio = float(clip.get("split_ratio") if clip.get("split_ratio") is not None else DEFAULT_SPLIT_RATIO)
+        split_divider = bool(clip.get("split_divider", DEFAULT_SPLIT_DIVIDER))
         face = clip.get("facecam")
         face_focus = clip.get("facecam_focus")
-        face_zoom = float(clip.get("facecam_zoom", 1.0))
+        face_zoom = float(clip.get("facecam_zoom", clip.get("face_zoom", 1.0)))
         cam_swap = bool(clip.get("cam_swap", False))
         cap_enabled = bool(clip.get("captions", True))
         cap_style = clip.get("style", "bounce")
-        cap_font_size = 132
+        cap_font_size = int(clip.get("cap_font_size") or 132)
         cap_y = clip.get("cap_y")
         words_to_use = words
         hook_enabled = bool(clip.get("hook_enabled", bool(clip.get("hook"))))
@@ -498,7 +667,8 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
         adjusted_words.append({"w": t, "s": round(s_val, 2), "e": round(e_val, 2)})
     words_to_use = adjusted_words
 
-    layout, fg_h, def_hook_y, def_cap_y = geometry(src_w, src_h, layout)
+    layout, fg_h, def_hook_y, def_cap_y = geometry(src_w, src_h, layout, out_w=ow, out_h=oh,
+                                                   split_ratio=split_ratio, cam_swap=cam_swap, divider=split_divider)
     if face and len(face) == 4 and src_w > 0 and src_h > 0:
         if all(isinstance(v, (int, float)) and 0.0 <= float(v) <= 1.0 for v in face) and (float(face[2]) > 0 or float(face[3]) > 0):
             fx = int(round(float(face[0]) * src_w))
@@ -515,47 +685,72 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
     if layout == "gameplay" and not (face and len(face) == 4):
         fb = clip.get("cam_fallback") or "blur"
         layout = fb if fb in ("blur", "zoom") else "blur"
-        layout, fg_h, def_hook_y, def_cap_y = geometry(src_w, src_h, layout)
+        layout, fg_h, def_hook_y, def_cap_y = geometry(src_w, src_h, layout, out_w=ow, out_h=oh)
     elif layout == "stack" and not (face and len(face) == 4):
         sw = src_w if src_w > 0 else 1920
         sh = src_h if src_h > 0 else 1080
         face = [0, 0, sw, int(round(sh * 0.50))]
 
+    stack_m = stack_layout_metrics(ow, oh, split_ratio=split_ratio, cam_swap=cam_swap, divider=split_divider) if layout == "stack" else None
+    y_scale = oh / 1920.0
+
     cap_anchor = clip.get("cap_anchor")
     if cap_y is not None:
         try:
-            cap_y = float(cap_y)
+            cap_y = float(cap_y) * y_scale if oh != 1920 else float(cap_y)
         except (ValueError, TypeError):
             cap_y = float(def_cap_y)
+    elif layout == "stack" and stack_m:
+        if cap_anchor == "seam":
+            cap_y = float(stack_m["seam_y"] + round(oh * 0.03) * (1 if not cam_swap else -1))
+        elif cap_anchor == "top":
+            cap_y = float(stack_m["game_top"] + round(stack_m["game_h"] * 0.16))
+        else:
+            cap_y = float(stack_m["cap_y"])
     elif cap_anchor == "safe_bottom":
-        cap_y = 1630.0
-    elif cap_anchor == "seam" and layout == "stack":
-        top_h = int(round(H * split_ratio / 2)) * 2
-        cap_y = float(top_h + (50 if not cam_swap else -50))
+        cap_y = round(oh * (1630.0 / 1920.0), 1)
     elif cap_anchor == "top":
-        cap_y = 420.0
+        cap_y = round(oh * (420.0 / 1920.0), 1)
     else:
         cap_y = float(def_cap_y)
 
+    # In stack layout, keep subtitles inside the gameplay section when using default/safe_bottom anchor
+    if layout == "stack" and stack_m and cap_anchor != "seam":
+        g_min, g_max = stack_m["cap_bounds"]
+        if cap_y < stack_m["game_top"] or cap_y > stack_m["game_bottom"]:
+            cap_y = float(stack_m["cap_y"])
+        else:
+            cap_y = max(g_min, min(g_max, cap_y))
+
+    hook_bounds = None
     if hook_y is not None:
         try:
-            hook_y = float(hook_y)
+            hook_y = float(hook_y) * y_scale if oh != 1920 else float(hook_y)
         except (ValueError, TypeError):
-            hook_y = _hook_y(layout, def_hook_y, face, split_ratio=split_ratio, cam_swap=cam_swap)
+            hook_y = _hook_y(layout, def_hook_y, face, split_ratio=split_ratio, cam_swap=cam_swap, out_w=ow, out_h=oh, divider=split_divider)
     else:
-        hook_y = _hook_y(layout, def_hook_y, face, split_ratio=split_ratio, cam_swap=cam_swap)
+        hook_y = _hook_y(layout, def_hook_y, face, split_ratio=split_ratio, cam_swap=cam_swap, out_w=ow, out_h=oh, divider=split_divider)
+
+    # Keep facecam labels (e.g. "JST") strictly inside the facecam section so they never overflow across the divider
+    if layout == "stack" and stack_m:
+        c_top, c_bot = stack_m["cam_top"], stack_m["cam_bottom"]
+        seam_tol = oh * 0.06
+        if (c_top - seam_tol) <= hook_y <= (c_bot + seam_tol):
+            hook_bounds = stack_m["hook_bounds"]
 
     ass = build_ass(words_to_use if cap_enabled else [], start, end, hook_text, cap_style,
                     clip.get("highlight_words", []), hook_y, cap_y,
                     cap_font_size=cap_font_size, hook_font_size=hook_font_size,
-                    hook_style=hook_style, hook_enabled=hook_enabled, cap_enabled=cap_enabled)
+                    hook_style=hook_style, hook_enabled=hook_enabled, cap_enabled=cap_enabled,
+                    out_w=ow, out_h=oh, hook_bounds=hook_bounds)
     # The clip is made in a short work folder and moved into place afterwards.
     work = Path(tempfile.mkdtemp(prefix="pk"))
     try:
         return _render_in(work, src, out_dir, name, start, end, layout, fg_h, ass,
                           face=face, clip=clip, words=words_to_use, hook_y=hook_y, cap_y=cap_y,
                           quality=quality, audio_opts=audio_opts, split_ratio=split_ratio,
-                          focus=face_focus, zoom=face_zoom, cam_swap=cam_swap)
+                          focus=face_focus, zoom=face_zoom, cam_swap=cam_swap,
+                          divider=split_divider, out_w=ow, out_h=oh, src_w=src_w, src_h=src_h)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
@@ -608,8 +803,16 @@ def _extract_cover(video_file: Path, out_jpg: Path, duration: float, fallback_sr
 
 def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layout, fg_h, ass: str,
                face=None, clip=None, words=None, hook_y=300, cap_y=1380, quality="final",
-               audio_opts=None, split_ratio=0.40, focus=None, zoom=1.0, cam_swap=False) -> dict:
+               audio_opts=None, split_ratio=DEFAULT_SPLIT_RATIO, focus=None, zoom=1.0, cam_swap=False,
+               divider=DEFAULT_SPLIT_DIVIDER, out_w=None, out_h=None, src_w=None, src_h=None) -> dict:
     global _nvenc_ok, _qsv_ok, _amf_ok
+    ow = max(2, int(out_w or config.OUT_W or W))
+    oh = max(2, int(out_h or config.OUT_H or H))
+    ow -= ow % 2
+    oh -= oh % 2
+    draft_w = max(2, (ow // 2) - ((ow // 2) % 2))
+    draft_h = max(2, (oh // 2) - ((oh // 2) % 2))
+
     (work / f"{name}.ass").write_text(ass, encoding="utf-8")
     (work / "f").mkdir()
     for f in config.FONTS_DIR.glob("*.ttf"):
@@ -635,9 +838,10 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
     cam_swap = bool(cam_swap or (clip or {}).get("cam_swap", False))
 
     if quality == "draft":
-        fc = _filter(layout, fg_h, face, cam_delay=cam_delay, split_ratio=split_ratio, cam_swap=cam_swap, focus=focus, zoom=zoom)
+        fc = _filter(layout, fg_h, face, cam_delay=cam_delay, split_ratio=split_ratio, cam_swap=cam_swap,
+                     focus=focus, zoom=zoom, divider=divider, out_w=ow, out_h=oh, src_w=src_w, src_h=src_h)
         fc_clean = fc.rstrip(";")
-        fc_draft = f"{fc_clean};[v0]scale=540:960,ass={name}.ass:fontsdir=f[vdraft]"
+        fc_draft = f"{fc_clean};[v0]scale={draft_w}:{draft_h},ass={name}.ass:fontsdir=f[vdraft]"
         base_draft = ["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
                       "-filter_complex", fc_draft, "-map", "[vdraft]", "-map", "0:a:0",
                       "-af", "asetpts=PTS-STARTPTS",
@@ -680,7 +884,8 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
     if fast_caption:
         shutil.copyfile(existing_raw, raw_file)
     else:
-        fc = _filter(layout, fg_h, face, cam_delay=cam_delay, split_ratio=split_ratio, cam_swap=cam_swap, focus=focus, zoom=zoom)
+        fc = _filter(layout, fg_h, face, cam_delay=cam_delay, split_ratio=split_ratio, cam_swap=cam_swap,
+                     focus=focus, zoom=zoom, divider=divider, out_w=ow, out_h=oh, src_w=src_w, src_h=src_h)
         fc_clean = fc.rstrip(";")
         base_raw = ["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
                     "-filter_complex", fc_clean, "-map", "[v0]", "-map", "0:a:0",
@@ -726,6 +931,7 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
         "cap_y": cap_y,
         "cap_anchor": clip.get("cap_anchor", "bottom") if clip else "bottom",
         "split_ratio": split_ratio,
+        "split_divider": divider,
         "cam_swap": cam_swap,
     }
     try:

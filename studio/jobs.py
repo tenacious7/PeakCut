@@ -115,7 +115,7 @@ DEFAULTS = {"max_clips": 6, "min_len": 15, "max_len": 60, "style": "bounce", "la
             "range_start": None, "range_end": None, "custom_ranges": None, "timestamp_mode": "direct",
             "captions": True, "meme": "none", "music": "none", "format": "moment", "cam_delay": 0.0,
             "meme_vol": None, "music_db": None, "cam_pos": "auto",
-            "split_ratio": 0.4, "cam_swap": False, "cap_anchor": "safe_bottom", "cam_fallback": "blur", "facecam": None, "cap_y": None,
+            "split_ratio": 0.35, "split_divider": True, "cam_swap": False, "cap_anchor": "safe_bottom", "cam_fallback": "blur", "facecam": None, "cap_y": None,
             "review_mode": "auto"}
 
 
@@ -236,6 +236,9 @@ def clean_options(options) -> dict:
                 out[k] = round(max(0.2, min(0.8, float(v))), 2)
             except (ValueError, TypeError):
                 pass
+            continue
+        elif k == "split_divider":
+            out[k] = bool(v)
             continue
         elif k == "cam_swap":
             out[k] = bool(v)
@@ -572,6 +575,8 @@ def request_render(jid, cid, changes: dict):
             new["split_ratio"] = round(max(0.2, min(0.8, float(changes["split_ratio"]))), 2)
         except (ValueError, TypeError):
             pass
+    if "split_divider" in changes:
+        new["split_divider"] = bool(changes["split_divider"])
     if "cam_swap" in changes:
         new["cam_swap"] = bool(changes["cam_swap"])
     if "cap_y" in changes:
@@ -646,6 +651,7 @@ def request_render(jid, cid, changes: dict):
         layout_changed = (
             new.get("layout") != clip.get("layout") or
             new.get("split_ratio") != clip.get("split_ratio") or
+            new.get("split_divider") != clip.get("split_divider") or
             new.get("cam_swap") != clip.get("cam_swap") or
             new.get("facecam") != clip.get("facecam") or
             new.get("cam_fallback") != clip.get("cam_fallback")
@@ -674,6 +680,12 @@ def request_render(jid, cid, changes: dict):
                 ed.setdefault("hook", {})["y_pos"] = float(new["hook_y"])
             if "cap_y" in new and new["cap_y"] is not None:
                 ed.setdefault("caption", {})["y_pos"] = float(new["cap_y"])
+            if "layout" in new:
+                ed["layout"] = new["layout"]
+            if "split_ratio" in new:
+                ed["split_ratio"] = new["split_ratio"]
+            if "split_divider" in new:
+                ed["split_divider"] = bool(new["split_divider"])
             if "cam_swap" in new:
                 ed["cam_swap"] = bool(new["cam_swap"])
             edit.save_edit(edit_file, ed)
@@ -793,6 +805,8 @@ def approve_clip(jid: str, cid: str) -> dict:
                 patch = {
                     "layout": ed.get("layout"),
                     "split_ratio": ed.get("split_ratio"),
+                    "split_divider": ed.get("split_divider", True),
+                    "cam_swap": ed.get("cam_swap", False),
                     "caption": {
                         "style": ed.get("caption", {}).get("style"),
                         "font_size": ed.get("caption", {}).get("font_size"),
@@ -853,6 +867,10 @@ def apply_to_all(jid: str, patch: dict) -> list:
             c["layout"] = merged["layout"]
         if "split_ratio" in merged:
             c["split_ratio"] = merged["split_ratio"]
+        if "split_divider" in merged:
+            c["split_divider"] = bool(merged["split_divider"])
+        if "cam_swap" in merged:
+            c["cam_swap"] = bool(merged["cam_swap"])
         if "facecam" in merged and not merged.get("facecam_override"):
             fc = merged["facecam"]
             c["facecam"] = [fc["x"], fc["y"], fc["w"], fc["h"]] if fc else None
@@ -1046,6 +1064,15 @@ def _facecam(job, src=None) -> list | None:
     path = src or job.get("source_path")
     cam_pos = (job.get("options") or {}).get("cam_pos", "auto")
     if cam_pos and cam_pos != "auto":
+        # Snap tightly to the real webcam inside the requested corner so we don't capture surrounding gameplay
+        if path and Path(path).is_file():
+            try:
+                detected = facecam.detect_in_corner(path, cam_pos)
+                if detected:
+                    job["facecam"] = [detected["x"], detected["y"], detected["w"], detected["h"]]
+                    return job["facecam"]
+            except Exception:  # noqa: BLE001
+                pass
         src_w, src_h = 1920, 1080
         if path and Path(path).is_file():
             try:
@@ -1053,8 +1080,8 @@ def _facecam(job, src=None) -> list | None:
                 src_w, src_h = info.get("w") or 1920, info.get("h") or 1080
             except Exception:
                 pass
-        bw, bh = int(src_w * 0.25), int(src_h * 0.28)
-        margin = int(src_w * 0.02)
+        bw, bh = int(src_w * 0.22), int(src_h * 0.24)
+        margin = int(src_w * 0.015)
         if cam_pos == "top-left":
             box = [margin, margin, bw, bh]
         elif cam_pos == "bottom-right":
@@ -1364,7 +1391,8 @@ def _run_job(job):
                     "music": o.get("music", "none"),
                     "meme_vol": o.get("meme_vol"),
                     "music_db": o.get("music_db"),
-                    "split_ratio": o.get("split_ratio", 0.40),
+                    "split_ratio": o.get("split_ratio", render.DEFAULT_SPLIT_RATIO),
+                    "split_divider": o.get("split_divider", render.DEFAULT_SPLIT_DIVIDER),
                     "cam_swap": o.get("cam_swap", False),
                     "cap_anchor": o.get("cap_anchor", "safe_bottom"),
                     "cam_fallback": o.get("cam_fallback", "blur"),
@@ -1439,7 +1467,8 @@ def _run_job(job):
                                   end=round(fc["end"] + r_start, 2), style=o["style"], layout=o["layout"],
                                   captions=o.get("captions", True), meme=o.get("meme", "none"),
                                   music=o.get("music", "none"), meme_vol=o.get("meme_vol"),
-                                  music_db=o.get("music_db"), split_ratio=o.get("split_ratio", 0.4),
+                                  music_db=o.get("music_db"), split_ratio=o.get("split_ratio", render.DEFAULT_SPLIT_RATIO),
+                                  split_divider=o.get("split_divider", render.DEFAULT_SPLIT_DIVIDER),
                                   cam_swap=o.get("cam_swap", False), cap_anchor=o.get("cap_anchor", "safe_bottom"),
                                   cam_fallback=o.get("cam_fallback", "blur"), cap_y=o.get("cap_y"),
                                   version=0, custom_mode="analyze")
@@ -1524,7 +1553,8 @@ def _run_job(job):
                          end=round(c["end"] + shift, 2), style=o["style"], layout=o["layout"],
                          captions=o.get("captions", True), meme=o.get("meme", "none"),
                          music=o.get("music", "none"), meme_vol=o.get("meme_vol"),
-                         music_db=o.get("music_db"), split_ratio=o.get("split_ratio", 0.4),
+                         music_db=o.get("music_db"), split_ratio=o.get("split_ratio", render.DEFAULT_SPLIT_RATIO),
+                         split_divider=o.get("split_divider", render.DEFAULT_SPLIT_DIVIDER),
                          cam_swap=o.get("cam_swap", False), cap_anchor=o.get("cap_anchor", "safe_bottom"),
                          cam_fallback=o.get("cam_fallback", "blur"), cap_y=o.get("cap_y"),
                          version=0)

@@ -1636,8 +1636,8 @@ function drawAdd(variant) {
                 <button type="button" class="btn sm" id="btnRefreshCropFrame" style="padding:2px 8px;font-size:10px;margin-left:4px">Load Frame</button>
               </div>
             </div>
-            <div id="cropContainer" class="crop-container">
-              <img id="cropImg" src="" style="width:100%;height:100%;object-fit:contain;display:none" alt="Stream Frame" />
+            <div id="cropContainer" class="crop-container" style="aspect-ratio:16/9">
+              <img id="cropImg" src="" style="width:100%;height:100%;object-fit:fill;display:none" alt="Stream Frame" />
               <div id="cropPlaceholder" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#888;font-size:12px;gap:6px;padding:20px;text-align:center">
                 <span>Click "Load Frame" or paste a video link to see stream preview</span>
               </div>
@@ -1651,11 +1651,11 @@ function drawAdd(variant) {
           <!-- 9:16 INTERACTIVE CANVAS & SPLIT SCREEN CONTROLS -->
           <div class="canvas-9-16-wrapper" id="composerSplitCanvasWrapper" style="display:${c?.layout === 'stack' ? 'flex' : 'none'}">
             <div class="canvas-9-16" id="composerCanvas916">
-              <div class="canvas-panel" id="compCanvTop" style="top:0;height:40%;background:linear-gradient(135deg, #2a2a2e, #1e1e24);color:#fff">
+              <div class="canvas-panel" id="compCanvTop" style="top:0;height:35%;background:linear-gradient(135deg, #2a2a2e, #1e1e24);color:#fff">
                 <span id="compCanvTopLabel">FACECAM</span>
               </div>
-              <div class="canvas-seam" id="compCanvSeam" style="top:40%"><div></div></div>
-              <div class="canvas-panel" id="compCanvBot" style="bottom:0;height:60%;background:linear-gradient(135deg, #18181c, #0d0d11);color:#aaa">
+              <div class="canvas-seam" id="compCanvSeam" style="top:35%"><div></div></div>
+              <div class="canvas-panel" id="compCanvBot" style="bottom:0;height:65%;background:linear-gradient(135deg, #18181c, #0d0d11);color:#aaa">
                 <span id="compCanvBotLabel">GAMEPLAY</span>
               </div>
               <div class="canvas-cap-badge" id="compCanvCapBadge" style="bottom:15%">
@@ -1665,12 +1665,20 @@ function drawAdd(variant) {
             </div>
             <div style="flex:1;display:flex;flex-direction:column;gap:8px">
               <div style="display:flex;align-items:center;justify-content:space-between">
-                <span style="font-size:12px;font-weight:700;color:var(--brand-ink)">Split Screen Layout:</span>
+                <span style="font-size:12px;font-weight:700;color:var(--brand-ink)">Split Screen (<span id="compSplitRatioText">35% / 65%</span>):</span>
                 <button type="button" class="btn ghost sm" id="btnCompSwap" style="padding:2px 8px;font-size:11px;height:26px">⇄ Swap Panels</button>
               </div>
-              <div style="font-size:11px;color:var(--dim);line-height:1.4">
-                <span id="compSplitInfo">Facecam on top, visuals below</span>
+              <div style="display:flex;gap:4px;flex-wrap:wrap">
+                <button type="button" class="split-preset-btn active" data-ratio="0.35">35% / 65%</button>
+                <button type="button" class="split-preset-btn" data-ratio="0.40">40% / 60%</button>
+                <button type="button" class="split-preset-btn" data-ratio="0.50">50% / 50%</button>
               </div>
+              <div style="font-size:11px;color:var(--dim);line-height:1.4">
+                <span id="compSplitInfo">Facecam on top (35%), gameplay below (65%)</span>
+              </div>
+              <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--brand-ink);cursor:pointer">
+                <input type="checkbox" id="o_split_divider" checked> Subtle divider line between sections
+              </label>
               <div style="margin-top:2px">
                 <div style="font-size:11px;font-weight:700;color:var(--dim);margin-bottom:4px">Caption Safe-Zone Lock:</div>
                 <div style="display:flex;gap:4px">
@@ -1925,7 +1933,8 @@ function drawAdd(variant) {
 
   // --- Auto/Manual Cam & 9:16 Canvas controls ---
   window.composerCamMode = "auto";
-  window.composerSplitRatio = 0.40;
+  window.composerSplitRatio = 0.35;
+  window.composerSplitDivider = true;
   window.composerCamSwap = false;
   window.composerCapAnchor = "safe_bottom";
   window.manualCropCoords = {x: 0.72, y: 0.04, w: 0.25, h: 0.28};
@@ -2517,6 +2526,11 @@ function jobOptions() {
   }
   if (window.composerSplitRatio != null) {
     o.split_ratio = window.composerSplitRatio;
+  }
+  if ($("#o_split_divider")) {
+    o.split_divider = $("#o_split_divider").checked;
+  } else if (window.composerSplitDivider != null) {
+    o.split_divider = window.composerSplitDivider;
   }
   if (window.composerCamSwap != null) {
     o.cam_swap = window.composerCamSwap;
@@ -3629,7 +3643,8 @@ function collectClipEdit() {
   const capY = $("#dlg_cap_y") ? Number($("#dlg_cap_y").value) : 1630;
 
   const layout = $("#dlg_layout") ? $("#dlg_layout").value : "blur";
-  const splitRatio = 0.40;
+  const splitRatio = $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.35;
+  const splitDivider = $("#dlg_split_divider") ? $("#dlg_split_divider").checked : true;
   const camSwap = $("#dlg_cam_swap") ? ($("#dlg_cam_swap").type === "checkbox" ? $("#dlg_cam_swap").checked : ($("#dlg_cam_swap").value === "true")) : false;
 
   let facecam = D.edit?.facecam ? JSON.parse(JSON.stringify(D.edit.facecam)) : null;
@@ -3663,6 +3678,7 @@ function collectClipEdit() {
     description,
     layout,
     split_ratio: splitRatio,
+    split_divider: splitDivider,
     cam_swap: camSwap,
     facecam: facecam,
     facecam_override: D.edit?.facecam_override || false,
@@ -3695,6 +3711,7 @@ function collectGlobalPatch() {
   return {
     layout: ed.layout,
     split_ratio: ed.split_ratio,
+    split_divider: ed.split_divider,
     cam_swap: ed.cam_swap,
     caption: {
       enabled: ed.caption.enabled,
@@ -3725,12 +3742,14 @@ function syncLiveOverlay() {
   if ($("#capYVal")) $("#capYVal").textContent = Math.round(capY) + "px";
 
   const isStack = ($("#dlg_layout") ? $("#dlg_layout").value : "blur") === "stack";
+  const splitRatio = $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.35;
   const isSwap = $("#dlg_cam_swap") ? ($("#dlg_cam_swap").type === "checkbox" ? $("#dlg_cam_swap").checked : ($("#dlg_cam_swap").value === "true")) : false;
 
   const seamEl = $("#liveStackSeam");
   if (seamEl) {
     seamEl.style.display = isStack ? "block" : "none";
-    seamEl.style.top = ((isSwap ? 0.60 : 0.40) * 100) + "%";
+    const seamFrac = isSwap ? (1 - splitRatio) : splitRatio;
+    seamEl.style.top = (seamFrac * 100) + "%";
   }
 
   const hookEnabled = $("#dlg_hook_enabled") ? $("#dlg_hook_enabled").checked : true;
@@ -3813,7 +3832,8 @@ function drawClipDlg(full) {
   const hk = ed.hook || { enabled: !!c.hook, text: c.hook || "", font_size: 96, y_pos: 300, style: "default" };
   const cap = ed.caption || { enabled: c.captions !== false, style: c.style || "bounce", font_size: 132, y_pos: 1630, words: c.words || [] };
   const layout = ed.layout || c.layout || "blur";
-  const splitRatio = ed.split_ratio != null ? ed.split_ratio : (c.split_ratio || 0.40);
+  const splitRatio = ed.split_ratio != null ? ed.split_ratio : (c.split_ratio != null ? c.split_ratio : 0.35);
+  const splitDivider = ed.split_divider != null ? !!ed.split_divider : (c.split_divider != null ? !!c.split_divider : true);
   const camSwap = ed.cam_swap != null ? !!ed.cam_swap : !!c.cam_swap;
   const memeVal = ed.audio ? (ed.audio.meme_mood || (ed.audio.meme ? "horn" : "")) : (c.meme || "");
   const musicVal = ed.audio ? (ed.audio.music_bed || (ed.audio.music ? "upbeat" : "")) : (c.music || "");
@@ -3842,8 +3862,8 @@ function drawClipDlg(full) {
     stageHtml = `<div class="video-preview-wrap" id="vwrap">
       <video id="dlgVideo" src="${videoFile}" poster="${posterFile}" controls playsinline preload="metadata"></video>
       <div class="live-overlay-container" id="liveOverlayContainer">
-        <div id="liveStackSeam" style="position:absolute;left:0;right:0;border-bottom:2px dashed rgba(255,102,0,0.7);pointer-events:none;z-index:5;top:${((camSwap ? 0.60 : 0.40) * 100)}%;display:${layout === 'stack' ? 'block' : 'none'}">
-          <span style="position:absolute;right:8px;bottom:2px;font-size:10px;font-weight:700;color:#fff;background:rgba(0,0,0,0.6);padding:1px 6px;border-radius:3px">SEAM (OVERLAP)</span>
+        <div id="liveStackSeam" style="position:absolute;left:0;right:0;border-bottom:2px dashed rgba(255,102,0,0.7);pointer-events:none;z-index:5;top:${((camSwap ? (1 - splitRatio) : splitRatio) * 100)}%;display:${layout === 'stack' ? 'block' : 'none'}">
+          <span style="position:absolute;right:8px;bottom:2px;font-size:10px;font-weight:700;color:#fff;background:rgba(0,0,0,0.6);padding:1px 6px;border-radius:3px">SPLIT SEAM</span>
         </div>
         <div id="liveHookBox" class="live-hook-box ${hk.style === 'nobox' ? 'nobox' : ''}" style="top:${((hk.y_pos || 300) / 1920 * 100)}%;display:${(hk.enabled !== false && (hk.text || c.hook)) ? 'block' : 'none'}">
           <span id="liveHookText">${esc(hk.text || c.hook || '')}</span>
@@ -3912,7 +3932,7 @@ function drawClipDlg(full) {
             <input type="range" id="dlg_hook_y" min="80" max="1750" step="10" value="${hk.y_pos || 300}" style="width:100%">
             <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">
               <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 220) < 50 ? 'active' : ''}" data-hook-pos="220">Top</button>
-              <button type="button" class="cap-anchor-btn" data-hook-pos="seam" title="Place Hook right across the panel seam overlap">On Seam (Overlap)</button>
+              <button type="button" class="cap-anchor-btn" data-hook-pos="seam" title="Keep label neatly inside the facecam section near the divider">Inside Facecam</button>
               <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 400) < 50 ? 'active' : ''}" data-hook-pos="400">Upper</button>
               <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 960) < 50 ? 'active' : ''}" data-hook-pos="960">Middle</button>
               <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 1300) < 50 ? 'active' : ''}" data-hook-pos="1300">Above Captions</button>
@@ -3991,16 +4011,25 @@ function drawClipDlg(full) {
         <!-- Split screen controls when layout === 'stack' -->
         <div id="dlgStackControls" style="display:${layout === 'stack' ? 'block' : 'none'};padding:8px;background:var(--muted);border:1px solid var(--line);border-radius:6px;margin-bottom:12px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <span style="font-size:11px;font-weight:700;color:var(--brand-ink)">Facecam Position</span>
+            <span style="font-size:11px;font-weight:700;color:var(--brand-ink)">Split Screen Layout</span>
             <button type="button" class="btn sm ghost" data-act="applylayoutall" style="padding:2px 8px;font-size:11px" title="Apply layout to all clips">
               ⚡ Apply to all
             </button>
           </div>
-          <select id="dlg_cam_swap" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px;background:#fff;font-weight:600">
-            <option value="false" ${!camSwap ? 'selected' : ''}>Facecam on Top, Video Below (Default)</option>
-            <option value="true" ${camSwap ? 'selected' : ''}>Video on Top, Facecam Below</option>
-          </select>
-          <input type="hidden" id="dlg_split_ratio" value="0.40">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+            <select id="dlg_split_ratio" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px;background:#fff;font-weight:600">
+              <option value="0.35" ${Math.abs(splitRatio - 0.35) < 0.03 ? 'selected' : ''}>35% Cam / 65% Game</option>
+              <option value="0.40" ${Math.abs(splitRatio - 0.40) < 0.03 ? 'selected' : ''}>40% Cam / 60% Game</option>
+              <option value="0.50" ${Math.abs(splitRatio - 0.50) < 0.03 ? 'selected' : ''}>50% Cam / 50% Game</option>
+            </select>
+            <select id="dlg_cam_swap" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px;background:#fff;font-weight:600">
+              <option value="false" ${!camSwap ? 'selected' : ''}>Facecam Top / Game Bottom</option>
+              <option value="true" ${camSwap ? 'selected' : ''}>Game Top / Facecam Bottom</option>
+            </select>
+          </div>
+          <label class="sw" style="margin:0;font-size:11px">
+            <input type="checkbox" id="dlg_split_divider" ${splitDivider ? "checked" : ""}> Subtle divider line between sections
+          </label>
         </div>
 
         <!-- Facecam Zoom & Nudge Focus -->
@@ -4150,9 +4179,12 @@ function drawClipDlg(full) {
     $$("#clipdlg [data-hook-pos]").forEach(b => b.addEventListener("click", () => {
       $$("#clipdlg [data-hook-pos]").forEach(x => x.classList.toggle("active", x === b));
       if (b.dataset.hookPos === "seam") {
+        const sr = $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.35;
         const isSwap = $("#dlg_cam_swap") ? ($("#dlg_cam_swap").type === "checkbox" ? $("#dlg_cam_swap").checked : ($("#dlg_cam_swap").value === "true")) : false;
-        const seamY = isSwap ? 1152 : 768;
-        if ($("#dlg_hook_y")) { $("#dlg_hook_y").value = seamY; syncLiveOverlay(); }
+        const camH = Math.round(1920 * sr / 2) * 2;
+        const gameH = 1920 - camH;
+        const insideCamY = isSwap ? (gameH + 84) : (camH - 84);
+        if ($("#dlg_hook_y")) { $("#dlg_hook_y").value = insideCamY; syncLiveOverlay(); }
       } else {
         if ($("#dlg_hook_y")) { $("#dlg_hook_y").value = b.dataset.hookPos; syncLiveOverlay(); }
       }
@@ -4164,18 +4196,22 @@ function drawClipDlg(full) {
       $$("#clipdlg [data-cap-pos]").forEach(x => x.classList.toggle("active", x === b));
       if ($("#dlg_cap_y")) { $("#dlg_cap_y").value = b.dataset.capPos; syncLiveOverlay(); }
     }));
-    $("#dlg_cam_swap")?.addEventListener("change", () => {
+    const onStackLayoutChange = () => {
       const isStack = ($("#dlg_layout") ? $("#dlg_layout").value : "blur") === "stack";
       if (isStack) {
+        const sr = $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.35;
         const isSwap = $("#dlg_cam_swap") ? ($("#dlg_cam_swap").type === "checkbox" ? $("#dlg_cam_swap").checked : ($("#dlg_cam_swap").value === "true")) : false;
-        const seamY = isSwap ? 1152 : 768;
-        const currHookY = $("#dlg_hook_y") ? Number($("#dlg_hook_y").value) : 300;
-        if (Math.abs(currHookY - (isSwap ? 768 : 1152)) < 150 && $("#dlg_hook_y")) {
-          $("#dlg_hook_y").value = seamY;
-        }
+        const camH = Math.round(1920 * sr / 2) * 2;
+        const gameH = 1920 - camH;
+        const targetHookY = isSwap ? (gameH + 84) : (camH - 84);
+        const targetCapY = isSwap ? Math.round(gameH * 0.80) : Math.round(camH + gameH * 0.77);
+        if ($("#dlg_hook_y")) $("#dlg_hook_y").value = targetHookY;
+        if ($("#dlg_cap_y")) $("#dlg_cap_y").value = targetCapY;
       }
       syncLiveOverlay();
-    });
+    };
+    $("#dlg_split_ratio")?.addEventListener("change", onStackLayoutChange);
+    $("#dlg_cam_swap")?.addEventListener("change", onStackLayoutChange);
     $("#dlg_face_zoom")?.addEventListener("input", e => {
       const z = Number(e.target.value);
       if ($("#faceZoomVal")) $("#faceZoomVal").textContent = z.toFixed(2) + "x";
@@ -4811,7 +4847,8 @@ document.addEventListener("click", async e => {
         const isSwap = $("#dlg_cam_swap") ? ($("#dlg_cam_swap").type === "checkbox" ? $("#dlg_cam_swap").checked : ($("#dlg_cam_swap").value === "true")) : false;
         const patch = {
           layout: $("#dlg_layout").value,
-          split_ratio: 0.40,
+          split_ratio: $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.35,
+          split_divider: $("#dlg_split_divider") ? $("#dlg_split_divider").checked : true,
           cam_swap: isSwap
         };
         await send(`/api/jobs/${encodeURIComponent(D.jid)}/apply-to-all`, patch, "POST");
@@ -4891,7 +4928,8 @@ document.addEventListener("click", async e => {
         });
       }
       if ($("#dlg_cap_anchor")) body.cap_anchor = $("#dlg_cap_anchor").value;
-      body.split_ratio = 0.40;
+      body.split_ratio = $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.35;
+      if ($("#dlg_split_divider")) body.split_divider = $("#dlg_split_divider").checked;
       if ($("#dlg_cam_swap")) body.cam_swap = $("#dlg_cam_swap").type === "checkbox" ? $("#dlg_cam_swap").checked : ($("#dlg_cam_swap").value === "true");
       if ($("#dlg_hook_enabled")) body.hook_enabled = $("#dlg_hook_enabled").checked;
       if ($("#dlg_cap_enabled")) body.captions = $("#dlg_cap_enabled").checked;

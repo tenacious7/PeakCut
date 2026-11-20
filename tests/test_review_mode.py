@@ -491,25 +491,44 @@ class TestReviewMode(unittest.TestCase):
         fzoom = render.cover_crop_filter(cam, 1080, 672, zoom=1.5)
         self.assertIn("crop=266:164:", fzoom)
 
-        # 5. Test build_stack_filter with swap=False and swap=True
-        stack_noswap = render.build_stack_filter(cam, 0.35, swap=False)
+        # 5. Test build_stack_filter with swap=False/True and optional divider
+        stack_noswap = render.build_stack_filter(cam, 0.35, swap=False, divider=True)
         self.assertIn("[c][g]vstack=inputs=2", stack_noswap)
         self.assertIn("scale=1080:672:flags=lanczos", stack_noswap)
         self.assertIn("crop=1080:1248", stack_noswap)
+        self.assertIn("drawbox=x=0:", stack_noswap)
 
-        stack_swap = render.build_stack_filter(cam, 0.35, swap=True)
+        stack_nodiv = render.build_stack_filter(cam, 0.35, swap=False, divider=False)
+        self.assertNotIn("drawbox=", stack_nodiv)
+
+        stack_swap = render.build_stack_filter(cam, 0.35, swap=True, divider=True)
         self.assertIn("[g][c]vstack=inputs=2", stack_swap)
         self.assertIn("scale=1080:672:flags=lanczos", stack_swap)
-        self.assertIn("crop=1080:1248", stack_noswap)
+        self.assertIn("crop=1080:1248", stack_swap)
 
-        # 6. Test hook placement at the seam (overlapping facecam and video halves)
-        # swap=False: seam at cam_h (672) -> hook_y = 672
+        # 6. Test hook placement strictly contained inside facecam section (never overflowing across divider)
+        # swap=False: facecam is [0, 672)
         hook_y_noswap = render._hook_y("stack", 300, facecam=cam, split_ratio=0.35, cam_swap=False)
-        self.assertEqual(hook_y_noswap, 672)
+        self.assertGreater(hook_y_noswap, 0)
+        self.assertLess(hook_y_noswap, 672)
 
-        # swap=True: seam at game_h (1248) -> hook_y = 1248
+        # swap=True: facecam is (1248, 1920]
         hook_y_swap = render._hook_y("stack", 300, facecam=cam, split_ratio=0.35, cam_swap=True)
-        self.assertEqual(hook_y_swap, 1248)
+        self.assertGreater(hook_y_swap, 1248)
+        self.assertLess(hook_y_swap, 1920)
+
+        # 7. Test responsive proportional metrics at non-1080p output resolution (720x1280)
+        m720 = render.stack_layout_metrics(720, 1280, split_ratio=0.35, cam_swap=False, divider=True)
+        self.assertEqual(m720["cam_h"], 448)
+        self.assertEqual(m720["game_h"], 832)
+        self.assertEqual(m720["cam_h"] + m720["game_h"], 1280)
+        self.assertLess(m720["hook_y"], m720["cam_bottom"])
+        self.assertGreater(m720["cap_y"], m720["game_top"])
+        self.assertLess(m720["cap_y"], m720["game_bottom"])
+
+        stack_720 = render.build_stack_filter(cam, 0.35, swap=False, W=720, H=1280, divider=True)
+        self.assertIn("scale=720:448:flags=lanczos", stack_720)
+        self.assertIn("crop=720:832", stack_720)
         print("PASS test_cover_crop_and_stack_filters")
 
     def test_face_center_and_focus_detection(self):

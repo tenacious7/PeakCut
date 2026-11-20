@@ -219,17 +219,62 @@ def _best(profile: np.ndarray, approx: float, span: float) -> float:
     return float(lo + seg.argmax()) if len(seg) else float(approx)
 
 
+def _trim_moving_margins(box: tuple[float, float, float, float], still: np.ndarray) -> tuple[float, float, float, float]:
+    """Shrink any outer rows/columns of a candidate box that move like the game rather than staying still like a webcam."""
+    x0, y0, x1, y1 = int(round(box[0])), int(round(box[1])), int(round(box[2])), int(round(box[3]))
+    x0 = max(0, min(W - 1, x0))
+    y0 = max(0, min(H - 1, y0))
+    x1 = max(x0 + 1, min(W, x1))
+    y1 = max(y0 + 1, min(H, y1))
+    min_w = max(4, int(round(W * MIN_SIZE)))
+    min_h = max(4, int(round(H * MIN_SIZE)))
+    game = float(np.median(still))
+    if game < 2.0:
+        return (float(x0), float(y0), float(x1), float(y1))
+    cut = max(STILL_MIN, STILL_FRAC * game)
+
+    # Peel moving gameplay strips from all four sides until we hit the static webcam picture
+    changed = True
+    while changed:
+        changed = False
+        if y1 - y0 > min_h and float((still[y0, x0:x1] > cut).mean()) > 0.45:
+            y0 += 1
+            changed = True
+        if y1 - y0 > min_h and float((still[y1 - 1, x0:x1] > cut).mean()) > 0.45:
+            y1 -= 1
+            changed = True
+        if x1 - x0 > min_w and float((still[y0:y1, x0] > cut).mean()) > 0.45:
+            x0 += 1
+            changed = True
+        if x1 - x0 > min_w and float((still[y0:y1, x1 - 1] > cut).mean()) > 0.45:
+            x1 -= 1
+            changed = True
+    return (float(x0), float(y0), float(x1), float(y1))
+
+
 def _snap(path: str | Path, box, w: int, h: int, span: float = 0.0):
     """A box on the small grid, put onto the borders that are really in the picture.
 
-    A border the small grid found is a pixel or two out; a box a model proposed can be a good part of the
-    frame out, which is what `span` is for. A side within a hair of the frame's own edge is the edge."""
+    Gradients are summed ONLY along the box's own local row/column span so distant game scenery
+    (trees, sky, HUD bars outside the webcam) cannot pull a webcam edge outward."""
     frame = _full_frame(path)
     if frame is None:
         return None
     fh, fw = frame.shape
-    col = np.abs(np.diff(frame, axis=1)).sum(axis=0)
-    row = np.abs(np.diff(frame, axis=0)).sum(axis=1)
+    x0_s, y0_s, x1_s, y1_s = box
+    ax0, ay0 = x0_s * fw / W, y0_s * fh / H
+    ax1, ay1 = x1_s * fw / W, y1_s * fh / H
+
+    # Restrict gradient profiles to the box's own span (trimmed slightly at the corners so rounded corners don't dilute edges)
+    pad_x = max(2, int(round((ax1 - ax0) * 0.10)))
+    pad_y = max(2, int(round((ay1 - ay0) * 0.10)))
+    ry0 = max(0, min(fh - 2, int(round(ay0)) + pad_y))
+    ry1 = max(ry0 + 2, min(fh, int(round(ay1)) - pad_y))
+    rx0 = max(0, min(fw - 2, int(round(ax0)) + pad_x))
+    rx1 = max(rx0 + 2, min(fw, int(round(ax1)) - pad_x))
+
+    col = np.abs(np.diff(frame[ry0:ry1, :], axis=1)).sum(axis=0)
+    row = np.abs(np.diff(frame[:, rx0:rx1], axis=0)).sum(axis=1)
     # The small grid is a quarter of the picture, so a border found on it is a few pixels out; one the
     # model proposed can be a good part of the frame out, which is what `span` is for.
     spread = max(4.0, span * max(fw, fh), 1.5 * max(fw / W, fh / H))
@@ -239,9 +284,8 @@ def _snap(path: str | Path, box, w: int, h: int, span: float = 0.0):
             return float(edge)
         return _best(profile, approx, spread)
 
-    x0, y0, x1, y1 = box
-    return (line(col, x0 * fw / W, 0, fw), line(row, y0 * fh / H, 0, fh),
-            line(col, x1 * fw / W, fw, fw), line(row, y1 * fh / H, fh, fh))
+    return (line(col, ax0, 0, fw), line(row, ay0, 0, fh),
+            line(col, ax1, fw, fw), line(row, ay1, fh, fh))
 
 
 def _corner(x0, y0, x1, y1, w, h) -> str:
@@ -264,15 +308,18 @@ def _corner(x0, y0, x1, y1, w, h) -> str:
     return "middle"
 
 
-def _finish(path: str | Path, found: dict, w: int, h: int, still: np.ndarray) -> dict | None:
+def _finish(path: str | Path, found: dict, w: int, h: int, still: np.ndarray, trim_moving: bool = False) -> dict | None:
     """The box in source pixels, with how sure it is that this is really a camera."""
-    snapped = _snap(path, (found["x"], found["y"], found["x1"], found["y1"]), w, h)
+    raw_box = (found["x"], found["y"], found["x1"], found["y1"])
+    if trim_moving:
+        raw_box = _trim_moving_margins(raw_box, still)
+    snapped = _snap(path, raw_box, w, h)
     if not snapped:
         return None
     x0, y0, x1, y1 = snapped
     if x1 - x0 < w * MIN_SIZE or y1 - y0 < h * MIN_SIZE:
         return None
-    inside = still[int(found["y"]):int(found["y1"]), int(found["x"]):int(found["x1"])]
+    inside = still[int(raw_box[1]):int(raw_box[3]), int(raw_box[0]):int(raw_box[2])]
     game = float(np.median(still))
     moving = float(np.median(inside)) if inside.size else 99.0
     # sure of it when the picture inside hardly moves while the game around it is racing
@@ -306,12 +353,13 @@ def _asked(path: str | Path, ask):
 
 
 def _seen(path: str | Path, box, w: int, h: int, still: np.ndarray, light: np.ndarray) -> dict | None:
-    """A box the model proposed, put onto the picture's real borders and checked like any other.
+    """A box the model proposed, trimmed of moving gameplay margins, put onto the picture's real borders and checked.
 
     A model reads a picture well but places a box roughly, and it can be wrong about the whole thing. So
-    its box is only believed where the borders are really there and the picture inside really is still."""
+    its box is trimmed to the still webcam interior first, then snapped locally to real borders."""
     fx, fy, fw, fh = box
-    snapped = _snap(path, (fx * W, fy * H, (fx + fw) * W, (fy + fh) * H), w, h, span=0.12)
+    trimmed = _trim_moving_margins((fx * W, fy * H, (fx + fw) * W, (fy + fh) * H), still)
+    snapped = _snap(path, trimmed, w, h, span=0.06)
     if not snapped:
         return None
     x0, y0, x1, y1 = snapped
@@ -323,7 +371,51 @@ def _seen(path: str | Path, box, w: int, h: int, still: np.ndarray, light: np.nd
     if _plausible(*small, still, light, float(np.median(still)), share=1.0) is None:
         return None
     found = {"x": small[0], "y": small[1], "x1": small[2], "y1": small[3], "score": 0.0}
-    return _finish(path, found, w, h, still)
+    return _finish(path, found, w, h, still, trim_moving=True)
+
+
+def detect_in_corner(path: str | Path, corner: str) -> dict | None:
+    """Find the tight webcam box inside a user-specified corner (top-left, top-right, bottom-left, bottom-right).
+
+    Prevents static corner presets from grabbing huge strips of surrounding gameplay."""
+    frames = _frames(path)
+    if len(frames) < 4:
+        return None
+    w, h = _size(path)
+    if not w or not h:
+        return None
+    still = _stillness(frames)
+    light = frames.astype(np.float32).mean(axis=0)
+    vx, hy = _profiles(frames)
+    vpeaks, hpeaks = _peaks(vx, 40), _peaks(hy, 40)
+    found = _local(vpeaks, hpeaks, still, light) if (vpeaks and hpeaks) else []
+
+    want_left = "left" in corner
+    want_top = "top" in corner
+
+    def _in_quadrant(c: dict) -> bool:
+        cx = (c["x"] + c["x1"]) / 2.0
+        cy = (c["y"] + c["y1"]) / 2.0
+        ok_x = cx < W * 0.55 if want_left else cx > W * 0.45
+        ok_y = cy < H * 0.55 if want_top else cy > H * 0.45
+        return ok_x and ok_y
+
+    in_q = [c for c in found if _in_quadrant(c)]
+    if in_q:
+        res = _finish(path, in_q[0], w, h, still, trim_moving=True)
+        if res:
+            return res
+
+    # Fallback: start from a generous corner quadrant and peel away moving gameplay pixels
+    qx0, qx1 = (0.0, W * 0.40) if want_left else (W * 0.60, float(W))
+    qy0, qy1 = (0.0, H * 0.45) if want_top else (H * 0.55, float(H))
+    trimmed = _trim_moving_margins((qx0, qy0, qx1, qy1), still)
+    if (trimmed[2] - trimmed[0]) >= W * MIN_SIZE and (trimmed[3] - trimmed[1]) >= H * MIN_SIZE:
+        res = _finish(path, {"x": trimmed[0], "y": trimmed[1], "x1": trimmed[2], "y1": trimmed[3], "score": 0.0},
+                      w, h, still, trim_moving=False)
+        if res:
+            return res
+    return None
 
 
 def detect(path: str | Path, ask=None) -> dict | None:
@@ -358,13 +450,13 @@ def detect(path: str | Path, ask=None) -> dict | None:
         # matches none of them is its own box measured and used.
         match = max(found, key=lambda c: _overlap(c, hinted)) if found else None
         if match and _overlap(match, hinted) >= MATCH:
-            return _finish(path, match, w, h, still)
+            return _finish(path, match, w, h, still, trim_moving=True)
         seen = _seen(path, hinted, w, h, still, light)
         if seen:
             return seen
     if not found:
         return None
-    return _finish(path, found[0], w, h, still)
+    return _finish(path, found[0], w, h, still, trim_moving=True)
 
 
 try:
