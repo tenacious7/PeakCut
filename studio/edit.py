@@ -25,6 +25,7 @@ GLOBAL_FIELDS = {
     "hook.enabled",
     "hook.font_size",
     "hook.y_pos",
+    "hook.max_w",
     "hook.style",
     "audio.meme",
     "audio.music",
@@ -48,24 +49,23 @@ ALLOWED_LAYOUTS = {"blur", "zoom", "crop", "gameplay", "stack"}
 
 def _stack_defaults(split_ratio: float = DEFAULT_SPLIT_RATIO, cam_swap: bool = False,
                     split_divider: bool = DEFAULT_SPLIT_DIVIDER) -> tuple[float, float]:
-    """Proportional (hook_y, cap_y) for stack layout based on configured output height."""
+    """Proportional (hook_y, cap_y) for stack layout based on configured output height.
+    Places Big Text cleanly below the split seam (top of gameplay) so it never covers the facecam."""
     oh = max(2, int(getattr(config, "OUT_H", 1920) or 1920))
     ratio = max(0.20, min(0.80, float(DEFAULT_SPLIT_RATIO if split_ratio is None else split_ratio)))
     cam_h = max(2, min(oh - 2, int(round(oh * ratio / 2.0)) * 2))
     game_h = oh - cam_h
     div_h = max(2, int(round(oh * 0.003 / 2.0)) * 2) if split_divider else 0
     half_div = div_h / 2.0
-    pad = max(6, int(round(oh * 0.008)))
-    hook_off = int(round(oh * 0.042))
+    pad = max(10, int(round(oh * 0.012)))
+    hook_off = int(round(oh * 0.048))
     if cam_swap:
-        cam_top, cam_bot = game_h, oh
-        game_top = 0
-        hook_y = round(min(cam_bot - pad, cam_top + half_div + hook_off), 1)
+        game_top, game_bot = 0, game_h
+        hook_y = round(max(game_top + pad, game_bot - half_div - hook_off), 1)
         cap_y = round(game_top + game_h * 0.80, 1)
     else:
-        cam_top, cam_bot = 0, cam_h
-        game_top = cam_h
-        hook_y = round(max(cam_top + pad, cam_bot - half_div - hook_off), 1)
+        game_top, game_bot = cam_h, oh
+        hook_y = round(min(game_bot - pad, game_top + half_div + hook_off), 1)
         cap_y = round(game_top + game_h * 0.77, 1)
     return hook_y, cap_y
 
@@ -100,6 +100,7 @@ def default_edit(start=0.0, end=30.0, layout="blur") -> dict:
             "text": "",
             "font_size": 96,
             "y_pos": def_hook_y,
+            "max_w": 980,
             "style": "default"
         },
         "audio": {
@@ -222,6 +223,7 @@ def init_edit(job: dict, clip: dict, words: list = None, facecam: list = None) -
             "text": hook_text,
             "font_size": hook_font_size,
             "y_pos": hook_y,
+            "max_w": int(clip.get("hook_max_w") or 980),
             "style": hook_style
         },
         "audio": {
@@ -352,6 +354,11 @@ def validate_edit(data: dict, src_w=1920, src_h=1080) -> dict:
         out["hook"]["y_pos"] = round(max(hook_min_y, min(hook_max_y, hyp)), 1)
     except (ValueError, TypeError):
         pass
+    try:
+        hmw = int(float(hk.get("max_w", 980)))
+        out["hook"]["max_w"] = max(360, min(1020, hmw))
+    except (ValueError, TypeError):
+        out["hook"]["max_w"] = 980
     out["hook"]["style"] = str(hk.get("style", "default"))
 
     # Audio
@@ -452,6 +459,11 @@ def deep_merge_global(target: dict, patch: dict) -> dict:
             oh = max(2, int(getattr(config, "OUT_H", 1920) or 1920))
             try:
                 res["hook"]["y_pos"] = round(max(round(oh * (50.0 / 1920.0), 1), min(round(oh * (1800.0 / 1920.0), 1), float(p_hk["y_pos"]))), 1)
+            except (ValueError, TypeError):
+                pass
+        if "max_w" in p_hk:
+            try:
+                res["hook"]["max_w"] = max(360, min(1020, int(float(p_hk["max_w"]))))
             except (ValueError, TypeError):
                 pass
         if "style" in p_hk and p_hk["style"]:

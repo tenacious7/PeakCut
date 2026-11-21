@@ -542,14 +542,16 @@ def judge_signals(z, chat, start, now, unit="messages", timeout=None):
 
 
 FIX_SCHEMA = {"type": "ARRAY", "items": {"type": "STRING"}}
-# Languages whose captions keep the words that were said: English as it is, Hindi and Urdu in Roman letters.
-KEEP_LANGS = ("en", "hi", "ur")
+# Languages whose captions keep the words that were said: English as it is, Hindi/Hinglish/Urdu in Roman letters.
+KEEP_LANGS = ("en", "hi", "ur", "hinglish")
 
 
 def needs_translation(lang: str) -> bool:
     """Is this transcript in a language whose captions should be translated into English?"""
-    lang = (lang or "").lower()
-    return bool(lang) and not lang.startswith(KEEP_LANGS)
+    lang = (lang or "").strip().lower()
+    if not lang or lang in ("auto", "hinglish", "hi-en", "en-hi"):
+        return False
+    return not lang.startswith(KEEP_LANGS)
 
 
 def _spread(text: str, s: float, e: float) -> list:
@@ -586,9 +588,13 @@ def translate_caption_words(words: list, lang: str = "", title: str = "") -> lis
 
 def english_captions(words: list, lang: str, title: str = "", youtube_english=None) -> list:
     """Captions for a clip, always in English letters:
-    English stays as it was said, Hindi and Urdu become Roman letters (the same words, tidied by the AI), and any
-    other language is translated into English: YouTube's own English captions first, then the AI. With neither,
-    the words as heard (Arabic and similar scripts still spelled in Roman letters)."""
+    English stays as it was said, Hindi/Hinglish/Urdu become Roman letters (the same words, tidied by the AI),
+    and any other language is translated into English. Never translates Hindi/Devanagari/Urdu into English."""
+    # Devanagari/Urdu script in the transcript means Indic speech (Hindi/Hinglish/Urdu) — keep exact spoken words!
+    has_indic = any(roman.needs_roman(str(w.get("w") or "")) for w in (words or []))
+    lang_low = (lang or "").strip().lower()
+    if has_indic and (not lang_low or lang_low.startswith(("hi", "ur", "mr", "ne", "pa", "sa", "bn", "gu", "hinglish", "auto"))):
+        return fix_caption_words(words, title, "hi")
     if not needs_translation(lang):
         return fix_caption_words(words, title, lang)
     if youtube_english:
@@ -622,7 +628,7 @@ def _fix_caption_words(words: list, title: str = "", lang: str = "") -> list:
         return words
     # The Hindi and Urdu rule is only given for those videos. On an English video it is one more thing a small
     # model can get wrong (turning English into something else).
-    hindi = (lang or "").lower().startswith(("hi", "ur")) or any(roman.needs_roman(w["w"]) for w in words)
+    hindi = (lang or "").lower().startswith(("hi", "ur", "hinglish")) or any(roman.needs_roman(w["w"]) for w in words)
     hinglish = (
         "CRITICAL HINGLISH & ENGLISH RULE: "
         "1) If the speaker said an English word that was written phonetically in Devanagari/Urdu script "
@@ -631,8 +637,8 @@ def _fix_caption_words(words: list, title: str = "", lang: str = "") -> list:
         "ALWAYS output the standard English spelling (NEVER phonetic Hindi spelling like 'tebal' or 'vhaats ap'). "
         "2) If the word is an actual Hindi or Urdu word (in Devanagari, Urdu script, or Roman letters), "
         "write that SAME word in natural Roman Hinglish chat spelling ('चूना' -> 'choona', 'जो' -> 'jo', "
-        "'उसको' -> 'usko', 'क्या' -> 'kya', 'भाई' -> 'bhai', 'یار' -> 'yaar'). Never translate Hindi/Urdu words into "
-        "English and never leave Devanagari or Urdu script. "
+        "'उसको' -> 'usko', 'क्या' -> 'kya', 'भाई' -> 'bhai', 'یار' -> 'yaar'). NEVER translate Hindi/Urdu words into "
+        "English meaning and never leave Devanagari or Urdu script. "
     ) if hindi else ""
     numbered = "\n".join(f"{i}: {_safe(w['w'], 60)}" for i, w in enumerate(words))
     prompt = (

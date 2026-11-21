@@ -995,6 +995,30 @@ dialog[open]{animation:fadein .16s ease}
 .badge.st-review{background:var(--brand-soft);color:var(--brand-deep);border:1px solid var(--brand-line)}
 .badge.st-approved{background:var(--good-soft);color:var(--good);border:1px solid #C3E9D0}
 .badge.st-rendering{background:#F3E8FF;color:#7E22CE;border:1px solid #E9D5FF}
+/* Interactive Big Text overlay (1:1 1080x1920 preview mapping) */
+.live-media-frame{position:absolute;pointer-events:none;overflow:visible}
+.live-hook-box{position:absolute;left:50%;transform:translate(-50%,-50%);box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center;pointer-events:auto;cursor:grab;user-select:none;touch-action:none;border:2px dashed rgba(255,98,0,0.85);background:transparent;color:transparent;z-index:12;transition:border-color .12s ease}
+.live-hook-box:active{cursor:grabbing}
+.live-hook-box.is-editing{background:#FFFFFF;color:#000000;border-style:solid;border-color:var(--brand)}
+.live-hook-box.is-editing.nobox{background:rgba(0,0,0,0.22);color:#FFFFFF;text-shadow:0 0 4px #000,0 2px 3px #000}
+.live-hook-text{font-family:"Montserrat","Plus Jakarta Sans",system-ui,sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:0.032em;line-height:1.15;word-break:break-word;pointer-events:none;width:100%}
+.live-hook-handle{position:absolute;width:11px;height:11px;background:#fff;border:2px solid var(--brand);border-radius:2px;pointer-events:auto;z-index:14}
+.live-hook-handle[data-h="nw"]{left:-6px;top:-6px;cursor:nwse-resize}
+.live-hook-handle[data-h="ne"]{right:-6px;top:-6px;cursor:nesw-resize}
+.live-hook-handle[data-h="sw"]{left:-6px;bottom:-6px;cursor:nesw-resize}
+.live-hook-handle[data-h="se"]{right:-6px;bottom:-6px;cursor:nwse-resize}
+.live-hook-handle[data-h="w"]{left:-6px;top:50%;transform:translateY(-50%);height:20px;width:8px;cursor:ew-resize}
+.live-hook-handle[data-h="e"]{right:-6px;top:50%;transform:translateY(-50%);height:20px;width:8px;cursor:ew-resize}
+.live-hook-tip{position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);background:#1E1612;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;pointer-events:none;z-index:16}
+.live-hook-off-note{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(30,22,18,0.88);color:#fff;font-size:11px;font-weight:600;padding:5px 10px;border-radius:6px;border:1px solid var(--brand);white-space:nowrap;pointer-events:none;z-index:16}
+/* Pre-clipping language confirmation cards */
+.lang-confirm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}
+.lang-card{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:10px 12px;border:1px solid var(--line-2);border-radius:10px;background:#fff;cursor:pointer;text-align:left;transition:border-color .15s ease,background-color .15s ease}
+.lang-card:hover{background:var(--muted);border-color:var(--brand)}
+.lang-card.active{background:var(--brand-soft);border-color:var(--brand);color:var(--brand-ink)}
+.lang-card b{font-size:13px;color:var(--brand-ink)}
+.lang-card small{font-size:11px;color:var(--dim);line-height:1.3}
+.lang-gpu-note{font-size:11.5px;color:var(--dim);background:var(--muted);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px}
 </style>
 </head>
 <body>
@@ -1645,6 +1669,14 @@ function drawAdd(variant) {
           <option value="auto">Automatic (Fastest — render final directly)</option>
           <option value="review">Review every clip (Pause for approval)</option>
           <option value="review_first">Review first clip (Apply settings to rest)</option>
+        </select>
+      </div>
+      <div class="ob"><div class="ot">Spoken language</div>
+        <select id="o_speech_lang" class="ob-select">
+          <option value="auto">Ask / Auto-detect</option>
+          <option value="en">English</option>
+          <option value="hi">Hindi (Roman Hinglish captions)</option>
+          <option value="hinglish">Hindi + English (Hinglish)</option>
         </select>
       </div>
       <div class="ob"><div class="ot cap-head"><span id="o_style_label">Caption style</span>
@@ -2534,6 +2566,7 @@ function jobOptions() {
     style: $("#o_style")?.value || "bounce",
     layout: $("#o_layout")?.value || "blur",
     review_mode: $("#o_review_mode")?.value || "auto",
+    speech_lang: $("#o_speech_lang")?.value || "auto",
     quality: n("#o_quality") || 720
   };
   if ($("#o_meme")?.value && $("#o_meme").value !== "none") {
@@ -2830,6 +2863,47 @@ function sendFile(f, who, options) {
     x.send(fd);
   });
 }
+function confirmClipLanguage(initialLang = "auto") {
+  return new Promise(res => {
+    const d = $("#formdlg");
+    if (!d) return res(initialLang || "auto");
+    let picked = ["en", "hi", "hinglish", "auto"].includes(initialLang) ? initialLang : (S.settings?.asr_language || "auto");
+    if (!["en", "hi", "hinglish", "auto"].includes(picked)) picked = "auto";
+    const asr = S.status?.asr || {};
+    const gpu = asr.gpu || {};
+    const gpuTxt = gpu.available
+      ? `Local GPU: ${gpu.name || "NVIDIA CUDA"}${gpu.total_mb ? ` (${(gpu.total_mb / 1024).toFixed(1)} GB VRAM)` : ""} · Auto INT8 compact mode for Hindi/Hinglish.`
+      : `Local speech engine: ${asr.engine === "faster-whisper" ? "Faster-Whisper" : "Parakeet-v2 ONNX"} (no cloud API).`;
+    const choices = [
+      {v: "en", t: "English", s: "Pure English voice (fast Parakeet v2 or Whisper GPU)"},
+      {v: "hi", t: "Hindi", s: "Hindi voice · Exact spoken words in Roman Hinglish (never translated)"},
+      {v: "hinglish", t: "Hindi + English", s: "Mixed Hindi & English gaming stream · Roman Hinglish captions"},
+      {v: "auto", t: "Auto-detect", s: "Detect automatically from audio"}
+    ];
+    d.innerHTML = `<form method="dialog" class="dlg">
+      <h2>Confirm video language</h2>
+      <p class="help">Select the language spoken in this video before clipping starts so captions match the audio accurately.</p>
+      <div class="lang-confirm-grid">
+        ${choices.map(ch => `<button type="button" class="lang-card ${picked === ch.v ? "active" : ""}" data-lang-pick="${ch.v}">
+          <b>${esc(ch.t)}</b><small>${esc(ch.s)}</small>
+        </button>`).join("")}
+      </div>
+      <div class="lang-gpu-note">${esc(gpuTxt)}</div>
+      <div class="dlg-foot">
+        <button class="btn" value="cancel">Cancel</button>
+        <button class="btn primary" value="ok" autofocus>Confirm &amp; Start Clipping</button>
+      </div>
+    </form>`;
+    $$("[data-lang-pick]", d).forEach(btn => btn.addEventListener("click", () => {
+      picked = btn.dataset.langPick;
+      $$("[data-lang-pick]", d).forEach(x => x.classList.toggle("active", x === btn));
+    }));
+    d.onclose = () => res(d.returnValue === "ok" ? picked : null);
+    d.returnValue = "cancel";
+    d.showModal();
+  });
+}
+
 async function makeClips() {
   const A = att();
   if (A.busy) return;
@@ -2861,9 +2935,15 @@ async function makeClips() {
     $("#url")?.focus();
     return;
   }
+  const opts = jobOptions();
+  const confirmedLang = await confirmClipLanguage(opts.speech_lang || "auto");
+  if (confirmedLang === null) return;
+  opts.speech_lang = confirmedLang;
+  if ($("#o_speech_lang")) $("#o_speech_lang").value = confirmedLang;
+
   A.busy = true; drawAtt();
   let started = 0, failed = 0;
-  const who = targetCreator(), opts = jobOptions();
+  const who = targetCreator();
   for (const l of A.links.filter(x => x.state === "ok")) {
     l.sending = true; drawAtt();
     try { await send("/api/jobs", {url: l.url, options: opts, creator: who}); l.state = "done"; started++; }
@@ -3707,7 +3787,8 @@ async function drawSettings() {
                 <select id="asr_lang" data-act-change="asrcfg">
                   <option value="auto" ${asr.language === "auto" ? "selected" : ""}>Auto (English &amp; Hinglish)</option>
                   <option value="en" ${asr.language === "en" ? "selected" : ""}>English only</option>
-                  <option value="hi" ${asr.language === "hi" ? "selected" : ""}>Hindi + Hinglish (keeps English words in English)</option>
+                  <option value="hi" ${asr.language === "hi" ? "selected" : ""}>Hindi (Roman Hinglish captions)</option>
+                  <option value="hinglish" ${asr.language === "hinglish" ? "selected" : ""}>Hindi + English (Hinglish)</option>
                 </select>
                 <span class="hint">Auto uses Silero VAD + language guard so noisy English never turns into wrong scripts.</span>
               </label>
@@ -3815,6 +3896,7 @@ function collectClipEdit() {
   const hookText = $("#dlg_hook_text") ? $("#dlg_hook_text").value.trim() : "";
   const hookSize = $("#dlg_hook_size") ? Number($("#dlg_hook_size").value) : 96;
   const hookY = $("#dlg_hook_y") ? Number($("#dlg_hook_y").value) : 300;
+  const hookMaxW = $("#dlg_hook_max_w") ? Number($("#dlg_hook_max_w").value) : 980;
   const hookStyle = $("#dlg_hook_style") ? $("#dlg_hook_style").value : "default";
 
   const capEnabled = $("#dlg_cap_enabled") ? $("#dlg_cap_enabled").checked : true;
@@ -3841,14 +3923,16 @@ function collectClipEdit() {
   const title = $("#dlg_title") ? $("#dlg_title").value.trim() : "";
   const description = $("#dlg_description") ? $("#dlg_description").value.trim() : "";
 
+  const jCur = jobOf(D.jid), cCur = jCur?.clips.find(x => x.id === D.cid);
   const wPills = $$("#dlgWordsBox [data-widx]");
-  let words = D.edit?.caption?.words || [];
+  let baseWords = (D.edit?.caption?.words && D.edit.caption.words.length) ? D.edit.caption.words : (cCur?.words || []);
+  let words = baseWords;
   if (wPills.length) {
-    words = words.map((w, idx) => {
-      const pill = wPills.find(p => p.dataset.widx === String(idx));
-      const txt = pill ? pill.textContent.trim() : (w.text || w.w);
+    const pillMap = new Map(wPills.map(p => [p.dataset.widx, p.textContent.trim()]));
+    words = baseWords.map((w, idx) => {
+      const txt = pillMap.has(String(idx)) ? pillMap.get(String(idx)) : String(w.text ?? w.w ?? "").trim();
       return {text: txt, start: Number(w.start ?? w.s ?? 0), end: Number(w.end ?? w.e ?? 0)};
-    });
+    }).filter(w => w.text.length > 0);
   }
 
   return {
@@ -3874,6 +3958,7 @@ function collectClipEdit() {
       text: hookText,
       font_size: hookSize,
       y_pos: hookY,
+      max_w: hookMaxW,
       style: hookStyle
     },
     audio: {
@@ -3903,6 +3988,7 @@ function collectGlobalPatch() {
       enabled: ed.hook.enabled,
       font_size: ed.hook.font_size,
       y_pos: ed.hook.y_pos,
+      max_w: ed.hook.max_w,
       style: ed.hook.style
     },
     audio: ed.audio,
@@ -3910,11 +3996,54 @@ function collectGlobalPatch() {
   };
 }
 
-function syncLiveOverlay() {
+function getStackHookCoords() {
+  const sr = $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.35;
+  const isSwap = $("#dlg_cam_swap") ? ($("#dlg_cam_swap").type === "checkbox" ? $("#dlg_cam_swap").checked : ($("#dlg_cam_swap").value === "true")) : false;
+  const camH = Math.round(1920 * sr / 2) * 2;
+  const gameH = 1920 - camH;
+  const seamY = isSwap ? gameH : camH;
+  const belowSeamY = isSwap ? Math.max(80, gameH - 92) : Math.min(1820, camH + 92);
+  const capY = isSwap ? Math.round(gameH * 0.80) : Math.round(camH + gameH * 0.77);
+  return {seamY, belowSeamY, capY};
+}
+
+function getVideoMediaRect() {
+  const wrap = $("#vwrap"), vid = $("#dlgVideo");
+  if (!wrap) return null;
+  const wRect = wrap.getBoundingClientRect();
+  if (!wRect.width || !wRect.height) return null;
+  const vw = (vid && vid.videoWidth) ? vid.videoWidth : 1080;
+  const vh = (vid && vid.videoHeight) ? vid.videoHeight : 1920;
+  const aspect = vw / vh;
+  const boxAspect = wRect.width / wRect.height;
+  let rw, rh, rx, ry;
+  if (boxAspect > aspect) {
+    rh = wRect.height;
+    rw = rh * aspect;
+    rx = (wRect.width - rw) / 2;
+    ry = 0;
+  } else {
+    rw = wRect.width;
+    rh = rw / aspect;
+    rx = 0;
+    ry = (wRect.height - rh) / 2;
+  }
+  return {left: rx, top: ry, width: rw, height: rh, scaleX: rw / 1080, scaleY: rh / 1920};
+}
+
+function syncLiveOverlay(markHookDirty = false) {
+  if (markHookDirty) D.hookDirty = true;
+  const hookEnabled = $("#dlg_hook_enabled") ? $("#dlg_hook_enabled").checked : true;
+  const hookText = ($("#dlg_hook_text") ? $("#dlg_hook_text").value : "").trim();
   const hookSize = $("#dlg_hook_size") ? Number($("#dlg_hook_size").value) : 96;
   const hookY = $("#dlg_hook_y") ? Number($("#dlg_hook_y").value) : 300;
-  if ($("#hookSizeVal")) $("#hookSizeVal").textContent = hookSize + "px";
+  const hookMaxW = $("#dlg_hook_max_w") ? Number($("#dlg_hook_max_w").value) : 980;
+  const hookStyle = $("#dlg_hook_style") ? $("#dlg_hook_style").value : "default";
+
+  if ($("#hookSizeVal")) $("#hookSizeVal").textContent = Math.round(hookSize) + "px";
   if ($("#hookYVal")) $("#hookYVal").textContent = Math.round(hookY) + "px";
+  if ($("#hookMaxWVal")) $("#hookMaxWVal").textContent = Math.round(hookMaxW) + "px";
+  if ($("#dlgHookExtraControls")) $("#dlgHookExtraControls").style.display = hookEnabled ? "flex" : "none";
 
   const capSize = $("#dlg_cap_size") ? Number($("#dlg_cap_size").value) : 132;
   const capY = $("#dlg_cap_y") ? Number($("#dlg_cap_y").value) : 1630;
@@ -3925,30 +4054,156 @@ function syncLiveOverlay() {
   const splitRatio = $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.35;
   const isSwap = $("#dlg_cam_swap") ? ($("#dlg_cam_swap").type === "checkbox" ? $("#dlg_cam_swap").checked : ($("#dlg_cam_swap").value === "true")) : false;
 
+  const rect = getVideoMediaRect();
+  const frame = $("#liveMediaFrame");
+  if (frame && rect) {
+    frame.style.left = rect.left + "px";
+    frame.style.top = rect.top + "px";
+    frame.style.width = rect.width + "px";
+    frame.style.height = rect.height + "px";
+  }
+
   const seamEl = $("#liveStackSeam");
   if (seamEl) {
     seamEl.style.display = isStack ? "block" : "none";
     const seamFrac = isSwap ? (1 - splitRatio) : splitRatio;
     seamEl.style.top = (seamFrac * 100) + "%";
   }
+
+  const offNote = $("#liveHookOffNote");
+  if (offNote) {
+    const hadBakedHook = D.initHookEnabled !== false && !hookEnabled;
+    offNote.style.display = hadBakedHook ? "block" : "none";
+  }
+
+  const box = $("#liveHookBox");
+  if (box && rect) {
+    if (!hookEnabled || !hookText) {
+      box.style.display = "none";
+    } else {
+      const sc = rect.scaleX;
+      const fs = Math.max(8, hookSize * sc);
+      const padX = Math.max(24, hookSize * 0.44) * sc;
+      const padY = Math.max(14, hookSize * 0.25) * sc;
+      const rad = Math.max(18, hookSize * 0.28) * sc;
+      const maxPx = Math.max(60, Math.min(rect.width - 8, hookMaxW * sc));
+      box.style.display = "flex";
+      box.style.top = ((hookY / 1920) * 100) + "%";
+      box.style.maxWidth = maxPx + "px";
+      box.style.width = maxPx + "px";
+      box.style.padding = `${padY.toFixed(1)}px ${padX.toFixed(1)}px`;
+      box.style.borderRadius = `${Math.min(rad, 32).toFixed(1)}px`;
+      box.classList.toggle("is-editing", !!D.hookDirty);
+      box.classList.toggle("nobox", hookStyle === "nobox");
+      const txtEl = $("#liveHookText");
+      if (txtEl) {
+        txtEl.textContent = hookText.toUpperCase();
+        txtEl.style.fontSize = fs.toFixed(1) + "px";
+      }
+      const tipEl = $("#liveHookTip");
+      if (tipEl) {
+        tipEl.textContent = D.hookDirty
+          ? `Size ${Math.round(hookSize)}px · Width ${Math.round(hookMaxW)}px — click Save draft to review`
+          : "Drag to move · Drag handles to resize";
+        tipEl.style.display = D.hookDirty ? "block" : "none";
+      }
+    }
+  }
 }
 
 function setupOverlayDraggables() {
-  // Duplicate HTML heading overlay removed; built-in heading is rendered directly in the video.
+  const box = $("#liveHookBox");
+  const vid = $("#dlgVideo");
+  if (vid && !vid.dataset.boundResize) {
+    vid.dataset.boundResize = "1";
+    vid.addEventListener("loadedmetadata", () => syncLiveOverlay(false));
+    if (typeof ResizeObserver !== "undefined" && $("#vwrap")) {
+      const ro = new ResizeObserver(() => syncLiveOverlay(false));
+      ro.observe($("#vwrap"));
+    }
+  }
+  if (!box || box.dataset.boundDrag) return;
+  box.dataset.boundDrag = "1";
+
+  let mode = null; // "move" | "nw" | "ne" | "sw" | "se" | "w" | "e"
+  let startX = 0, startY = 0;
+  let initY = 300, initSize = 96, initW = 980;
+
+  box.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const h = e.target.closest("[data-h]");
+    mode = h ? h.dataset.h : "move";
+    startX = e.clientX;
+    startY = e.clientY;
+    initY = $("#dlg_hook_y") ? Number($("#dlg_hook_y").value) : 300;
+    initSize = $("#dlg_hook_size") ? Number($("#dlg_hook_size").value) : 96;
+    initW = $("#dlg_hook_max_w") ? Number($("#dlg_hook_max_w").value) : 980;
+    D.hookDirty = true;
+    box.setPointerCapture(e.pointerId);
+    syncLiveOverlay(true);
+  });
+
+  box.addEventListener("pointermove", e => {
+    if (!mode) return;
+    const rect = getVideoMediaRect();
+    if (!rect || !rect.scaleX || !rect.scaleY) return;
+    const dx = (e.clientX - startX) / rect.scaleX;
+    const dy = (e.clientY - startY) / rect.scaleY;
+
+    if (mode === "move") {
+      let nextY = Math.max(80, Math.min(1800, Math.round((initY + dy) / 2) * 2));
+      const isStack = ($("#dlg_layout") ? $("#dlg_layout").value : "blur") === "stack";
+      if (isStack) {
+        const sc = getStackHookCoords();
+        if (Math.abs(nextY - sc.belowSeamY) <= 18) nextY = sc.belowSeamY;
+        else if (Math.abs(nextY - sc.seamY) <= 18) nextY = sc.seamY;
+      }
+      if ($("#dlg_hook_y")) $("#dlg_hook_y").value = nextY;
+    } else if (mode === "w" || mode === "e") {
+      const sign = mode === "e" ? 1 : -1;
+      const nextW = Math.max(380, Math.min(1020, Math.round((initW + sign * dx * 2) / 10) * 10));
+      if ($("#dlg_hook_max_w")) $("#dlg_hook_max_w").value = nextW;
+    } else {
+      // Corner resize scales font size cleanly (drag outward = bigger, inward = smaller)
+      const sx = (mode === "ne" || mode === "se") ? 1 : -1;
+      const sy = (mode === "sw" || mode === "se") ? 1 : -1;
+      const delta = (dx * sx * 0.22) + (dy * sy * 0.45);
+      const nextSize = Math.max(36, Math.min(150, Math.round((initSize + delta) / 2) * 2));
+      if ($("#dlg_hook_size")) $("#dlg_hook_size").value = nextSize;
+    }
+    syncLiveOverlay(true);
+  });
+
+  const endDrag = e => {
+    if (!mode) return;
+    mode = null;
+    try { box.releasePointerCapture(e.pointerId); } catch {}
+  };
+  box.addEventListener("pointerup", endDrag);
+  box.addEventListener("pointercancel", endDrag);
 }
 
 function drawClipDlg(full) {
   const j = jobOf(D.jid), c = j?.clips.find(x => x.id === D.cid), dlg = $("#clipdlg");
   if (!c) { if (dlg.open) dlg.close(); return; }
   const isBusySt = s => ["queued", "rendering", "rendering_final", "drafting", "approved"].includes(s);
-  const m = `/media/${j.id}/`, sig = c.status + "_" + (c.version || 0) + "_" + (c.eta_sec || 0) + (D.edit ? "_" + D.edit.version : "");
+  const m = `/media/${j.id}/`, sig = c.status + "_" + (c.version || 0) + "_" + (c.draft_v || 0) + "_" + (c.eta_sec || 0) + (D.edit ? "_" + D.edit.version : "");
 
   const idx = j.clips.findIndex(x => x.id === c.id);
   const prevC = idx > 0 ? j.clips[idx - 1] : null;
   const nextC = idx < j.clips.length - 1 ? j.clips[idx + 1] : null;
 
   const ed = D.edit || {};
-  const hk = ed.hook || { enabled: !!c.hook, text: c.hook || "", font_size: 96, y_pos: 300, style: "default" };
+  const hkEnabledDefault = ed.hook && ed.hook.enabled !== undefined ? !!ed.hook.enabled : (c.hook_enabled !== undefined ? !!c.hook_enabled : !!c.hook);
+  const hk = {
+    enabled: hkEnabledDefault,
+    text: (ed.hook && ed.hook.text !== undefined) ? ed.hook.text : (c.hook || ""),
+    font_size: (ed.hook && ed.hook.font_size) ? ed.hook.font_size : (c.hook_font_size || 96),
+    y_pos: (ed.hook && ed.hook.y_pos != null) ? ed.hook.y_pos : (c.hook_y != null ? c.hook_y : 300),
+    max_w: (ed.hook && ed.hook.max_w) ? ed.hook.max_w : (c.hook_max_w || 980),
+    style: (ed.hook && ed.hook.style) ? ed.hook.style : (c.hook_style || "default")
+  };
   const cap = ed.caption || { enabled: c.captions !== false, style: c.style || "bounce", font_size: 132, y_pos: 1630, words: c.words || [] };
   const layout = ed.layout || c.layout || "blur";
   const splitRatio = ed.split_ratio != null ? ed.split_ratio : (c.split_ratio != null ? c.split_ratio : 0.35);
@@ -3958,6 +4213,11 @@ function drawClipDlg(full) {
   const musicVal = ed.audio ? (ed.audio.music_bed || (ed.audio.music ? "upbeat" : "")) : (c.music || "");
   const startVal = ed.start != null ? ed.start : c.start;
   const endVal = ed.end != null ? ed.end : c.end;
+
+  if (full) {
+    D.hookDirty = false;
+    D.initHookEnabled = hk.enabled;
+  }
 
   const statusBadge = c.status === "awaiting_review" ? `<span class="badge st-review">${ic("clock")}Needs review</span>`
     : c.status === "approved" ? `<span class="badge st-approved">${ic("check")}Approved</span>`
@@ -3983,8 +4243,21 @@ function drawClipDlg(full) {
     stageHtml = `<div class="video-preview-wrap" id="vwrap">
       <video id="dlgVideo" src="${videoFile}" poster="${posterFile}" controls playsinline preload="metadata"></video>
       <div class="live-overlay-container" id="liveOverlayContainer">
-        <div id="liveStackSeam" style="position:absolute;left:0;right:0;border-bottom:2px dashed rgba(255,139,51,0.8);pointer-events:none;z-index:5;top:${((camSwap ? (1 - splitRatio) : splitRatio) * 100)}%;display:${layout === 'stack' ? 'block' : 'none'}">
-          <span style="position:absolute;right:8px;bottom:2px;font-size:10px;font-weight:700;color:#fff;background:rgba(30,22,18,0.75);padding:1px 6px;border-radius:4px">SPLIT SEAM</span>
+        <div class="live-media-frame" id="liveMediaFrame">
+          <div id="liveStackSeam" style="position:absolute;left:0;right:0;border-bottom:2px dashed rgba(255,139,51,0.8);pointer-events:none;z-index:5;top:${((camSwap ? (1 - splitRatio) : splitRatio) * 100)}%;display:${layout === 'stack' ? 'block' : 'none'}">
+            <span style="position:absolute;right:8px;bottom:2px;font-size:10px;font-weight:700;color:#fff;background:rgba(30,22,18,0.75);padding:1px 6px;border-radius:4px">SPLIT SEAM</span>
+          </div>
+          <div class="live-hook-off-note" id="liveHookOffNote" style="display:none">Big text OFF — click Save draft to remove from video</div>
+          <div class="live-hook-box" id="liveHookBox" style="display:none" title="Drag to move · Drag corners to scale · Drag sides to reshape width">
+            <span class="live-hook-tip" id="liveHookTip" style="display:none"></span>
+            <span class="live-hook-text" id="liveHookText"></span>
+            <span class="live-hook-handle" data-h="nw" title="Resize font size"></span>
+            <span class="live-hook-handle" data-h="ne" title="Resize font size"></span>
+            <span class="live-hook-handle" data-h="sw" title="Resize font size"></span>
+            <span class="live-hook-handle" data-h="se" title="Resize font size"></span>
+            <span class="live-hook-handle" data-h="w" title="Reshape banner width"></span>
+            <span class="live-hook-handle" data-h="e" title="Reshape banner width"></span>
+          </div>
         </div>
       </div>
     </div>`;
@@ -4017,46 +4290,56 @@ function drawClipDlg(full) {
         <div class="dlg-sec">
           <div class="dlg-sec-head">
             <label class="sw" style="margin:0;font-size:12.5px">
-              <input type="checkbox" id="dlg_hook_enabled" ${hk.enabled !== false ? "checked" : ""}> Big text
+              <input type="checkbox" id="dlg_hook_enabled" ${hk.enabled ? "checked" : ""}> Big text
             </label>
             <div class="row" style="gap:4px">
-              <button type="button" class="btn xs ghost" id="btnRemoveHook" title="Remove Big text from this clip">${ic("trash")}Remove</button>
-              <button type="button" class="btn xs ghost" data-act="applyhookall" title="Apply Big Text style, size and position to all clips">Apply to all</button>
+              <button type="button" class="btn xs ghost" id="btnRemoveHook" title="Turn off Big text on this clip">${ic("trash")}Remove</button>
+              <button type="button" class="btn xs ghost" data-act="applyhookall" title="Apply Big Text style, size, width and position to all clips">Apply to all</button>
             </div>
           </div>
-          <label class="f">Headline text
-            <input data-f="hook" id="dlg_hook_text" value="${esc(hk.text || c.hook || '')}" placeholder="Hook or headline text">
-          </label>
-          <div>
-            <div class="dlg-range-head">
-              <span>Font size: <b id="hookSizeVal">${hk.font_size || 96}px</b></span>
-              <div class="row" style="gap:4px">
-                <button type="button" class="btn xs ghost" data-hook-size="64">Small</button>
-                <button type="button" class="btn xs ghost" data-hook-size="96">Normal</button>
-                <button type="button" class="btn xs ghost" data-hook-size="128">Large</button>
+          <div id="dlgHookExtraControls" style="display:${hk.enabled ? 'flex' : 'none'};flex-direction:column;gap:8px">
+            <label class="f">Headline text
+              <input data-f="hook" id="dlg_hook_text" value="${esc(hk.text || '')}" placeholder="Hook or headline text">
+            </label>
+            <div>
+              <div class="dlg-range-head">
+                <span>Font size: <b id="hookSizeVal">${hk.font_size || 96}px</b></span>
+                <div class="row" style="gap:4px">
+                  <button type="button" class="btn xs ghost" data-hook-size="64">Small</button>
+                  <button type="button" class="btn xs ghost" data-hook-size="96">Normal</button>
+                  <button type="button" class="btn xs ghost" data-hook-size="128">Large</button>
+                </div>
+              </div>
+              <input type="range" id="dlg_hook_size" min="36" max="150" step="2" value="${hk.font_size || 96}">
+            </div>
+            <div>
+              <div class="dlg-range-head">
+                <span>Banner width: <b id="hookMaxWVal">${hk.max_w || 980}px</b></span>
+                <span style="font-size:10.5px;color:var(--faint)">Or drag side handles on video</span>
+              </div>
+              <input type="range" id="dlg_hook_max_w" min="380" max="1020" step="10" value="${hk.max_w || 980}">
+            </div>
+            <div>
+              <div class="dlg-range-head">
+                <span>Position (Y): <b id="hookYVal">${Math.round(hk.y_pos || 300)}px</b></span>
+                <span style="font-size:10.5px;color:var(--faint)">Drag box on video</span>
+              </div>
+              <input type="range" id="dlg_hook_y" min="80" max="1750" step="10" value="${Math.round(hk.y_pos || 300)}">
+              <div class="row" style="gap:4px;margin-top:4px;flex-wrap:wrap">
+                <button type="button" class="cap-anchor-btn" data-hook-pos="below_seam" title="Place cleanly below the split line so it never covers the facecam">Below split</button>
+                <button type="button" class="cap-anchor-btn" data-hook-pos="seam" title="Center right across the split line">On split line</button>
+                <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 220) < 50 ? 'active' : ''}" data-hook-pos="220">Top</button>
+                <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 960) < 50 ? 'active' : ''}" data-hook-pos="960">Middle</button>
+                <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 1300) < 50 ? 'active' : ''}" data-hook-pos="1300">Above captions</button>
               </div>
             </div>
-            <input type="range" id="dlg_hook_size" min="36" max="150" step="2" value="${hk.font_size || 96}">
+            <label class="f">Style
+              <select id="dlg_hook_style">
+                <option value="default" ${(hk.style||'default')==='default'?'selected':''}>Classic white banner (TikTok style)</option>
+                <option value="nobox" ${(hk.style||'default')==='nobox'?'selected':''}>Clean text with outline</option>
+              </select>
+            </label>
           </div>
-          <div>
-            <div class="dlg-range-head">
-              <span>Position (Y): <b id="hookYVal">${hk.y_pos || 300}px</b></span>
-            </div>
-            <input type="range" id="dlg_hook_y" min="80" max="1750" step="10" value="${hk.y_pos || 300}">
-            <div class="row" style="gap:4px;margin-top:4px">
-              <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 220) < 50 ? 'active' : ''}" data-hook-pos="220">Top</button>
-              <button type="button" class="cap-anchor-btn" data-hook-pos="seam" title="Keep label neatly inside the facecam section near the divider">Inside facecam</button>
-              <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 400) < 50 ? 'active' : ''}" data-hook-pos="400">Upper</button>
-              <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 960) < 50 ? 'active' : ''}" data-hook-pos="960">Middle</button>
-              <button type="button" class="cap-anchor-btn ${Math.abs((hk.y_pos||300) - 1300) < 50 ? 'active' : ''}" data-hook-pos="1300">Above captions</button>
-            </div>
-          </div>
-          <label class="f">Style
-            <select id="dlg_hook_style">
-              <option value="default" ${(hk.style||'default')==='default'?'selected':''}>Classic white banner (TikTok style)</option>
-              <option value="nobox" ${(hk.style||'default')==='nobox'?'selected':''}>Clean text with outline</option>
-            </select>
-          </label>
         </div>
 
         <div class="dlg-sec">
@@ -4225,68 +4508,62 @@ function drawClipDlg(full) {
       </div></div>`;
 
     // Live sync bindings
-    $("#dlg_hook_enabled")?.addEventListener("change", syncLiveOverlay);
-    $("#dlg_hook_text")?.addEventListener("input", syncLiveOverlay);
-    $("#dlg_hook_size")?.addEventListener("input", syncLiveOverlay);
-    $("#dlg_hook_y")?.addEventListener("input", syncLiveOverlay);
-    $("#dlg_hook_style")?.addEventListener("change", syncLiveOverlay);
+    $("#dlg_hook_enabled")?.addEventListener("change", () => syncLiveOverlay(true));
+    $("#dlg_hook_text")?.addEventListener("input", () => syncLiveOverlay(true));
+    $("#dlg_hook_size")?.addEventListener("input", () => syncLiveOverlay(true));
+    $("#dlg_hook_max_w")?.addEventListener("input", () => syncLiveOverlay(true));
+    $("#dlg_hook_y")?.addEventListener("input", () => syncLiveOverlay(true));
+    $("#dlg_hook_style")?.addEventListener("change", () => syncLiveOverlay(true));
 
     $("#dlg_cap_enabled")?.addEventListener("change", e => {
       if ($("#dlgCapExtraControls")) $("#dlgCapExtraControls").style.display = e.target.checked ? "flex" : "none";
-      syncLiveOverlay();
+      syncLiveOverlay(false);
     });
-    $("#dlg_cap_size")?.addEventListener("input", syncLiveOverlay);
-    $("#dlg_cap_y")?.addEventListener("input", syncLiveOverlay);
+    $("#dlg_cap_size")?.addEventListener("input", () => syncLiveOverlay(false));
+    $("#dlg_cap_y")?.addEventListener("input", () => syncLiveOverlay(false));
 
     $("#btnRemoveHook")?.addEventListener("click", () => {
       if ($("#dlg_hook_enabled")) $("#dlg_hook_enabled").checked = false;
-      syncLiveOverlay();
-      toast("Big text removed from this clip. Click 'Save Draft' to re-render.", "ok");
+      syncLiveOverlay(true);
+      toast("Big text turned off. Click 'Save draft' to re-render without heading.", "ok");
     });
     $("#btnRemoveCap")?.addEventListener("click", () => {
       if ($("#dlg_cap_enabled")) $("#dlg_cap_enabled").checked = false;
       if ($("#dlgCapExtraControls")) $("#dlgCapExtraControls").style.display = "none";
-      syncLiveOverlay();
+      syncLiveOverlay(false);
       toast("Captions removed from this clip. Click 'Save Draft' to re-render.", "ok");
     });
 
     // Preset buttons
     $$("#clipdlg [data-hook-size]").forEach(b => b.addEventListener("click", () => {
-      if ($("#dlg_hook_size")) { $("#dlg_hook_size").value = b.dataset.hookSize; syncLiveOverlay(); }
+      if ($("#dlg_hook_size")) { $("#dlg_hook_size").value = b.dataset.hookSize; syncLiveOverlay(true); }
     }));
     $$("#clipdlg [data-hook-pos]").forEach(b => b.addEventListener("click", () => {
       $$("#clipdlg [data-hook-pos]").forEach(x => x.classList.toggle("active", x === b));
-      if (b.dataset.hookPos === "seam") {
-        const sr = $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.35;
-        const isSwap = $("#dlg_cam_swap") ? ($("#dlg_cam_swap").type === "checkbox" ? $("#dlg_cam_swap").checked : ($("#dlg_cam_swap").value === "true")) : false;
-        const camH = Math.round(1920 * sr / 2) * 2;
-        const gameH = 1920 - camH;
-        const insideCamY = isSwap ? (gameH + 84) : (camH - 84);
-        if ($("#dlg_hook_y")) { $("#dlg_hook_y").value = insideCamY; syncLiveOverlay(); }
+      const sc = getStackHookCoords();
+      if (b.dataset.hookPos === "below_seam") {
+        if ($("#dlg_hook_y")) { $("#dlg_hook_y").value = sc.belowSeamY; syncLiveOverlay(true); }
+      } else if (b.dataset.hookPos === "seam") {
+        if ($("#dlg_hook_y")) { $("#dlg_hook_y").value = sc.seamY; syncLiveOverlay(true); }
       } else {
-        if ($("#dlg_hook_y")) { $("#dlg_hook_y").value = b.dataset.hookPos; syncLiveOverlay(); }
+        if ($("#dlg_hook_y")) { $("#dlg_hook_y").value = b.dataset.hookPos; syncLiveOverlay(true); }
       }
     }));
     $$("#clipdlg [data-cap-size]").forEach(b => b.addEventListener("click", () => {
-      if ($("#dlg_cap_size")) { $("#dlg_cap_size").value = b.dataset.capSize; syncLiveOverlay(); }
+      if ($("#dlg_cap_size")) { $("#dlg_cap_size").value = b.dataset.capSize; syncLiveOverlay(false); }
     }));
     $$("#clipdlg [data-cap-pos]").forEach(b => b.addEventListener("click", () => {
       $$("#clipdlg [data-cap-pos]").forEach(x => x.classList.toggle("active", x === b));
-      if ($("#dlg_cap_y")) { $("#dlg_cap_y").value = b.dataset.capPos; syncLiveOverlay(); }
+      if ($("#dlg_cap_y")) { $("#dlg_cap_y").value = b.dataset.capPos; syncLiveOverlay(false); }
     }));
     const onStackLayoutChange = () => {
       const isStack = ($("#dlg_layout") ? $("#dlg_layout").value : "blur") === "stack";
       if (isStack) {
-        const sr = $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.35;
-        const isSwap = $("#dlg_cam_swap") ? ($("#dlg_cam_swap").type === "checkbox" ? $("#dlg_cam_swap").checked : ($("#dlg_cam_swap").value === "true")) : false;
-        const camH = Math.round(1920 * sr / 2) * 2;
-        const gameH = 1920 - camH;
-        const targetHookY = isSwap ? (gameH + 84) : (camH - 84);
-        const targetCapY = isSwap ? Math.round(gameH * 0.80) : Math.round(camH + gameH * 0.77);
-        if ($("#dlg_hook_y")) $("#dlg_hook_y").value = targetHookY;
-        if ($("#dlg_cap_y")) $("#dlg_cap_y").value = targetCapY;
+        const sc = getStackHookCoords();
+        if ($("#dlg_hook_y")) $("#dlg_hook_y").value = sc.belowSeamY;
+        if ($("#dlg_cap_y")) $("#dlg_cap_y").value = sc.capY;
       }
-      syncLiveOverlay();
+      syncLiveOverlay(true);
     };
     $("#dlg_split_ratio")?.addEventListener("change", onStackLayoutChange);
     $("#dlg_cam_swap")?.addEventListener("change", onStackLayoutChange);
@@ -4340,11 +4617,12 @@ function drawClipDlg(full) {
   } else if (D.sig !== sig) {
     const wasBusy = D.lastBusy;
     const nowBusy = isBusySt(c.status);
-    if (wasBusy !== nowBusy || (!nowBusy && D.lastVer !== (c.version || 0))) {
+    const verKey = (c.version || 0) + "_" + (c.draft_v || 0);
+    if (wasBusy !== nowBusy || (!nowBusy && D.lastVer !== verKey)) {
       D.lastBusy = nowBusy;
-      D.lastVer = c.version || 0;
+      D.lastVer = verKey;
       D.sig = sig;
-      if (!nowBusy && c.status === "done") {
+      if (!nowBusy && (c.status === "done" || c.status === "awaiting_review" || c.status === "qc_flagged")) {
         api(`/api/jobs/${encodeURIComponent(D.jid)}/clips/${encodeURIComponent(D.cid)}/edit`).then(ed2 => { D.edit = ed2; drawClipDlg(true); }).catch(() => drawClipDlg(true));
       } else {
         drawClipDlg(true);
@@ -4356,7 +4634,7 @@ function drawClipDlg(full) {
     syncLiveOverlay();
   }
   D.lastBusy = isBusySt(c.status);
-  D.lastVer = c.version || 0;
+  D.lastVer = (c.version || 0) + "_" + (c.draft_v || 0);
   D.sig = sig;
   put($("#dposts"), postPills(c));
 }
@@ -4848,11 +5126,14 @@ document.addEventListener("click", async e => {
       b.disabled = true;
       try {
         const ed = collectClipEdit();
+        const vid = $("#dlgVideo");
+        if (vid) { try { vid.pause(); vid.removeAttribute("src"); vid.load(); } catch {} }
         const updated = await send(`/api/clips/${encodeURIComponent(D.cid)}/edit`, ed, "PUT");
         D.edit = updated;
+        D.hookDirty = false;
         const j = jobOf(D.jid), c = j?.clips.find(x => x.id === D.cid);
         if (c) c.status = "drafting";
-        toast("Draft saved. Updating preview…", "ok");
+        toast("Draft saved. Rendering review preview with your exact settings…", "ok");
         drawClipDlg(true);
         await tick();
       } catch (err) { toast(err.message, "bad"); }
@@ -4877,6 +5158,8 @@ document.addEventListener("click", async e => {
       b.disabled = true;
       try {
         const ed = Object.assign(collectClipEdit(), {skip_draft: true});
+        const vid = $("#dlgVideo");
+        if (vid) { try { vid.pause(); vid.removeAttribute("src"); vid.load(); } catch {} }
         await send(`/api/clips/${encodeURIComponent(D.cid)}/edit`, ed, "PUT");
         await send(`/api/clips/${encodeURIComponent(D.cid)}/approve`, {}, "POST");
         const j = jobOf(D.jid), c = j?.clips.find(x => x.id === D.cid);
@@ -4898,6 +5181,8 @@ document.addEventListener("click", async e => {
       b.disabled = true;
       try {
         const ed = Object.assign(collectClipEdit(), {skip_draft: true});
+        const vid = $("#dlgVideo");
+        if (vid) { try { vid.pause(); vid.removeAttribute("src"); vid.load(); } catch {} }
         await send(`/api/clips/${encodeURIComponent(D.cid)}/edit`, ed, "PUT");
         await send(`/api/jobs/${encodeURIComponent(D.jid)}/apply-to-all`, Object.assign(collectGlobalPatch(), {skip_draft: false}), "POST");
         await send(`/api/clips/${encodeURIComponent(D.cid)}/approve`, {}, "POST");
@@ -4947,6 +5232,7 @@ document.addEventListener("click", async e => {
             enabled: $("#dlg_hook_enabled").checked,
             font_size: Number($("#dlg_hook_size").value),
             y_pos: Number($("#dlg_hook_y").value),
+            max_w: $("#dlg_hook_max_w") ? Number($("#dlg_hook_max_w").value) : 980,
             style: $("#dlg_hook_style").value
           }
         };
@@ -5054,12 +5340,13 @@ document.addEventListener("click", async e => {
         });
         const j = jobOf(D.jid), c = j?.clips.find(x => x.id === D.cid);
         const wPills = $$("#dlgWordsBox [data-widx]");
-        if (wPills.length && c?.words) {
-          body.words = c.words.map((w, idx) => {
-            const pill = wPills.find(p => p.dataset.widx === String(idx));
-            const txt = pill ? pill.textContent.trim() : w.w;
-            return {...w, w: txt};
-          });
+        const srcWords = (D.edit?.caption?.words && D.edit.caption.words.length) ? D.edit.caption.words : (c?.words || []);
+        if (wPills.length && srcWords.length) {
+          const pillMap = new Map(wPills.map(p => [p.dataset.widx, p.textContent.trim()]));
+          body.words = srcWords.map((w, idx) => {
+            const txt = pillMap.has(String(idx)) ? pillMap.get(String(idx)) : String(w.text ?? w.w ?? "").trim();
+            return {w: txt, s: Number(w.start ?? w.s ?? 0), e: Number(w.end ?? w.e ?? 0)};
+          }).filter(w => w.w.length > 0);
         }
         if ($("#dlg_cap_anchor")) body.cap_anchor = $("#dlg_cap_anchor").value;
         body.split_ratio = $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.35;
@@ -5069,6 +5356,7 @@ document.addEventListener("click", async e => {
         if ($("#dlg_cap_enabled")) body.captions = $("#dlg_cap_enabled").checked;
         if ($("#dlg_hook_text")) body.hook = $("#dlg_hook_text").value.trim();
         if ($("#dlg_hook_size")) body.hook_font_size = Number($("#dlg_hook_size").value);
+        if ($("#dlg_hook_max_w")) body.hook_max_w = Number($("#dlg_hook_max_w").value);
         if ($("#dlg_hook_y")) body.hook_y = Number($("#dlg_hook_y").value);
         if ($("#dlg_hook_style")) body.hook_style = $("#dlg_hook_style").value;
         if ($("#dlg_cap_size")) body.cap_font_size = Number($("#dlg_cap_size").value);

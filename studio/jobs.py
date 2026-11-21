@@ -116,7 +116,7 @@ DEFAULTS = {"max_clips": 6, "min_len": 15, "max_len": 60, "style": "bounce", "la
             "captions": True, "meme": "none", "music": "none", "format": "moment", "cam_delay": 0.0,
             "meme_vol": None, "music_db": None, "cam_pos": "auto",
             "split_ratio": 0.35, "split_divider": True, "cam_swap": False, "cap_anchor": "safe_bottom", "cam_fallback": "blur", "facecam": None, "cap_y": None,
-            "review_mode": "auto"}
+            "review_mode": "auto", "speech_lang": "auto"}
 
 
 LIMITS = {"max_clips": (1, 20), "min_len": (5, 120), "max_len": (10, 180), "quality": (360, 1080)}
@@ -205,6 +205,9 @@ def clean_options(options) -> dict:
             v = v if v in render.STYLES else DEFAULTS["style"]
         elif k == "review_mode":
             v = v if v in ("auto", "review", "review_first") else "auto"
+        elif k == "speech_lang":
+            sv = str(v).strip().lower()
+            v = sv if sv in ("auto", "en", "hi", "hinglish") else "auto"
         elif k == "layout":
             v = v if v in render.LAYOUTS else DEFAULTS["layout"]
         elif k == "cam_delay":
@@ -596,6 +599,11 @@ def request_render(jid, cid, changes: dict):
             new["hook_font_size"] = int(float(changes["hook_font_size"]))
         except (ValueError, TypeError):
             pass
+    if "hook_max_w" in changes:
+        try:
+            new["hook_max_w"] = max(360, min(1020, int(float(changes["hook_max_w"]))))
+        except (ValueError, TypeError):
+            pass
     if "hook_style" in changes:
         new["hook_style"] = str(changes["hook_style"])
     if "meme_vol" in changes:
@@ -629,6 +637,7 @@ def request_render(jid, cid, changes: dict):
                     "e": round(float(w.get("e", 0.0)), 2)
                 })
         new["words"] = valid_words
+        new["words_edited"] = True
     if new.get("style") not in render.STYLES:
         new["style"] = DEFAULTS["style"]
     if new.get("layout") not in render.LAYOUTS:
@@ -717,6 +726,8 @@ def request_render(jid, cid, changes: dict):
                 hk_ed["text"] = str(new["hook"])
             if "hook_font_size" in new and new["hook_font_size"] is not None:
                 hk_ed["font_size"] = int(new["hook_font_size"])
+            if "hook_max_w" in new and new["hook_max_w"] is not None:
+                hk_ed["max_w"] = max(360, min(1020, int(new["hook_max_w"])))
             if "hook_style" in new and new["hook_style"]:
                 hk_ed["style"] = str(new["hook_style"])
             if "hook_y" in new and new["hook_y"] is not None:
@@ -772,11 +783,33 @@ def render_one(job, clip, words, quality="final"):
             face = job.get("facecam") or _facecam(job, src=src, window=clip_win)
             if face:
                 clip["facecam"] = face
+        edit_file = d / "clips" / f"{clip['id']}_edit.json"
+        existing_ed = edit.load_edit(edit_file) if edit_file.is_file() else None
+
+        # Respect explicit hook_enabled=False from either edit.json or clip dict
+        if existing_ed and "enabled" in (existing_ed.get("hook") or {}):
+            eff_hook_enabled = bool(existing_ed["hook"]["enabled"])
+        else:
+            eff_hook_enabled = bool(clip.get("hook_enabled", bool(clip.get("hook"))))
+
         local = dict(clip, start=clip["start"] - off, end=clip["end"] - off,
-                     hook=roman.to_roman(clip.get("hook") or "") if clip.get("hook_enabled", True) else "",
-                     hook_enabled=clip.get("hook_enabled", True),
+                     hook=roman.to_roman(clip.get("hook") or "") if eff_hook_enabled else "",
+                     hook_enabled=eff_hook_enabled,
                      cam_delay=float(clip.get("cam_delay", 0.0) or 0.0))
-        if clip.get("captions", True):
+
+        # Authoritative caption words: user-edited words in edit.json ALWAYS win over raw/cached transcript
+        ed_cap = (existing_ed or {}).get("caption") or {}
+        if existing_ed and ed_cap.get("words_edited") and isinstance(ed_cap.get("words"), list):
+            near = roman.words([
+                {
+                    "w": str(w.get("text") if "text" in w else w.get("w", "")).strip(),
+                    "s": round(float(w.get("start") if "start" in w else w.get("s", 0.0)), 2),
+                    "e": round(float(w.get("end") if "end" in w else w.get("e", 0.0)), 2),
+                }
+                for w in ed_cap["words"]
+                if str(w.get("text") if "text" in w else w.get("w", "")).strip()
+            ])
+        elif clip.get("captions", True):
             if clip.get("words"):
                 near = [dict(w, s=float(w["s"]), e=float(w["e"])) for w in roman.words(clip["words"])]
             elif clip.get("src_words"):
@@ -792,8 +825,7 @@ def render_one(job, clip, words, quality="final"):
             near = []
 
         # Ensure {cid}_edit.json exists and stays synced with cleaned captions unless user manually edited words
-        edit_file = d / "clips" / f"{clip['id']}_edit.json"
-        if not edit_file.is_file():
+        if not existing_ed:
             if clip.get("facecam") and not clip.get("facecam_focus") and src.is_file():
                 try:
                     foc = facecam.find_clip_face_focus(src, clip["facecam"], clip["start"], clip["end"])
@@ -804,23 +836,22 @@ def render_one(job, clip, words, quality="final"):
             ed = edit.init_edit(job, clip, near, clip.get("facecam"))
             edit.save_edit(edit_file, ed)
         else:
-            ed = edit.load_edit(edit_file)
-            if ed:
-                if "captions" in clip:
-                    ed["caption"]["enabled"] = bool(clip["captions"])
-                if "hook_enabled" in clip:
-                    ed.setdefault("hook", {})["enabled"] = bool(clip["hook_enabled"])
-                if near and not ed["caption"].get("words_edited"):
-                    ed["caption"]["words"] = [
-                        {
-                            "text": str(w.get("w") if "w" in w else w.get("text", "")),
-                            "start": round(float(w.get("s") if "s" in w else w.get("start", 0.0)), 2),
-                            "end": round(float(w.get("e") if "e" in w else w.get("end", 0.0)), 2),
-                        }
-                        for w in near
-                        if str(w.get("w") if "w" in w else w.get("text", "")).strip()
-                    ]
-                edit.save_edit(edit_file, ed)
+            ed = existing_ed
+            if "captions" in clip:
+                ed["caption"]["enabled"] = bool(clip["captions"])
+            if "hook_enabled" in clip:
+                ed.setdefault("hook", {})["enabled"] = bool(clip["hook_enabled"])
+            if near and not ed["caption"].get("words_edited"):
+                ed["caption"]["words"] = [
+                    {
+                        "text": str(w.get("w") if "w" in w else w.get("text", "")),
+                        "start": round(float(w.get("s") if "s" in w else w.get("start", 0.0)), 2),
+                        "end": round(float(w.get("e") if "e" in w else w.get("end", 0.0)), 2),
+                    }
+                    for w in near
+                    if str(w.get("w") if "w" in w else w.get("text", "")).strip()
+                ]
+            edit.save_edit(edit_file, ed)
 
         out = render.render_clip(src, d / "clips", clip["id"], local, near, job.get("width") or 1920, job.get("height") or 1080, quality=quality)
         clip.pop("eta_sec", None)
@@ -918,6 +949,7 @@ def approve_clip(jid: str, cid: str) -> dict:
                         "enabled": ed.get("hook", {}).get("enabled", True),
                         "font_size": ed.get("hook", {}).get("font_size"),
                         "y_pos": ed.get("hook", {}).get("y_pos"),
+                        "max_w": ed.get("hook", {}).get("max_w", 980),
                         "style": ed.get("hook", {}).get("style"),
                     },
                     "audio": ed.get("audio", {}),
@@ -974,6 +1006,24 @@ def apply_to_all(jid: str, patch: dict, skip_draft: bool = False) -> list:
             c["split_divider"] = bool(merged["split_divider"])
         if "cam_swap" in merged:
             c["cam_swap"] = bool(merged["cam_swap"])
+        if "hook" in merged and isinstance(merged["hook"], dict):
+            hk = merged["hook"]
+            c["hook_enabled"] = bool(hk.get("enabled", True))
+            if hk.get("font_size") is not None:
+                c["hook_font_size"] = int(hk["font_size"])
+            if hk.get("y_pos") is not None:
+                c["hook_y"] = float(hk["y_pos"])
+            if hk.get("max_w") is not None:
+                c["hook_max_w"] = int(hk["max_w"])
+            if hk.get("style"):
+                c["hook_style"] = str(hk["style"])
+        if "caption" in merged and isinstance(merged["caption"], dict):
+            cp = merged["caption"]
+            c["captions"] = bool(cp.get("enabled", True))
+            if cp.get("style"):
+                c["style"] = str(cp["style"])
+            if cp.get("y_pos") is not None:
+                c["cap_y"] = float(cp["y_pos"])
         if "facecam" in merged and not merged.get("facecam_override"):
             fc = merged["facecam"]
             c["facecam"] = [fc["x"], fc["y"], fc["w"], fc["h"]] if fc else None
@@ -1372,7 +1422,10 @@ def _run_job(job):
             cam = job.get("facecam") or (src_file and _facecam(job, src=src_file))
             if cam:
                 clip["facecam"] = cam
-        whisper_active = (transcribe.active_engine() == "faster-whisper")
+        speech_lang = (o.get("speech_lang") or "auto").strip().lower()
+        whisper_active = (transcribe.active_engine() == "faster-whisper") or (
+            speech_lang in ("hi", "hinglish") and transcribe.faster_whisper_installed()
+        )
         should_retranscribe = bool(
             (yt and (
                 yt[1].lower().startswith("en")
@@ -1386,9 +1439,10 @@ def _run_job(job):
         if clip["status"] not in ("error", "failed") and clip.get("captions", True) and should_retranscribe:
             # Run crisp word-level timestamps on just this short clip (fast even on CPU, instant on GPU).
             a0, b0 = max(lo, int((clip["start"] - 1.5) * 16000)), min(hi, int((clip["end"] + 1.5) * 16000))
+            eff_lang_hint = speech_lang if speech_lang in ("en", "hi", "hinglish") else (job.get("lang") or "")
             try:
                 tw = [dict(w, s=round(w["s"] + a0 / 16000, 2), e=round(w["e"] + a0 / 16000, 2))
-                      for w in transcribe.transcribe(audio[a0:b0], lang_hint=job.get("lang") or "", word_timestamps=True)]
+                      for w in transcribe.transcribe(audio[a0:b0], lang_hint=eff_lang_hint, word_timestamps=True)]
             except Exception:  # noqa: BLE001 - the clip is still made, with existing words
                 tw = []
             if len(tw) >= 3:
@@ -1408,6 +1462,9 @@ def _run_job(job):
     words, tokens, model = [], 0, None
     done_blocks = 0
     yt = None
+    speech_lang = (o.get("speech_lang") or "auto").strip().lower()
+    if speech_lang in ("en", "hi", "hinglish"):
+        job["lang"] = speech_lang
     if src["type"] == "url" and config.YT_TRANSCRIPT and media.is_youtube(src["url"]):
         try:
             yt = media.youtube_words(src["url"])
@@ -1415,8 +1472,13 @@ def _run_job(job):
             yt = None
         if yt and not _covers(yt[0], lo / 16000, hi / 16000):
             yt = None
+        # If user confirmed Hindi or Hinglish, ignore mismatched YouTube English captions so Hindi speech isn't lost
+        if yt and speech_lang in ("hi", "hinglish") and str(yt[1] or "").lower().startswith("en"):
+            yt = None
         job["transcript_from"] = "youtube" if yt else "own"
-        job["lang"] = yt[1] if yt else ""          # the language spoken, when YouTube says (decides the captions)
+        if speech_lang not in ("en", "hi", "hinglish"):
+            # Never let YouTube's auto-tag override Auto speech detection unless we actually borrowed YouTube's captions
+            job["lang"] = yt[1] if yt else ""
     if resuming:
         try:
             words = json.loads((d / "words.json").read_text(encoding="utf-8"))
@@ -1443,7 +1505,10 @@ def _run_job(job):
         if i < len(blocks) and i >= done_blocks and i not in heard:
             a_, b_ = blocks[i]
             last = [0.0, 0.0]  # [last_p, last_ts]
-            use_word_ts = (transcribe.active_engine() != "faster-whisper")
+            whisper_active_block = (transcribe.active_engine() == "faster-whisper") or (
+                speech_lang in ("hi", "hinglish") and transcribe.faster_whisper_installed()
+            )
+            use_word_ts = not whisper_active_block
 
             def tp(p, i=i, a_=a_, b_=b_):
                 now = time.time()

@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -573,6 +574,47 @@ def fmt_eta(seconds) -> str:
     return f"{sec}s"
 
 
+def _move_with_retry(src: Path, dst: Path, tries: int = 5) -> Path:
+    """Move a downloaded file into place, retrying briefly if Windows antivirus or a handle briefly locks it."""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    last_err = None
+    for i in range(tries):
+        try:
+            if dst.exists():
+                try:
+                    dst.unlink()
+                except OSError:
+                    pass
+            try:
+                src.replace(dst)
+            except OSError:
+                shutil.move(str(src), str(dst))
+            return dst
+        except (PermissionError, OSError) as e:
+            last_err = e
+            time.sleep(0.35 * (i + 1))
+    raise last_err or RuntimeError(f"Could not save downloaded file to {dst.name}")
+
+
+def _download_staged(url: str, out_dir: Path, stem: str, opts: dict) -> Path:
+    """Download inside a short, space-free temp folder (nopart + windowsfilenames) and move the finished file
+    into out_dir. Prevents Windows path-length and '.part' rename failures ('Giving up after 3 retries')."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    tmp_dir = Path(tempfile.mkdtemp(prefix="pkdl_"))
+    try:
+        staged_opts = dict(opts)
+        staged_opts["outtmpl"] = str(tmp_dir / "f.%(ext)s")
+        staged_opts["nopart"] = True
+        staged_opts["windowsfilenames"] = True
+        with _youtube_guard(url):
+            _execute_download(staged_opts, url)
+        got = _biggest(tmp_dir, "f")
+        target = out_dir / f"{stem}{got.suffix}"
+        return _move_with_retry(got, target)
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
 def download_audio(url: str, job_dir: Path, on_progress=None, is_paused=None, start=None, end=None) -> Path:
     """Audio only: a few seconds even for long videos, and all the AI needs to pick clips."""
     def hook(d):
@@ -591,7 +633,6 @@ def download_audio(url: str, job_dir: Path, on_progress=None, is_paused=None, st
 
     opts = {
         "format": "ba[ext=m4a]/ba/worst",
-        "outtmpl": str(job_dir / "audio_src.%(ext)s"),
         "progress_hooks": [hook],
         "is_audio": True,
         "external_downloader": None,
@@ -603,20 +644,15 @@ def download_audio(url: str, job_dir: Path, on_progress=None, is_paused=None, st
         opts["download_ranges"] = download_range_func(None, [(start_sec, end_sec or float("inf"))])
         opts["force_keyframes_at_cuts"] = True
 
-    with _youtube_guard(url):
-        _execute_download(opts, url)
-    return _biggest(job_dir, "audio_src")
+    return _download_staged(url, job_dir, "audio_src", opts)
 
 
 def download(url: str, job_dir: Path, height=720) -> Path:
     """The whole video. Used for shorter videos, where this is quicker than fetching pieces."""
-    opts = {"format": _video_format(height), "merge_output_format": "mp4",
-            "outtmpl": str(job_dir / "source.%(ext)s")}
+    opts = {"format": _video_format(height), "merge_output_format": "mp4"}
     if is_youtube(url):
         opts["external_downloader"] = None
-    with _youtube_guard(url):
-        _execute_download(opts, url)
-    return _biggest(job_dir, "source")
+    return _download_staged(url, job_dir, "source", opts)
 
 
 def download_section(url: str, out_dir: Path, stem: str, start: float, end: float, height=720, exact=False,
@@ -624,7 +660,6 @@ def download_section(url: str, out_dir: Path, stem: str, start: float, end: floa
     """Just one stretch of the video. The cut lands on a keyframe, so find_offset() pins the true start; with
     exact=True the cut is made at exactly `start` instead (slower), for when there is nothing to match against."""
     from yt_dlp.utils import download_range_func
-    out_dir.mkdir(parents=True, exist_ok=True)
     def hook(d):
         if is_paused and is_paused():
             raise JobPaused("Job paused by user")
@@ -636,15 +671,13 @@ def download_section(url: str, out_dir: Path, stem: str, start: float, end: floa
             except TypeError:
                 on_progress(pct)
 
-    opts = {"format": _video_format(height), "merge_output_format": "mp4", "outtmpl": str(out_dir / (stem + ".%(ext)s")),
+    opts = {"format": _video_format(height), "merge_output_format": "mp4",
             "download_ranges": download_range_func(None, [(max(0.0, start), end)]),
             "progress_hooks": [hook],
             "external_downloader": None}
     if exact:
         opts["force_keyframes_at_cuts"] = True
-    with _youtube_guard(url):
-        _execute_download(opts, url)
-    return _biggest(out_dir, stem)
+    return _download_staged(url, out_dir, stem, opts)
 
 
 def find_offset(full: np.ndarray, part: np.ndarray, expected: float, search=20.0) -> float:
