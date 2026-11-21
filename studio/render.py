@@ -1,9 +1,11 @@
 """Turns a time range into a vertical clip: 9:16 layout, bouncy word captions, hook title, cover."""
 import json
+import os
 import re
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from . import config, edit, roman
@@ -31,14 +33,15 @@ STYLES = {
     "neon": {"label": "Neon Cyan", "font": "Poppins ExtraBold", "size": 130, "base": "FFFFFF", "active": "EED322",
              "strong": "22D3EE", "outline": 7, "pop": 110, "upper": False, "per": 3},
 }
-HOOK = {"font": "Poppins ExtraBold", "size": 96, "ink": "14100E", "box": "FFFFFF", "pad_x": 36, "pad_y": 22, "radius": 26,
-        "max_w": 900}
+HOOK = {"font": "Montserrat ExtraBold", "size": 96, "ink": "000000", "box": "FFFFFF", "pad_x": 42, "pad_y": 24, "radius": 28,
+        "max_w": 980, "tracking": 0.032}
 FONT_FILES = {
     "Poppins ExtraBold": "Poppins-ExtraBold.ttf",
     "Anton": "Anton-Regular.ttf",
     "Archivo Black": "ArchivoBlack-Regular.ttf",
     "Lilita One": "LilitaOne-Regular.ttf",
     "Montserrat": "Montserrat-ExtraBold.ttf",
+    "Montserrat ExtraBold": "Montserrat-ExtraBold.ttf",
     "Bebas Neue": "BebasNeue-Regular.ttf",
     "Righteous": "Righteous-Regular.ttf"
 }
@@ -215,53 +218,104 @@ def geometry(src_w, src_h, layout, out_w=None, out_h=None, split_ratio=DEFAULT_S
             min(round(oh * (1640.0 / 1920.0), 1), top + fg_h + round(oh * (180.0 / 1920.0), 1)))
 
 
+def _wrap_hook_lines(words, measure, max_text_w):
+    """Split heading words into 1, 2, or 3 balanced lines so large font sizes stay genuinely big."""
+    one = " ".join(words)
+    if len(words) <= 1 or measure(one) <= max_text_w:
+        return [one]
+    # Try best balanced 2-line split first
+    best2 = None
+    best2_w = float("inf")
+    for i in range(1, len(words)):
+        a, b = " ".join(words[:i]), " ".join(words[i:])
+        w = max(measure(a), measure(b))
+        if w < best2_w:
+            best2_w = w
+            best2 = [a, b]
+    if best2_w <= max_text_w or len(words) < 3:
+        return best2
+    # If user picked a large font size and 2 lines still overflow, try a clean 3-line balanced split
+    best3 = best2
+    best3_w = best2_w
+    for i in range(1, len(words) - 1):
+        for j in range(i + 1, len(words)):
+            a, b, c = " ".join(words[:i]), " ".join(words[i:j]), " ".join(words[j:])
+            w = max(measure(a), measure(b), measure(c))
+            if w < best3_w:
+                best3_w = w
+                best3 = [a, b, c]
+    return best3
+
+
 def _hook_events(hook, dur, y, font_size=None, style=None, enabled=True, out_w=None, out_h=None, bounds=None):
-    """The heading: dark text in a white rounded box that fits it, on one line or two balanced ones.
+    """TikTok/Reels/Shorts-style video heading: bold ALL-CAPS geometric sans-serif with slightly wide
+    tracking, centered horizontally and vertically inside a solid pure-white rounded pill banner.
 
     If `bounds=(min_y, max_y)` is provided, the entire badge is strictly contained inside `[min_y, max_y]`
     so it never overflows outside its assigned section."""
     if not enabled or not hook:
         return []
     ow = max(2, int(out_w or config.OUT_W or W))
+    oh = max(2, int(out_h or config.OUT_H or H))
     scale = ow / 1080.0
-    max_w = HOOK["max_w"] * scale
-    pad_x = HOOK["pad_x"] * scale
-    pad_y = HOOK["pad_y"] * scale
-    radius = HOOK["radius"] * scale
+    max_box_w = HOOK["max_w"] * scale
 
     f = _Font.get(HOOK["font"])
     size = int(round((int(font_size) if font_size else HOOK["size"]) * scale))
     min_size = max(18, int(round(36 * scale)))
-    words = hook.split()
+
+    # Set heading in punchy ALL-CAPS for maximum mobile readability
+    words = [w.upper() for w in hook.split() if w.strip()]
     if not words:
         return []
-    lines = [" ".join(words)]
-    if f.width(lines[0], size) > max_w and len(words) > 1:      # two lines, split where they come out most even
-        cut = min(range(1, len(words)), key=lambda i: max(f.width(" ".join(words[:i]), size), f.width(" ".join(words[i:]), size)))
-        lines = [" ".join(words[:cut]), " ".join(words[cut:])]
-    widest = max(f.width(l, size) for l in lines)
-    if widest > max_w:
-        size = max(min_size, int(size * max_w / widest))
-        widest = max(f.width(l, size) for l in lines)
-    line_h = f.em(size) * 1.16
-    bw, bh = widest + 2 * pad_x, line_h * len(lines) + 2 * pad_y
 
-    # Enforce strict section containment if bounds are supplied
+    track_ratio = float(HOOK.get("tracking", 0.032))
+
+    def _metrics(sz):
+        trk = round(max(1.0 * scale, sz * track_ratio), 2)
+        px = max(24.0 * scale, sz * 0.44)
+        py = max(14.0 * scale, sz * 0.25)
+        rad = max(18.0 * scale, sz * 0.28)
+        return trk, px, py, rad
+
+    def _line_w(txt, sz, trk):
+        # Slightly inflate glyph width by ~3% to account for ASS Bold=-1 synthetic thickening
+        return f.width(txt, sz) * 1.03 + trk * max(0, len(txt) - 1)
+
+    track, pad_x, pad_y, radius = _metrics(size)
+    max_text_w = max(120.0 * scale, max_box_w - 2.0 * pad_x)
+    lines = _wrap_hook_lines(words, lambda s: _line_w(s, size, track), max_text_w)
+    widest = max(_line_w(l, size, track) for l in lines)
+
+    # Only scale down if even the wrapped lines exceed the frame's safe horizontal span
+    if widest > max_text_w:
+        size = max(min_size, int(size * max_text_w / widest))
+        track, pad_x, pad_y, radius = _metrics(size)
+        widest = max(_line_w(l, size, track) for l in lines)
+
+    line_h = f.em(size) * 1.15
+    # Span cleanly across the horizontal frame when near full width, while staying snug for short labels
+    bw = min(max_box_w, widest + 2.0 * pad_x)
+    bh = line_h * len(lines) + 2.0 * pad_y
+
+    # Enforce strict section containment if bounds are supplied, else keep safely inside the full frame
     if bounds and len(bounds) == 2:
         min_y, max_y = float(bounds[0]), float(bounds[1])
         avail_h = max(16.0, max_y - min_y)
         if bh > avail_h:
             shrink = avail_h / bh
             size = max(min_size, int(size * shrink))
-            pad_x *= shrink
-            pad_y *= shrink
-            radius *= shrink
-            widest = max(f.width(l, size) for l in lines)
-            line_h = f.em(size) * 1.16
-            bw, bh = widest + 2 * pad_x, line_h * len(lines) + 2 * pad_y
+            track, pad_x, pad_y, radius = _metrics(size)
+            widest = max(_line_w(l, size, track) for l in lines)
+            line_h = f.em(size) * 1.15
+            bw = min(max_box_w, widest + 2.0 * pad_x)
+            bh = line_h * len(lines) + 2.0 * pad_y
         y = max(min_y + bh / 2.0, min(max_y - bh / 2.0, float(y)))
+    else:
+        margin_y = 28.0 * scale
+        y = max(margin_y + bh / 2.0, min(oh - margin_y - bh / 2.0, float(y)))
 
-    x0, y0, r = (ow - bw) / 2, y - bh / 2, min(radius, bh / 2)
+    x0, y0, r = (ow - bw) / 2.0, y - bh / 2.0, min(radius, bh / 2.0)
     x1, y1 = x0 + bw, y0 + bh
     n = lambda v: f"{v:.0f}"                                                         # noqa: E731
     box = (f"m {n(x0 + r)} {n(y0)} l {n(x1 - r)} {n(y0)} b {n(x1)} {n(y0)} {n(x1)} {n(y0)} {n(x1)} {n(y0 + r)} "
@@ -271,11 +325,14 @@ def _hook_events(hook, dur, y, font_size=None, style=None, enabled=True, out_w=N
     span = f"{_ts(0)},{_ts(dur)}"
     ev = []
     if style != "nobox":
-        ev.append(f"Dialogue: 3,{span},Hook,,0,0,0,,{{\\an7\\pos(0,0)\\fad(160,0)\\c&H{HOOK['box']}&\\p1}}{box}{{\\p0}}")
+        ev.append(f"Dialogue: 3,{span},Hook,,0,0,0,,{{\\an7\\pos(0,0)\\fad(160,0)\\c&H{HOOK['box']}&\\bord0\\shad0\\p1}}{box}{{\\p0}}")
     for i, line in enumerate(lines):
-        cy = y - line_h * (len(lines) - 1) / 2 + i * line_h - f.cap_shift(size)
-        ink = HOOK['ink'] if style != "nobox" else "FFFFFF"
-        extra = f"\\c&H{ink}&" if style == "nobox" else ""
+        cy = y - line_h * (len(lines) - 1) / 2.0 + i * line_h - f.cap_shift(size)
+        if style == "nobox":
+            bord = max(3, int(round(size * 0.085)))
+            extra = f"\\b1\\fsp{track:.1f}\\c&HFFFFFF&\\3c&H000000&\\bord{bord}"
+        else:
+            extra = f"\\b1\\fsp{track:.1f}\\c&H{HOOK['ink']}&\\bord0"
         ev.append(f"Dialogue: 4,{span},Hook,,0,0,0,,{{\\an5\\pos({ow // 2},{cy:.0f})\\fad(160,0)\\fs{size}{extra}}}{line}")
     return ev
 
@@ -313,7 +370,7 @@ ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Cap,{st['font']},{cap_sz},&H00{st['base']},&H00{st['base']},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,{outline_px},0,5,0,0,0,1
-Style: Hook,{HOOK['font']},{hk_sz},&H00{HOOK['ink']},&H00{HOOK['ink']},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
+Style: Hook,{HOOK['font']},{hk_sz},&H00{HOOK['ink']},&H00{HOOK['ink']},&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -544,22 +601,85 @@ def _hook_y(layout, hook_y, facecam=None, split_ratio=DEFAULT_SPLIT_RATIO, cam_s
 _nvenc_ok = None
 _qsv_ok = None
 _amf_ok = None
-RENDER_SECONDS = 600      # one clip's video encode; far beyond normal, so a frozen encoder is stopped, not waited on
+RENDER_SECONDS = 300      # one clip's video encode; far beyond normal, so a frozen encoder is stopped, not waited on
+
+
+def _probe_encoder(codec: str) -> bool:
+    """Quickly test a hardware H.264 encoder on a 1-frame null source so a broken driver never stalls a real render."""
+    try:
+        r = subprocess.run(
+            ["ffmpeg", "-nostdin", "-y", "-v", "error", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.04",
+             "-c:v", codec, "-f", "null", "-"],
+            stdin=subprocess.DEVNULL, capture_output=True, timeout=5, creationflags=NO_WINDOW,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
 
 
 def check_nvenc() -> bool:
     """Checks whether NVIDIA NVENC hardware encoder is available on this system."""
     global _nvenc_ok
     if _nvenc_ok is None:
-        try:
-            r = subprocess.run(
-                ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.04", "-c:v", "h264_nvenc", "-f", "null", "-"],
-                capture_output=True, timeout=5, creationflags=NO_WINDOW
-            )
-            _nvenc_ok = (r.returncode == 0)
-        except Exception:
-            _nvenc_ok = False
+        _nvenc_ok = _probe_encoder("h264_nvenc")
     return bool(_nvenc_ok)
+
+
+def _available_encoders(gpu_enabled: bool, draft: bool = False) -> list:
+    """Return ordered list of working (label, ffmpeg_args) encoders using cached 5s probes."""
+    global _nvenc_ok, _qsv_ok, _amf_ok
+    if gpu_enabled:
+        if _nvenc_ok is None:
+            _nvenc_ok = _probe_encoder("h264_nvenc")
+        if not _nvenc_ok and _qsv_ok is None:
+            _qsv_ok = _probe_encoder("h264_qsv")
+        if not _nvenc_ok and not _qsv_ok and _amf_ok is None:
+            _amf_ok = _probe_encoder("h264_amf")
+    encoders = []
+    if draft:
+        if gpu_enabled and _nvenc_ok:
+            encoders.append(("nvenc", ["yuv420p", "-c:v", "h264_nvenc", "-preset", "p1", "-cq", "28"]))
+        if gpu_enabled and _qsv_ok:
+            encoders.append(("qsv", ["nv12", "-c:v", "h264_qsv", "-preset", "veryfast", "-global_quality", "28"]))
+        if gpu_enabled and _amf_ok:
+            encoders.append(("amf", ["yuv420p", "-c:v", "h264_amf", "-rc", "cqp", "-qp_p", "28", "-qp_i", "28"]))
+        encoders.append(("x264", ["yuv420p", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28"]))
+    else:
+        if gpu_enabled and _nvenc_ok:
+            encoders.append(("nvenc", ["yuv420p", "-c:v", "h264_nvenc", "-cq", "21", "-preset", "p4"]))
+        if gpu_enabled and _qsv_ok:
+            encoders.append(("qsv", ["nv12", "-c:v", "h264_qsv", "-global_quality", "23", "-preset", "fast"]))
+        if gpu_enabled and _amf_ok:
+            encoders.append(("amf", ["yuv420p", "-c:v", "h264_amf", "-rc", "cqp", "-qp_p", "21", "-qp_i", "21"]))
+        encoders.append(("x264", ["yuv420p", "-c:v", "libx264", "-crf", "21", "-preset", "veryfast"]))
+    return encoders
+
+
+def _safe_move(src_path: Path, dst_path: Path, retries: int = 8):
+    """Move rendered output into place, retrying briefly on Windows if the browser still holds a read lock."""
+    last_err = None
+    for attempt in range(retries):
+        try:
+            if dst_path.exists():
+                try:
+                    os.replace(str(src_path), str(dst_path))
+                    return
+                except OSError:
+                    pass
+            shutil.move(str(src_path), str(dst_path))
+            return
+        except PermissionError as e:
+            last_err = e
+            time.sleep(0.25 * (attempt + 1))
+    # Final fallback: copy bytes over if destination can be truncated
+    try:
+        shutil.copyfile(str(src_path), str(dst_path))
+        src_path.unlink(missing_ok=True)
+        return
+    except Exception:
+        if last_err:
+            raise last_err
+        raise
 
 
 def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, src_w: int, src_h: int,
@@ -578,9 +698,9 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
     if ed:
         start = float(ed["start"])
         end = float(ed["end"])
-        if off > 0 and start >= off:
-            start = round(start - off, 2)
-            end = round(end - off, 2)
+        if off > 0 and start >= max(0.0, off - 30.0):
+            start = max(0.0, round(start - off, 2))
+            end = max(start + 1.0, round(end - off, 2))
         layout = ed.get("layout", "blur")
         split_ratio = float(ed.get("split_ratio") if ed.get("split_ratio") is not None else DEFAULT_SPLIT_RATIO)
         split_divider = bool(ed.get("split_divider", clip.get("split_divider", DEFAULT_SPLIT_DIVIDER)))
@@ -776,18 +896,18 @@ def _extract_cover(video_file: Path, out_jpg: Path, duration: float, fallback_sr
     # 1. Try rendered video at cover_t
     if video_file.is_file():
         subprocess.run(
-            ["ffmpeg", "-y", "-v", "error", "-ss", f"{cover_t:.2f}", "-i", str(video_file),
+            ["ffmpeg", "-nostdin", "-y", "-v", "error", "-ss", f"{cover_t:.2f}", "-i", str(video_file),
              "-frames:v", "1", "-strict", "-1", "-q:v", "3", str(out_jpg)],
-            cwd=work_dir, capture_output=True, text=True, creationflags=NO_WINDOW, timeout=15
+            cwd=work_dir, stdin=subprocess.DEVNULL, capture_output=True, text=True, creationflags=NO_WINDOW, timeout=15
         )
         if out_jpg.is_file() and out_jpg.stat().st_size > 0:
             return
 
         # 2. Try first frame of rendered video
         subprocess.run(
-            ["ffmpeg", "-y", "-v", "error", "-i", str(video_file),
+            ["ffmpeg", "-nostdin", "-y", "-v", "error", "-i", str(video_file),
              "-frames:v", "1", "-strict", "-1", "-q:v", "3", str(out_jpg)],
-            cwd=work_dir, capture_output=True, text=True, creationflags=NO_WINDOW, timeout=15
+            cwd=work_dir, stdin=subprocess.DEVNULL, capture_output=True, text=True, creationflags=NO_WINDOW, timeout=15
         )
         if out_jpg.is_file() and out_jpg.stat().st_size > 0:
             return
@@ -796,9 +916,9 @@ def _extract_cover(video_file: Path, out_jpg: Path, duration: float, fallback_sr
     if fallback_src and fallback_src.is_file():
         src_t = max(0.0, fallback_start + cover_t)
         subprocess.run(
-            ["ffmpeg", "-y", "-v", "error", "-ss", f"{src_t:.2f}", "-i", str(fallback_src),
+            ["ffmpeg", "-nostdin", "-y", "-v", "error", "-ss", f"{src_t:.2f}", "-i", str(fallback_src),
              "-frames:v", "1", "-strict", "-1", "-q:v", "3", str(out_jpg)],
-            cwd=work_dir, capture_output=True, text=True, creationflags=NO_WINDOW, timeout=15
+            cwd=work_dir, stdin=subprocess.DEVNULL, capture_output=True, text=True, creationflags=NO_WINDOW, timeout=15
         )
         if out_jpg.is_file() and out_jpg.stat().st_size > 0:
             return
@@ -829,7 +949,6 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
     for f in config.FONTS_DIR.glob("*.ttf"):
         shutil.copyfile(f, work / "f" / f.name)
 
-    encoders = []
     gpu_enabled = getattr(config, "USE_GPU", True)
     try:
         from . import accounts
@@ -837,13 +956,7 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
             gpu_enabled = False
     except Exception:
         pass
-    if gpu_enabled and _nvenc_ok is not False:
-        encoders.append(("nvenc", ["yuv420p", "-c:v", "h264_nvenc", "-cq", "21", "-preset", "p4"]))
-    if gpu_enabled and _qsv_ok is not False:
-        encoders.append(("qsv", ["nv12", "-c:v", "h264_qsv", "-global_quality", "23", "-preset", "fast"]))
-    if gpu_enabled and _amf_ok is not False:
-        encoders.append(("amf", ["yuv420p", "-c:v", "h264_amf", "-rc", "cqp", "-qp_p", "21", "-qp_i", "21"]))
-    encoders.append(("x264", ["yuv420p", "-c:v", "libx264", "-crf", "21", "-preset", "veryfast"]))
+    encoders = _available_encoders(gpu_enabled, draft=False)
 
     cam_delay = float((clip or {}).get("cam_delay", 0.0) or 0.0)
     cam_swap = bool(cam_swap or (clip or {}).get("cam_swap", False))
@@ -853,29 +966,30 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
                      focus=focus, zoom=zoom, divider=divider, out_w=ow, out_h=oh, src_w=src_w, src_h=src_h)
         fc_clean = fc.rstrip(";")
         fc_draft = f"{fc_clean};[v0]scale={draft_w}:{draft_h},ass={name}.ass:fontsdir=f[vdraft]"
-        base_draft = ["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
-                      "-filter_complex", fc_draft, "-map", "[vdraft]", "-map", "0:a:0",
+        base_draft = ["ffmpeg", "-nostdin", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
+                      "-filter_complex", fc_draft, "-map", "[vdraft]", "-map", "0:a:0?",
                       "-af", "asetpts=PTS-STARTPTS",
                       "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", "-pix_fmt"]
-        draft_encoders = []
-        if gpu_enabled and _nvenc_ok is not False:
-            draft_encoders.append(("nvenc", ["yuv420p", "-c:v", "h264_nvenc", "-preset", "p1", "-cq", "28"]))
-        if gpu_enabled and _qsv_ok is not False:
-            draft_encoders.append(("qsv", ["nv12", "-c:v", "h264_qsv", "-preset", "veryfast", "-global_quality", "28"]))
-        if gpu_enabled and _amf_ok is not False:
-            draft_encoders.append(("amf", ["yuv420p", "-c:v", "h264_amf", "-rc", "cqp", "-qp_p", "28", "-qp_i", "28"]))
-        draft_encoders.append(("x264", ["yuv420p", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28"]))
+        draft_encoders = _available_encoders(gpu_enabled, draft=True)
 
         err = None
         for label, enc in draft_encoders:
-            p = subprocess.run(base_draft + enc + [f"{name}_draft.mp4"], cwd=work, capture_output=True, text=True,
-                               encoding="utf-8", errors="replace", creationflags=NO_WINDOW, timeout=RENDER_SECONDS)
+            try:
+                p = subprocess.run(base_draft + enc + [f"{name}_draft.mp4"], cwd=work, stdin=subprocess.DEVNULL,
+                                   capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                   creationflags=NO_WINDOW, timeout=RENDER_SECONDS)
+            except subprocess.TimeoutExpired:
+                err = f"{label} timed out"
+                if label == "nvenc": _nvenc_ok = False
+                elif label == "qsv": _qsv_ok = False
+                elif label == "amf": _amf_ok = False
+                continue
             if p.returncode == 0:
-                if label == "nvenc": _nvenc_ok = True
-                elif label == "qsv": _qsv_ok = True
-                elif label == "amf": _amf_ok = True
                 break
             err = p.stderr[-1200:]
+            if label == "nvenc": _nvenc_ok = False
+            elif label == "qsv": _qsv_ok = False
+            elif label == "amf": _amf_ok = False
         else:
             raise RuntimeError(f"Draft render failed: {err}")
 
@@ -883,33 +997,68 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
         for ext in ("mp4", "jpg", "ass"):
             fpath = work / f"{name}_draft.mp4" if ext == "mp4" else work / f"{name}.{ext}"
             if fpath.is_file():
-                dest = out_dir / fpath.name
-                shutil.move(str(fpath), str(dest))
+                _safe_move(fpath, out_dir / fpath.name)
         return {"file": f"{name}_draft.mp4", "cover": f"{name}.jpg", "layout": layout, "draft": True}
 
-    # Final Render
-    raw_file = work / f"{name}_raw.mp4"
+    # Final Render — single-pass when layout/time/audio changed (2x faster, no double encode!)
     existing_raw = out_dir / f"{name}_raw.mp4"
     fast_caption = bool(clip and clip.get("_fast_caption_only") and existing_raw.is_file())
 
     if fast_caption:
+        # Caption/hook-only remake: re-burn ASS onto existing raw video in 1 quick pass (2-4s)
+        raw_file = work / f"{name}_raw.mp4"
         shutil.copyfile(existing_raw, raw_file)
+        if ass:
+            burn_base = ["ffmpeg", "-nostdin", "-y", "-v", "error", "-i", str(raw_file),
+                         "-vf", f"ass={name}.ass:fontsdir=f",
+                         "-c:a", "copy", "-movflags", "+faststart", "-pix_fmt"]
+            err = None
+            for label, enc in encoders:
+                try:
+                    p = subprocess.run(burn_base + enc + [f"{name}.mp4"], cwd=work, stdin=subprocess.DEVNULL,
+                                       capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                       creationflags=NO_WINDOW, timeout=RENDER_SECONDS)
+                except subprocess.TimeoutExpired:
+                    err = f"{label} timed out"
+                    continue
+                if p.returncode == 0:
+                    break
+                err = p.stderr[-1200:]
+                if label == "nvenc": _nvenc_ok = False
+                elif label == "qsv": _qsv_ok = False
+                elif label == "amf": _amf_ok = False
+            else:
+                shutil.copyfile(raw_file, work / f"{name}.mp4")
+        else:
+            shutil.copyfile(raw_file, work / f"{name}.mp4")
     else:
+        # Full layout/clip render: burn layout + captions + normalized audio in ONE single FFmpeg pass!
         fc = _filter(layout, fg_h, face, cam_delay=cam_delay, split_ratio=split_ratio, cam_swap=cam_swap,
                      focus=focus, zoom=zoom, divider=divider, out_w=ow, out_h=oh, src_w=src_w, src_h=src_h)
         fc_clean = fc.rstrip(";")
-        base_raw = ["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
-                    "-filter_complex", fc_clean, "-map", "[v0]", "-map", "0:a:0",
-                    "-af", "asetpts=PTS-STARTPTS,aresample=48000,loudnorm=I=-14:TP=-1.5:LRA=11",
-                    "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", "-pix_fmt"]
+        if ass:
+            fc_final = f"{fc_clean};[v0]ass={name}.ass:fontsdir=f[vout]"
+            v_map = "[vout]"
+        else:
+            fc_final = fc_clean
+            v_map = "[v0]"
+        base_final = ["ffmpeg", "-nostdin", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
+                      "-filter_complex", fc_final, "-map", v_map, "-map", "0:a:0?",
+                      "-af", "asetpts=PTS-STARTPTS,aresample=48000,loudnorm=I=-14:TP=-1.5:LRA=11",
+                      "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", "-pix_fmt"]
         err = None
         for label, enc in encoders:
-            p = subprocess.run(base_raw + enc + [f"{name}_raw.mp4"], cwd=work, capture_output=True, text=True,
-                               encoding="utf-8", errors="replace", creationflags=NO_WINDOW, timeout=RENDER_SECONDS)
+            try:
+                p = subprocess.run(base_final + enc + [f"{name}.mp4"], cwd=work, stdin=subprocess.DEVNULL,
+                                   capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                   creationflags=NO_WINDOW, timeout=RENDER_SECONDS)
+            except subprocess.TimeoutExpired:
+                err = f"{label} timed out after {RENDER_SECONDS}s"
+                if label == "nvenc": _nvenc_ok = False
+                elif label == "qsv": _qsv_ok = False
+                elif label == "amf": _amf_ok = False
+                continue
             if p.returncode == 0:
-                if label == "nvenc": _nvenc_ok = True
-                elif label == "qsv": _qsv_ok = True
-                elif label == "amf": _amf_ok = True
                 break
             err = p.stderr[-1200:]
             if label == "nvenc": _nvenc_ok = False
@@ -917,21 +1066,12 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
             elif label == "amf": _amf_ok = False
         else:
             raise RuntimeError(f"Render failed: {err}")
-
-    # Burn captions onto raw_file to produce {name}.mp4
-    if ass:
-        burn_base = ["ffmpeg", "-y", "-v", "error", "-i", str(raw_file),
-                     "-vf", f"ass={name}.ass:fontsdir=f",
-                     "-c:a", "copy", "-pix_fmt"]
-        for label, enc in encoders:
-            p = subprocess.run(burn_base + enc + [f"{name}.mp4"], cwd=work, capture_output=True, text=True,
-                               encoding="utf-8", errors="replace", creationflags=NO_WINDOW, timeout=60)
-            if p.returncode == 0:
-                break
-        else:
-            shutil.copyfile(raw_file, work / f"{name}.mp4")
-    else:
-        shutil.copyfile(raw_file, work / f"{name}.mp4")
+        # Remove any stale raw file from a previous layout so Fast remake never uses the old layout
+        if existing_raw.is_file():
+            try:
+                existing_raw.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     # Save captions.json with word timestamps, style, and offsets
     cap_data = {
@@ -976,11 +1116,9 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
     for ext in ("mp4", "jpg", "ass"):
         fpath = work / f"{name}.{ext}"
         if fpath.is_file():
-            shutil.move(str(fpath), str(out_dir / fpath.name))
-    if (work / f"{name}_raw.mp4").is_file():
-        shutil.move(str(work / f"{name}_raw.mp4"), str(out_dir / f"{name}_raw.mp4"))
+            _safe_move(fpath, out_dir / fpath.name)
     if (work / f"{name}_captions.json").is_file():
-        shutil.move(str(work / f"{name}_captions.json"), str(out_dir / f"{name}_captions.json"))
+        _safe_move(work / f"{name}_captions.json", out_dir / f"{name}_captions.json")
 
     # Cleanup draft file if present
     draft_file = out_dir / f"{name}_draft.mp4"

@@ -151,7 +151,7 @@ def site_allowed(url: str) -> bool:
 
 def run(cmd, cwd=None, timeout=3600):
     try:
-        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8",
+        p = subprocess.run(cmd, cwd=cwd, stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
                            errors="replace", creationflags=NO_WINDOW, timeout=timeout)
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"{Path(str(cmd[0])).name} took too long and was stopped.")

@@ -575,11 +575,16 @@ def status(request: Request):
     from . import updates
     me_ = _me(request)
     has_nvenc = render.check_nvenc()
+    gpu_hw = transcribe.gpu_status()
+    has_gpu = bool(has_nvenc or gpu_hw.get("available"))
     gpu_on = accounts.settings().get("gpu_enabled", True) and getattr(config, "USE_GPU", True)
+    real_name = gpu_hw.get("name") or ("NVIDIA GPU (NVENC)" if has_nvenc else "Not detected (using CPU libx264)")
     gpu_info = {
-        "supported": bool(has_nvenc),
-        "enabled": bool(gpu_on and has_nvenc),
-        "name": "NVIDIA GeForce GTX 1650 (NVENC)" if has_nvenc else "Not detected (using CPU libx264)",
+        **gpu_hw,
+        "supported": has_gpu,
+        "nvenc": bool(has_nvenc),
+        "enabled": bool(gpu_on and has_gpu),
+        "name": real_name,
     }
     return {"user": auth.public(me_), "update": updates.latest() if me_.is_admin else None, "accounts": config.ACCOUNTS, "disk_full": load.disk_full(), "no_ffmpeg": bool(_tools.missing()), "links": {"repo": config.REPO_URL, "follow": config.FOLLOW_URL}, "ai": usage.brief(), "unread": notices.unread(),
             "tour": not accounts.settings()["tour_done"],
@@ -595,15 +600,27 @@ def status(request: Request):
 def toggle_gpu(body: dict = Body(None)):
     current = accounts.settings().get("gpu_enabled", True)
     new_val = not current if not body or "enabled" not in body else bool(body["enabled"])
-    accounts.save_settings({"gpu_enabled": new_val})
+    saved = accounts.save_settings({"gpu_enabled": new_val})
+    # If Faster-Whisper is active, immediately reload it onto GPU (or CPU) so the toggle takes effect smoothly
+    if saved.get("asr_engine") == "faster-whisper" and transcribe.faster_whisper_installed():
+        transcribe.switch_engine(
+            engine="faster-whisper",
+            whisper_model=saved.get("whisper_model", "small"),
+            language=saved.get("asr_language", "auto"),
+            preload=True,
+        )
     ctx.bump()
     has_nvenc = render.check_nvenc()
-    return {"gpu_enabled": new_val, "supported": has_nvenc}
+    gpu_hw = transcribe.gpu_status(fresh=True)
+    return {"gpu_enabled": new_val, "supported": bool(has_nvenc or gpu_hw.get("available")), "gpu": gpu_hw}
 
 
 @app.get("/api/asr")
-def get_asr():
-    return transcribe.asr_status()
+def get_asr(fresh: int = 0, model: str = ""):
+    st = transcribe.asr_status(fresh_gpu=bool(fresh))
+    if model and model.strip().lower() in transcribe.WHISPER_MODEL_IDS:
+        st["gpu"] = transcribe.gpu_status(selected_model=model.strip().lower(), fresh=bool(fresh))
+    return st
 
 
 @app.post("/api/asr")
@@ -616,6 +633,12 @@ def set_asr(request: Request, body: dict = Body(...)):
         patch["whisper_model"] = str(body["whisper_model"]).strip().lower()
     if "language" in body and body["language"] is not None:
         patch["asr_language"] = str(body["language"]).strip().lower()
+    # Clicking Faster-Whisper / Load model automatically enables GPU if an NVIDIA GPU is available
+    target_eng = patch.get("asr_engine") or accounts.settings().get("asr_engine", "parakeet")
+    if target_eng == "faster-whisper" and body.get("auto_gpu", True) and getattr(config, "USE_GPU", True):
+        gpu_hw = transcribe.gpu_status(fresh=True)
+        if gpu_hw.get("available"):
+            patch["gpu_enabled"] = True
     try:
         saved = accounts.save_settings(patch) if patch else accounts.settings()
     except (ValueError, TypeError) as e:
@@ -1101,9 +1124,12 @@ def update_clip_edit(cid: str, body: dict = Body(...), jid: str = None):
     if valid["facecam"]:
         fc = valid["facecam"]
         clip["facecam"] = [fc["x"], fc["y"], fc["w"], fc["h"]]
-    clip["status"] = "drafting"
-    jobs.save(job)
-    jobs._q.put(("clip_draft", job["id"], clip["id"]))
+    if body.get("skip_draft"):
+        jobs.save(job)
+    else:
+        clip["status"] = "drafting"
+        jobs.save(job)
+        jobs._q.put(("clip_draft", job["id"], clip["id"]))
     return valid
 
 
@@ -1128,7 +1154,8 @@ def approve_clip_endpoint(cid: str, jid: str = None):
 def apply_to_all_endpoint(jid: str, body: dict = Body(...)):
     _job_or_404(jid)
     try:
-        updated = jobs.apply_to_all(jid, body)
+        skip_draft = bool(body.pop("skip_draft", False)) if isinstance(body, dict) else False
+        updated = jobs.apply_to_all(jid, body, skip_draft=skip_draft)
         return {"ok": True, "count": len(updated)}
     except ValueError as e:
         raise HTTPException(400, str(e))
