@@ -28,7 +28,7 @@ SETTING_DEFAULTS = {"discord_webhook": "", "telegram_token": "", "telegram_chat"
                     "asr_engine": "parakeet", "whisper_model": "small", "asr_language": "auto"}
 ASR_ENGINES = ("parakeet", "faster-whisper")
 WHISPER_MODELS = ("base", "small", "medium", "large-v3-turbo")
-ASR_LANGUAGES = ("auto", "en", "hi")
+ASR_LANGUAGES = ("auto", "en", "hi", "hinglish")
 
 YT_SCOPES = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly"
 IG = "https://graph.instagram.com"

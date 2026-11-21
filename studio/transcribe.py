@@ -58,8 +58,8 @@ WHISPER_MODEL_MAP = {m["id"]: m for m in WHISPER_MODELS}
 WHISPER_MODEL_IDS = set(WHISPER_MODEL_MAP)
 WHISPER_THREADS = int(os.environ.get("PEAKCUT_WHISPER_THREADS") or max(4, min(8, _CPUS - 2)))
 WHISPER_HINGLISH_PROMPT = (
-    "Natural Hinglish gaming stream. Keep spoken English words like table, chair, game, bro, clutch, "
-    "watch, stream, laptop, phone, video, question, athletic, what's up in standard English spelling."
+    "यह हिंदी और इंग्लिश (Hinglish) गेमिंग स्ट्रीम है। "
+    "भाई, यार, अरे, क्या, bro, clutch, kill, zone, push, game, car, bike, stream, video."
 )
 _ARABIC_SCRIPT_RE = re.compile(r"[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]")
 _NO_WIN = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
@@ -435,8 +435,34 @@ def gpu_status(selected_model: str = None, fresh: bool = False) -> dict:
     return out
 
 
+def _is_low_vram_gpu(ginfo: dict | None) -> bool:
+    """True for NVIDIA GTX 16-series (no FP16 Tensor Cores) or GPUs with <= 4.5 GB VRAM (e.g. GTX 1650 4 GB)."""
+    if not ginfo or not ginfo.get("available"):
+        return False
+    name = str(ginfo.get("name") or "").lower()
+    tot = int(ginfo.get("total_mb") or 0)
+    if any(k in name for k in ("1650", "1660", "1630", "1050", "1060", "mx", "p400", "t500", "t600")):
+        return True
+    return 0 < tot <= 4600
+
+
+def _pick_whisper_batch_size(device: str, lang_arg: str | None = None) -> int:
+    """Scale BatchedInferencePipeline batch_size to fit VRAM cleanly without overflowing to Windows Shared RAM."""
+    is_hi = (lang_arg or "").strip().lower().startswith(("hi", "ur", "hinglish"))
+    if device != "cuda":
+        return 6 if is_hi else 8
+    ginfo = gpu_status(fresh=False)
+    tot = int(ginfo.get("total_mb") or 0)
+    if _is_low_vram_gpu(ginfo):
+        return 4
+    if 0 < tot <= 6500:
+        return 6 if is_hi else 8
+    return 12 if is_hi else 16
+
+
 def _detect_whisper_device(gpu_on: bool) -> tuple[str, str]:
-    """Pick optimal (device, compute_type) for Faster-Whisper: CUDA float16/int8_float16 if available, else CPU int8."""
+    """Pick optimal (device, compute_type) for Faster-Whisper: CUDA int8 on GTX 16-series / <=4 GB VRAM,
+    CUDA float16 on >=6 GB RTX cards, else CPU int8."""
     pref = os.environ.get("PEAKCUT_WHISPER_DEVICE", "auto").strip().lower()
     if pref == "cpu" or not gpu_on:
         return "cpu", "int8"
@@ -445,7 +471,12 @@ def _detect_whisper_device(gpu_on: bool) -> tuple[str, str]:
         import ctranslate2
         if ctranslate2.get_cuda_device_count() > 0:
             env_c = os.environ.get("PEAKCUT_WHISPER_COMPUTE", "").strip()
-            return "cuda", env_c or "float16"
+            if env_c:
+                return "cuda", env_c
+            ginfo = gpu_status(fresh=False)
+            if _is_low_vram_gpu(ginfo):
+                return "cuda", "int8"
+            return "cuda", "float16"
     except Exception:
         pass
     return "cpu", "int8"
@@ -540,9 +571,15 @@ def _get_whisper_model(model_size: str = None, gpu_on: bool = None, force_cpu: b
                 )
                 used_dev, used_ctype = "cpu", "int8"
             else:
-                # If VRAM is tight (e.g. Ollama running), prefer compact int8_float16 first so it fits smoothly on GPU!
+                # GTX 1650 / <=4 GB GPUs lack FP16 Tensor Cores and run fastest + lowest VRAM in int8!
+                low_vram = _is_low_vram_gpu(ginfo)
                 tight = bool(ginfo and ginfo["total_mb"] > 0 and free_mb < m_meta["vram_mb"] + 250)
-                pref_order = ("int8_float16", "int8", "float16") if tight else (compute_type, "float16", "int8_float16", "int8")
+                if low_vram:
+                    pref_order = ("int8", "int8_float32", "int8_float16", "float16")
+                elif tight:
+                    pref_order = ("int8_float16", "int8", "float16")
+                else:
+                    pref_order = (compute_type, "float16", "int8_float16", "int8")
                 try_types = []
                 for ct in pref_order:
                     if ct and ct not in try_types:
@@ -1146,20 +1183,37 @@ def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = ""
     with _state_lock:
         _asr_state.update(status="ready", device=device, compute_type=compute_type)
 
-    # Resolve language: explicit setting wins, else reliable hint, else auto with fast pre-decode guard
-    hint = (lang_hint or "").strip().lower().split("-")[0]
+    # Resolve language: explicit per-video confirmation wins over auto; 'hinglish' uses Hindi+English Whisper mode
+    hint = (lang_hint or "").strip().lower()
+    if hint in ("hinglish", "hi-en", "en-hi"):
+        hint_norm = "hinglish"
+    else:
+        hint_norm = hint.split("-")[0]
+    pref_norm = "hinglish" if pref_lang in ("hinglish", "hi-en", "en-hi") else pref_lang
+
     chosen_lang = None
-    if pref_lang in ("en", "hi"):
-        chosen_lang = pref_lang
-    elif hint in ("en", "hi"):
-        chosen_lang = hint
+    hinglish_mode = False
+    if hint_norm in ("en", "hi", "hinglish"):
+        if hint_norm == "hinglish":
+            chosen_lang = "hi"
+            hinglish_mode = True
+        else:
+            chosen_lang = hint_norm
+            hinglish_mode = (hint_norm == "hi")
+    elif pref_norm in ("en", "hi", "hinglish"):
+        if pref_norm == "hinglish":
+            chosen_lang = "hi"
+            hinglish_mode = True
+        else:
+            chosen_lang = pref_norm
+            hinglish_mode = (pref_norm == "hi")
 
     total_sec = len(wav) / 16000.0
     vad_params = {"min_silence_duration_ms": 400, "speech_pad_ms": 200}
 
     def _call_transcribe(cur_model, cur_batched, cur_device, lang_arg, use_vad=True):
-        prompt = WHISPER_HINGLISH_PROMPT if lang_arg == "hi" else None
-        # BatchedInferencePipeline is 2x-4x faster on both GPU (batch 16) and CPU (batch 8) for longer audio
+        prompt = WHISPER_HINGLISH_PROMPT if (lang_arg == "hi" or hinglish_mode) else None
+        # BatchedInferencePipeline with VRAM-aware batch_size (batch 4 on 4 GB GTX 1650 prevents shared-RAM lag)
         use_batch = cur_batched is not None and total_sec >= 25.0
         kwargs = {
             "beam_size": 1,
@@ -1167,16 +1221,17 @@ def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = ""
             "vad_filter": use_vad,
             "word_timestamps": bool(word_timestamps),
             "condition_on_previous_text": False,
-            "no_speech_threshold": 0.6,
+            "no_speech_threshold": 0.65 if (lang_arg == "hi" or hinglish_mode) else 0.6,
             "compression_ratio_threshold": 2.4,
             "language": lang_arg,
+            "task": "transcribe",
         }
         if use_vad:
             kwargs["vad_parameters"] = vad_params
         if prompt:
             kwargs["initial_prompt"] = prompt
         if use_batch:
-            kwargs["batch_size"] = 16 if cur_device == "cuda" else 8
+            kwargs["batch_size"] = _pick_whisper_batch_size(cur_device, lang_arg)
             return cur_batched.transcribe(wav, **kwargs)
         return cur_model.transcribe(wav, **kwargs)
 
@@ -1187,7 +1242,10 @@ def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = ""
             if lang_arg is None and info is not None:
                 det_lang = str(getattr(info, "language", "") or "").lower()
                 det_prob = float(getattr(info, "language_probability", 1.0) or 0.0)
-                if (det_lang not in ("en", "hi") and det_prob < 0.78) or (det_lang in ("ar", "ur", "fa") and det_prob < 0.88):
+                if det_lang == "ur":
+                    # Whisper frequently tags spoken Hindi/Hinglish as Urdu ('ur'): decode as Hindi, NEVER English!
+                    segments, info = _call_transcribe(cur_model, cur_batched, cur_device, "hi", use_vad=use_vad)
+                elif (det_lang not in ("en", "hi") and det_prob < 0.78) or (det_lang in ("ar", "fa") and det_prob < 0.88):
                     segments, info = _call_transcribe(cur_model, cur_batched, cur_device, "en", use_vad=use_vad)
             got_words = _extract_whisper_words(segments, total_sec, on_progress=on_progress)
         return got_words, info
@@ -1206,22 +1264,29 @@ def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = ""
             # Retry once without VAD / batching if Silero VAD asset fails in an offline environment
             raw_words, info = _run_once(model, None, device, chosen_lang, use_vad=False)
 
-    # Lightweight final guard: only re-run if Arabic script still slipped into short clips under auto-detect
+    # Lightweight final guard: if Arabic/Urdu script slipped into auto-detect on short audio, re-decode cleanly
     if chosen_lang is None and total_sec <= 120.0 and raw_words:
         sample_txt = " ".join(w["w"] for w in raw_words[:30])
+        det_lang = str(getattr(info, "language", "") or "").lower() if info is not None else ""
         det_prob = float(getattr(info, "language_probability", 1.0) or 0.0) if info is not None else 0.0
         if _ARABIC_SCRIPT_RE.search(sample_txt) and det_prob < 0.90:
-            raw_words, _ = _run_once(model, batched, device, "en", use_vad=True)
+            fallback_lang = "hi" if det_lang in ("ur", "hi") else "en"
+            raw_words, _ = _run_once(model, batched, device, fallback_lang, use_vad=True)
 
     if on_progress:
         on_progress(1.0)
     return _clean_words(raw_words)
 
 
-def transcribe(audio: np.ndarray, on_progress=None, lang_hint: str = "", word_timestamps: bool = True) -> list:
+def transcribe(audio: np.ndarray, on_progress=None, lang_hint: str = "", word_timestamps: bool = True,
+               engine_override: str = None) -> list:
     """Returns [{'w': word, 's': start_sec, 'e': end_sec}, ...] using the active ASR engine
-    (Parakeet-v2 or Faster-Whisper). Falls back gracefully to Parakeet if Faster-Whisper is not installed."""
-    eng = active_engine()
+    (Parakeet-v2 or Faster-Whisper). Automatically uses Faster-Whisper when Hindi/Hinglish is explicitly
+    requested and Faster-Whisper is installed, falling back gracefully to Parakeet otherwise."""
+    eng = (engine_override or active_engine() or "parakeet").strip().lower()
+    hint_low = (lang_hint or "").strip().lower()
+    if not engine_override and hint_low in ("hi", "hinglish", "hi-en", "en-hi") and faster_whisper_installed():
+        eng = "faster-whisper"
     if eng == "faster-whisper" and faster_whisper_installed():
         return _transcribe_whisper(audio, on_progress=on_progress, lang_hint=lang_hint, word_timestamps=word_timestamps)
     return _transcribe_parakeet(audio, on_progress=on_progress)

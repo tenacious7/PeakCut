@@ -156,16 +156,16 @@ def stack_layout_metrics(out_w: int = None, out_h: int = None, split_ratio: floa
 
     divider_h = max(2, int(round(oh * 0.003 / 2.0)) * 2) if divider else 0
     half_div = divider_h / 2.0
-    pad = max(6, int(round(oh * 0.008)))
+    pad = max(10, int(round(oh * 0.012)))
 
-    # Keep facecam labels (e.g. "JST") strictly inside the facecam section, resting cleanly near the seam
-    hook_offset = int(round(oh * 0.042))
+    # Place Big Text cleanly below the split seam (inside gameplay) so it never covers the YouTuber's facecam
+    hook_offset = int(round(oh * 0.048))
     if cam_swap:
-        hook_bounds = (float(cam_top + half_div + pad), float(cam_bottom - pad))
-        hook_y = float(min(hook_bounds[1], cam_top + half_div + hook_offset))
+        hook_bounds = (float(game_top + pad), float(game_bottom - half_div - pad))
+        hook_y = float(max(hook_bounds[0], game_bottom - half_div - hook_offset))
     else:
-        hook_bounds = (float(cam_top + pad), float(cam_bottom - half_div - pad))
-        hook_y = float(max(hook_bounds[0], cam_bottom - half_div - hook_offset))
+        hook_bounds = (float(game_top + half_div + pad), float(game_bottom - pad))
+        hook_y = float(min(hook_bounds[1], game_top + half_div + hook_offset))
 
     # Keep subtitles centered inside the gameplay section with clean bottom spacing (~15% margin on default 35/65)
     cap_frac = 0.80 if cam_swap else 0.77
@@ -247,7 +247,7 @@ def _wrap_hook_lines(words, measure, max_text_w):
     return best3
 
 
-def _hook_events(hook, dur, y, font_size=None, style=None, enabled=True, out_w=None, out_h=None, bounds=None):
+def _hook_events(hook, dur, y, font_size=None, style=None, enabled=True, out_w=None, out_h=None, bounds=None, max_w=None):
     """TikTok/Reels/Shorts-style video heading: bold ALL-CAPS geometric sans-serif with slightly wide
     tracking, centered horizontally and vertically inside a solid pure-white rounded pill banner.
 
@@ -258,7 +258,8 @@ def _hook_events(hook, dur, y, font_size=None, style=None, enabled=True, out_w=N
     ow = max(2, int(out_w or config.OUT_W or W))
     oh = max(2, int(out_h or config.OUT_H or H))
     scale = ow / 1080.0
-    max_box_w = HOOK["max_w"] * scale
+    base_max_w = max(360.0, min(1020.0, float(max_w))) if max_w else float(HOOK["max_w"])
+    max_box_w = base_max_w * scale
 
     f = _Font.get(HOOK["font"])
     size = int(round((int(font_size) if font_size else HOOK["size"]) * scale))
@@ -339,7 +340,7 @@ def _hook_events(hook, dur, y, font_size=None, style=None, enabled=True, out_w=N
 
 def build_ass(words, start, end, hook, style_name, highlight, hook_y, cap_y,
               cap_font_size=None, hook_font_size=None, hook_style=None,
-              hook_enabled=True, cap_enabled=True, out_w=None, out_h=None, hook_bounds=None) -> str:
+              hook_enabled=True, cap_enabled=True, out_w=None, out_h=None, hook_bounds=None, hook_max_w=None) -> str:
     ow = max(2, int(out_w or config.OUT_W or W))
     oh = max(2, int(out_h or config.OUT_H or H))
     scale = ow / 1080.0
@@ -377,7 +378,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     dur = end - start
     ev = _hook_events(_clean(hook), dur, hook_y, font_size=hook_font_size or HOOK['size'],
-                      style=hook_style, enabled=hook_enabled, out_w=ow, out_h=oh, bounds=hook_bounds)
+                      style=hook_style, enabled=hook_enabled, out_w=ow, out_h=oh, bounds=hook_bounds, max_w=hook_max_w)
     if not cap_enabled:
         return head + "\n".join(ev)
     f = _Font.get(st["font"])
@@ -682,6 +683,46 @@ def _safe_move(src_path: Path, dst_path: Path, retries: int = 8):
         raise
 
 
+def _normalize_clip_words(words_to_use: list, start: float, end: float, off: float = 0.0) -> list:
+    """Align a clip's word timestamps uniformly to the [start, end] range of the source file.
+    Using a whole-list basis check prevents per-word double-offset subtraction (when off is small)
+    and prevents pre-start words (e.g. start - 0.5s) from being teleported forward into the clip."""
+    parsed = []
+    for w in (words_to_use or []):
+        if not isinstance(w, dict):
+            continue
+        t = str(w.get("w") if "w" in w else w.get("text", "")).strip()
+        if not t:
+            continue
+        if roman.needs_roman(t):
+            t = roman.to_roman(t)
+        try:
+            s_val = float(w.get("s") if "s" in w else w.get("start", 0.0))
+            e_val = float(w.get("e") if "e" in w else w.get("end", s_val + 0.3))
+        except (ValueError, TypeError):
+            continue
+        if e_val < s_val:
+            e_val = s_val + 0.1
+        parsed.append((t, s_val, e_val))
+    if not parsed:
+        return []
+
+    dur = max(0.5, float(end) - float(start))
+    in_clip = sum(1 for _, s, _ in parsed if (start - 2.0) <= s <= (end + 2.0))
+    in_abs = sum(1 for _, s, _ in parsed if (start + off - 2.0) <= s <= (end + off + 2.0)) if off > 1.0 else -1
+    in_rel = sum(1 for _, s, _ in parsed if -1.5 <= s <= (dur + 2.0)) if start > 2.0 else -1
+
+    delta = 0.0
+    if in_clip > 0 and in_clip >= in_abs and in_clip >= in_rel:
+        delta = 0.0
+    elif off > 1.0 and in_abs > in_clip and in_abs >= in_rel:
+        delta = -off
+    elif start > 2.0 and in_rel > in_clip:
+        delta = start
+
+    return [{"w": t, "s": round(s + delta, 2), "e": round(e + delta, 2)} for t, s, e in parsed]
+
+
 def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, src_w: int, src_h: int,
                 quality: str = "final", out_w: int = None, out_h: int = None) -> dict:
     """Writes <name>.mp4 (or <name>_draft.mp4), <name>.jpg, <name>.ass, etc. into out_dir. Returns file names."""
@@ -726,6 +767,7 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
         hook_text = str(hook_conf.get("text", "")).strip() if hook_enabled else ""
         hook_font_size = int(hook_conf.get("font_size", 96))
         hook_y = hook_conf.get("y_pos")
+        hook_max_w = hook_conf.get("max_w") or clip.get("hook_max_w") or HOOK["max_w"]
         hook_style = str(hook_conf.get("style", "default"))
         audio_conf = ed.get("audio") or {}
         audio_opts = {
@@ -757,6 +799,7 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
         hook_text = str(clip.get("hook", "")).strip() if hook_enabled else ""
         hook_font_size = int(clip.get("hook_font_size") or 96)
         hook_y = clip.get("hook_y")
+        hook_max_w = clip.get("hook_max_w") or HOOK["max_w"]
         hook_style = str(clip.get("hook_style") or "default")
         audio_opts = {
             "meme": bool(clip.get("meme") and clip.get("meme") != "none"),
@@ -770,22 +813,8 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
     if hook_text and roman.needs_roman(hook_text):
         hook_text = roman.to_roman(hook_text)
 
-    # Normalize word timestamps to align with [start, end] inside src
-    adjusted_words = []
-    for w in (words_to_use or []):
-        t = str(w.get("w") if "w" in w else w.get("text", "")).strip()
-        if roman.needs_roman(t):
-            t = roman.to_roman(t)
-        s_val = float(w.get("s") if "s" in w else w.get("start", 0.0))
-        e_val = float(w.get("e") if "e" in w else w.get("end", s_val + 0.3))
-        if off > 0 and s_val >= off:
-            s_val -= off
-            e_val -= off
-        elif s_val < start and (end - start) >= s_val:
-            s_val += start
-            e_val += start
-        adjusted_words.append({"w": t, "s": round(s_val, 2), "e": round(e_val, 2)})
-    words_to_use = adjusted_words
+    # Whole-list word timestamp normalization: avoids per-word double-offset subtraction and pre-start word teleporting
+    words_to_use = _normalize_clip_words(words_to_use, start, end, off)
 
     layout, fg_h, def_hook_y, def_cap_y = geometry(src_w, src_h, layout, out_w=ow, out_h=oh,
                                                    split_ratio=split_ratio, cam_swap=cam_swap, divider=split_divider)
@@ -862,18 +891,11 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
     else:
         hook_y = _hook_y(layout, def_hook_y, face, split_ratio=split_ratio, cam_swap=cam_swap, out_w=ow, out_h=oh, divider=split_divider)
 
-    # Keep facecam labels (e.g. "JST") strictly inside the facecam section so they never overflow across the divider
-    if layout == "stack" and stack_m:
-        c_top, c_bot = stack_m["cam_top"], stack_m["cam_bottom"]
-        seam_tol = oh * 0.06
-        if (c_top - seam_tol) <= hook_y <= (c_bot + seam_tol):
-            hook_bounds = stack_m["hook_bounds"]
-
     ass = build_ass(words_to_use if cap_enabled else [], start, end, hook_text, cap_style,
                     clip.get("highlight_words", []), hook_y, cap_y,
                     cap_font_size=cap_font_size, hook_font_size=hook_font_size,
                     hook_style=hook_style, hook_enabled=hook_enabled, cap_enabled=cap_enabled,
-                    out_w=ow, out_h=oh, hook_bounds=hook_bounds)
+                    out_w=ow, out_h=oh, hook_bounds=hook_bounds, hook_max_w=hook_max_w)
     # The clip is made in a short work folder and moved into place afterwards.
     work = Path(tempfile.mkdtemp(prefix="pk"))
     try:

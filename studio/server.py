@@ -1110,11 +1110,21 @@ def update_clip_edit(cid: str, body: dict = Body(...), jid: str = None):
         clip["hook_enabled"] = bool(valid["hook"].get("enabled", True))
         clip["hook_font_size"] = valid["hook"].get("font_size", 96)
         clip["hook_y"] = valid["hook"].get("y_pos", 300.0)
+        clip["hook_max_w"] = valid["hook"].get("max_w", 980)
         clip["hook_style"] = valid["hook"].get("style", "default")
     if "caption" in valid:
         clip["style"] = valid["caption"].get("style", "bounce")
         clip["captions"] = bool(valid["caption"].get("enabled", True))
         clip["cap_y"] = valid["caption"].get("y_pos", 1630.0)
+        if valid["caption"].get("words_edited") and isinstance(new_words, list):
+            clip["words"] = [
+                {"w": str(w.get("text", "")).strip(), "s": round(float(w.get("start", 0.0)), 2), "e": round(float(w.get("end", 0.0)), 2)}
+                for w in new_words
+                if str(w.get("text", "")).strip()
+            ]
+            clip["words_edited"] = True
+            clip.pop("fixed_words", None)
+            clip.pop("fixed_for", None)
     clip["draft_v"] = int(time.time() * 1000)
     clip["version"] = clip.get("version", 0) + 1
     if "title" in body and body["title"]:
