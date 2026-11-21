@@ -19,6 +19,8 @@ are there, and only then offer to delete the old folder. Never delete anything w
 
 ## Run and test
 
+- Automated Friend Sync Tool: `powershell -ExecutionPolicy Bypass -File .\sync_friend.ps1`
+- Automated Feature Commit & Push Tool: `powershell -ExecutionPolicy Bypass -File .\push_to_repo.ps1`
 - Run: `python -m studio.server` (settings from `.env`; see `.env.example`). Needs Python 3.10+ and `ffmpeg`.
 - The speech model (about 480 MB) downloads by itself on first start; `python -m studio.fetch_model` gets it ahead of time.
 - Tests: `python tests/run.py`. It starts a throwaway copy on a spare port with an empty data folder. Run it
