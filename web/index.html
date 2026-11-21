@@ -465,6 +465,18 @@ img.av{object-fit:cover}
 .asr-opt b{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--brand-ink)}
 .asr-opt b svg{width:15px;height:15px;color:var(--brand-deep)}
 .asr-opt small{font-size:12px;color:var(--dim);font-weight:400;line-height:1.35}
+.gpu-meter{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--muted)}
+.gpu-meter-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.gpu-meter-name{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--brand-ink)}
+.gpu-meter-name svg{width:15px;height:15px;color:var(--brand-deep)}
+.gpu-meter-nums{font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums}
+.gpu-vram-bar{height:7px;border-radius:999px;background:#E6DDD6;overflow:hidden}
+.gpu-vram-bar>i{display:block;height:100%;background:var(--brand);transition:width .25s ease}
+.gpu-vram-bar.high>i{background:#C2410C}
+.gpu-warn-box{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:10px;border:1px solid var(--brand-line);background:#FFF4E5;color:var(--brand-deep);font-size:12.5px;line-height:1.45}
+.gpu-warn-head{display:flex;align-items:flex-start;gap:8px}
+.gpu-warn-head svg{flex:none;width:16px;height:16px;margin-top:2px}
+.gpu-warn-acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 
 /* ---------- home blocks */
 .tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:16px}
@@ -968,11 +980,6 @@ dialog[open]{animation:fadein .16s ease}
 .video-preview-wrap{position:relative;width:100%;max-height:calc(100vh - 48px);aspect-ratio:9/16;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:6px}
 .video-preview-wrap video{width:100%;height:100%;object-fit:contain;display:block}
 .live-overlay-container{position:absolute;inset:0;pointer-events:none;overflow:hidden}
-.live-hook-box{position:absolute;left:50%;transform:translateX(-50%);width:88%;text-align:center;font-weight:900;line-height:1.15;cursor:grab;pointer-events:auto;user-select:none;z-index:10;text-transform:uppercase;background:rgba(0,0,0,0.85);color:#fff;padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);box-sizing:border-box;touch-action:none}
-.live-hook-box:active{cursor:grabbing}
-.live-hook-box.nobox{background:transparent!important;border:none!important;text-shadow:-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000}
-.live-cap-box{position:absolute;left:50%;transform:translateX(-50%);width:88%;text-align:center;font-weight:800;line-height:1.2;cursor:grab;pointer-events:auto;user-select:none;z-index:9;text-transform:uppercase;color:#fff;text-shadow:-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000;touch-action:none}
-.live-cap-box:active{cursor:grabbing}
 .cap-word-hl{color:#FFDE00}
 .btn.xs{padding:3px 8px;font-size:11px;height:24px;border-radius:6px;gap:4px}
 .btn.xs svg{width:12px;height:12px}
@@ -1066,6 +1073,7 @@ const I = {
  "plusc": "<path d=\"M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm48-88a8,8,0,0,1-8,8H136v32a8,8,0,0,1-16,0V136H88a8,8,0,0,1,0-16h32V88a8,8,0,0,1,16,0v32h32A8,8,0,0,1,176,128Z\"/>",
  "user": "<path d=\"M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24ZM74.08,197.5a64,64,0,0,1,107.84,0,87.83,87.83,0,0,1-107.84,0ZM96,120a32,32,0,1,1,32,32A32,32,0,0,1,96,120Zm97.76,66.41a79.66,79.66,0,0,0-36.06-28.75,48,48,0,1,0-59.4,0,79.66,79.66,0,0,0-36.06,28.75,88,88,0,1,1,131.52,0Z\"/>",
  "bolt": "<path d=\"M215.79,118.17a8,8,0,0,0-5-5.66L153.18,90.9l14.66-73.33a8,8,0,0,0-13.69-7l-112,120a8,8,0,0,0,3,13l57.63,21.61L88.16,238.43a8,8,0,0,0,13.69,7l112-120A8,8,0,0,0,215.79,118.17ZM109.37,214l10.47-52.38a8,8,0,0,0-5-9.06L62,132.71l84.62-90.66L136.16,94.43a8,8,0,0,0,5,9.06l52.8,19.8Z\"/>",
+ "refresh": "<path d=\"M240,56v48a8,8,0,0,1-8,8H184a8,8,0,0,1,0-16H211.4L184.81,71.64l-.25-.24a80,80,0,1,0-1.67,114.78,8,8,0,0,1,11,11.63A95.44,95.44,0,0,1,128,224h-1.32A96,96,0,1,1,195.75,60L224,85.8V56a8,8,0,1,1,16,0Z\"/>",
  "bell": "<path d=\"M221.8,175.94C216.25,166.38,208,139.33,208,104a80,80,0,1,0-160,0c0,35.34-8.26,62.38-13.81,71.94A16,16,0,0,0,48,200H88.81a40,40,0,0,0,78.38,0H208a16,16,0,0,0,13.8-24.06ZM128,216a24,24,0,0,1-22.62-16h45.24A24,24,0,0,1,128,216ZM48,184c7.7-13.24,16-43.92,16-80a64,64,0,1,1,128,0c0,36.05,8.28,66.73,16,80Z\"/>",
  "plug": "<path d=\"M237.66,18.34a8,8,0,0,0-11.32,0l-52.4,52.41-5.37-5.38a32.05,32.05,0,0,0-45.26,0L100,88.69l-6.34-6.35A8,8,0,0,0,82.34,93.66L88.69,100,65.37,123.31a32,32,0,0,0,0,45.26l5.38,5.37-52.41,52.4a8,8,0,0,0,11.32,11.32l52.4-52.41,5.37,5.38a32,32,0,0,0,45.26,0L156,167.31l6.34,6.35a8,8,0,0,0,11.32-11.32L167.31,156l23.32-23.31a32,32,0,0,0,0-45.26l-5.38-5.37,52.41-52.4A8,8,0,0,0,237.66,18.34Zm-116.29,161a16,16,0,0,1-22.62,0L76.69,157.25a16,16,0,0,1,0-22.62L100,111.31,144.69,156Zm57.94-57.94L156,144.69,111.31,100l23.32-23.31a16,16,0,0,1,22.62,0l22.06,22A16,16,0,0,1,179.31,121.37ZM88.57,35A8,8,0,0,1,103.43,29l8,20A8,8,0,0,1,96.57,55ZM24.57,93A8,8,0,0,1,35,88.57l20,8A8,8,0,0,1,49,111.43l-20-8A8,8,0,0,1,24.57,93ZM231.43,163a8,8,0,0,1-10.4,4.46l-20-8A8,8,0,1,1,207,144.57l20,8A8,8,0,0,1,231.43,163Zm-64,58.06A8,8,0,0,1,152.57,227l-8-20A8,8,0,0,1,159.43,201Z\"/>",
  "upright": "<path d=\"M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z\"/>",
@@ -1079,6 +1087,21 @@ const I = {
 const ic = n => `<svg viewBox="0 0 256 256" aria-hidden="true">${I[n]}</svg>`;
 const navIc = (n, v) => ic(S.view === v && I[n + "_f"] ? n + "_f" : n);
 const fmt = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(s % 60).padStart(2, "0"); };
+const fmtEta = s => {
+  const n = Math.round(Number(s) || 0);
+  if (n <= 0 || !Number.isFinite(n)) return "";
+  const h = Math.floor(n / 3600), m = Math.floor((n % 3600) / 60), sec = n % 60;
+  if (h > 0) return `~${h}h ${String(m).padStart(2, "0")}m left`;
+  if (m > 0) return `~${m}m ${String(sec).padStart(2, "0")}s left`;
+  return `~${Math.max(1, sec)}s left`;
+};
+const clipEtaText = c => {
+  if (!c || !c.eta_sec) return "";
+  if (!["queued", "rendering", "rendering_final", "drafting", "approved"].includes(c.status)) return "";
+  const elapsed = c.render_started ? Math.max(0, (Date.now() / 1000) - Number(c.render_started)) : 0;
+  const rem = Math.max(1, Math.round(Number(c.eta_sec) - elapsed));
+  return fmtEta(rem);
+};
 const clock = t => new Date(t * 1000).toLocaleString([], {weekday:"short", hour:"2-digit", minute:"2-digit"});
 const when = t => new Date(t * 1000).toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"});
 const opts = (map, val) => Object.entries(map).map(([k, v]) => `<option value="${esc(k)}"${String(k) === String(val) ? " selected" : ""}>${esc(v)}</option>`).join("");
@@ -2881,19 +2904,22 @@ function clipHtml(j, c) {
   } else if (c.status === "approved") {
     body = `<img src="${m}${esc(c.cover || (c.id + '.jpg'))}?v=${c.version || 1}" alt="" loading="lazy"><span class="veil"><span class="veil-pill good">Approved</span></span>`;
   } else if (c.status === "rendering_final") {
-    body = `<span class="making">Rendering final…</span>`;
+    const eta = clipEtaText(c);
+    body = `<span class="making">Rendering final…${eta ? `<br><small style="opacity:.8;font-weight:500">${esc(eta)}</small>` : ""}</span>`;
   } else if (c.status === "drafting") {
-    body = `<span class="making">Generating draft…</span>`;
+    const eta = clipEtaText(c);
+    body = `<span class="making">Generating draft…${eta ? `<br><small style="opacity:.8;font-weight:500">${esc(eta)}</small>` : ""}</span>`;
   } else if (c.status === "qc_flagged") {
     body = `<img src="${m}${esc(c.cover || (c.id + '.jpg'))}?v=${c.version || 1}" alt="" loading="lazy"><span class="veil"><span class="veil-pill bad">QC flagged</span></span>`;
   } else if (c.status === "failed" || c.status === "error") {
     body = `<span class="making" style="animation:none;color:var(--bad);background:var(--bad-soft)">${esc(c.error || "Could not make this clip. Open to retry.")}</span>`;
   } else {
-    body = `<span class="making">${c.status === "rendering" ? "Making this clip…" : "Waiting its turn…"}</span>`;
+    const eta = clipEtaText(c);
+    body = `<span class="making">${c.status === "rendering" ? "Making this clip…" : "Waiting its turn…"}${eta ? `<br><small style="opacity:.8;font-weight:500">${esc(eta)}</small>` : ""}</span>`;
   }
 
   const key = `c:${j.id}:${c.id}`;
-  const busyClip = c.status === "queued" || c.status === "rendering" || c.status === "drafting" || c.status === "rendering_final";
+  const busyClip = c.status === "queued" || c.status === "rendering" || c.status === "drafting" || c.status === "rendering_final" || c.status === "approved";
   
   let stBadge = "";
   if (c.status === "awaiting_review") stBadge = `<span class="badge bot st-review">Needs review</span>`;
@@ -3124,6 +3150,7 @@ function jobHtml(j) {
   const nQc = j.clips.filter(c => c.status === "qc_flagged").length;
   const showFilters = j.clips.length > 0 && (nAwaiting > 0 || nApproved > 0 || nQc > 0);
 
+  const nApprovable = j.clips.filter(c => ["awaiting_review", "qc_flagged", "failed", "error", "drafting"].includes(c.status)).length;
   let filterBar = "";
   if (showFilters) {
     filterBar = `<div class="job-filter-bar">
@@ -3134,7 +3161,7 @@ function jobHtml(j) {
         ${nDone ? `<button type="button" class="${curFilter==='done'?'active':''}" data-act="clipfilter" data-j="${j.id}" data-v="done">Done (${nDone})</button>` : ''}
         ${nQc ? `<button type="button" class="${curFilter==='qc'?'active':''}" data-act="clipfilter" data-j="${j.id}" data-v="qc" style="color:var(--bad)">QC flagged (${nQc})</button>` : ''}
       </div>
-      ${nAwaiting ? `<button type="button" class="btn sm good" data-act="approvealljob" data-j="${j.id}">${ic("check")}Approve all (${nAwaiting})</button>` : ''}
+      ${nApprovable ? `<button type="button" class="btn sm good" data-act="approvealljob" data-j="${j.id}">${ic("check")}Approve all (${nApprovable})</button>` : ''}
     </div>`;
   }
 
@@ -3152,7 +3179,7 @@ function jobHtml(j) {
         ${j.clips.some(c => c.status === "done") ? `<button class="btn sm icon ghost" data-act="dlall" data-j="${j.id}" title="Download all clips of this video" aria-label="Download all clips of this video">${ic("down")}</button>` : ""}
         <button class="btn sm icon ghost" data-act="deljob" data-j="${j.id}" title="Delete" aria-label="Delete this video and its clips">${ic("trash")}</button>
         <label class="selck" title="Select this video and its clips"><input type="checkbox" data-sel="j:${j.id}" ${sel().has("j:" + j.id) ? "checked" : ""} aria-label="Select this video"></label>`}</div></div>
-    ${busy ? `<div class="bar"><i style="width:${Math.round(j.progress * 100)}%"></i></div><p class="sub">${esc(j.stage)} · ${Math.round(j.progress * 100)}%</p>` : ""}
+    ${busy ? `<div class="bar"><i style="width:${Math.round(j.progress * 100)}%"></i></div><p class="sub">${esc(j.stage)} · ${Math.round(j.progress * 100)}%${j.eta_sec > 0 ? ` · <b>${esc(fmtEta(j.eta_sec))}</b>` : ""}</p>` : ""}
     ${paused ? `<div class="bar" style="opacity:0.5"><i style="width:${Math.round(j.progress * 100)}%"></i></div><p class="sub"><span class="pill warn" style="margin-right:6px">Paused</span>${esc(j.stage)} · ${Math.round(j.progress * 100)}%</p>` : ""}
     ${j.status === "done" && !j.clips.length ? `<p class="sub">${esc(j.stage)}</p>` : ""}
     ${j.error ? `<div class="err">${esc(j.error)}<button class="rep" data-act="report" data-ctx="${esc("Video failed: " + (j.title || j.source.name || "") + " | " + j.error)}">Report this</button></div>` : ""}${j.ai?.note ? `<p class="sub">${esc(j.ai.note)}</p>` : ""}
@@ -3567,15 +3594,20 @@ async function drawSettings() {
         </div></section>`;
     }
     if (tab === "hardware") {
-      const g = S.status.gpu || {supported: false, enabled: false, name: "CPU (libx264)"};
-      const asr = S.asr = await api("/api/asr").catch(() => S.status.asr || {
+      const fmtGb = mb => (mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.max(0, Math.round(mb || 0))} MB`);
+      const asr = S.asr = await api("/api/asr?fresh=1").catch(() => S.status.asr || {
         engine: "parakeet", whisper_model: "small", language: "auto", status: "ready",
         message: "Parakeet-v2 ready.", device: "cpu", compute_type: "int8",
-        faster_whisper_installed: false, parakeet_installed: true, models: []
+        faster_whisper_installed: false, parakeet_installed: true, models: [], gpu: {}
       });
+      const gStatus = S.status.gpu || {supported: false, enabled: false, name: "CPU (libx264)"};
+      const gh = asr.gpu || gStatus || {};
+      const hasGpu = Boolean(gh.available || gStatus.supported);
+      const gpuName = gh.name || gStatus.name || (hasGpu ? "NVIDIA GPU" : "No NVIDIA GPU detected");
+      const gpuEnabled = Boolean((asr.gpu_enabled !== undefined ? asr.gpu_enabled : gStatus.enabled) && hasGpu);
       const isWhisper = asr.engine === "faster-whisper";
       const asrPill = asr.status === "ready"
-        ? `<span class="pill ok">${ic("check")}Ready</span>`
+        ? `<span class="pill ok">${ic("check")}${isWhisper && asr.device === "cuda" ? "Running on GPU" : "Ready"}</span>`
         : asr.status === "loading"
         ? `<span class="pill warn">${ic("clock")}Loading model…</span>`
         : asr.status === "not_installed"
@@ -3589,8 +3621,57 @@ async function drawSettings() {
         {id: "medium", label: "Medium (~1.5 GB · High Accuracy)"},
         {id: "large-v3-turbo", label: "Large-v3-Turbo (~1.6 GB · Best)"}
       ];
+      const renderGpuMeter = (info, dev, ctype) => {
+        if (!info || !info.available) {
+          return `<div class="gpu-meter" id="asr_gpu_meter">
+            <div class="gpu-meter-top">
+              <span class="gpu-meter-name">${ic("bolt")}No NVIDIA CUDA GPU detected</span>
+              <button type="button" class="btn sm ghost" data-act="gpurefresh">${ic("refresh")}Check GPU</button>
+            </div>
+            <div class="gpu-meter-nums">Faster-Whisper will run on multi-core CPU (INT8).</div>
+          </div>`;
+        }
+        const tot = info.total_mb || 0, used = info.used_mb || 0, free = info.free_mb || 0;
+        const pct = Math.min(100, Math.max(0, info.used_pct || (tot > 0 ? Math.round((used / tot) * 100) : 0)));
+        const olTag = info.ollama_running
+          ? `<span class="pill warn">${ic("warn")}Ollama active${info.ollama_vram_mb ? ` (~${fmtGb(info.ollama_vram_mb)})` : ""}</span>`
+          : "";
+        const devTag = isWhisper && dev === "cuda"
+          ? `<span class="pill ok">${ic("check")}GPU ${esc(ctype || "float16")}</span>`
+          : `<span class="pill">${ic("bolt")}GPU available</span>`;
+        return `<div class="gpu-meter" id="asr_gpu_meter">
+          <div class="gpu-meter-top">
+            <span class="gpu-meter-name">${ic("bolt")}${esc(info.name || "NVIDIA GPU")} ${devTag} ${olTag}</span>
+            <div class="row" style="gap:8px">
+              ${tot > 0 ? `<span class="gpu-meter-nums"><b>${fmtGb(free)} free</b> · ${fmtGb(used)} / ${fmtGb(tot)} VRAM (${pct}%)${info.util_pct ? ` · ${info.util_pct}% load` : ""}</span>` : ""}
+              <button type="button" class="btn sm ghost" data-act="gpurefresh">${ic("refresh")}Check GPU</button>
+            </div>
+          </div>
+          ${tot > 0 ? `<div class="gpu-vram-bar ${pct >= 80 || info.high_usage ? "high" : ""}"><i style="width:${pct}%"></i></div>` : ""}
+        </div>`;
+      };
+      const renderGpuWarn = info => {
+        if (!info || !info.warning) return `<div id="asr_gpu_warn"></div>`;
+        const rec = info.recommended_model || "";
+        const recBtn = rec && rec !== "parakeet"
+          ? `<button type="button" class="btn sm primary" data-act="asrquick" data-engine="faster-whisper" data-model="${esc(rec)}">${ic("bolt")}Use ${esc(rec)} model</button>`
+          : "";
+        const smallBtn = (!recBtn && info.selected_model !== "small" && info.selected_model !== "base")
+          ? `<button type="button" class="btn sm primary" data-act="asrquick" data-engine="faster-whisper" data-model="small">${ic("bolt")}Use small model</button>`
+          : "";
+        const pkBtn = (!info.can_fit_gpu || rec === "parakeet")
+          ? `<button type="button" class="btn sm" data-act="asrquick" data-engine="parakeet">${ic("bolt")}Use Parakeet-v2 (CPU)</button>`
+          : "";
+        return `<div id="asr_gpu_warn"><div class="gpu-warn-box">
+          <div class="gpu-warn-head">${ic("warn")}<span>${esc(info.warning)}</span></div>
+          <div class="gpu-warn-acts">
+            ${recBtn}${smallBtn}${pkBtn}
+            <button type="button" class="btn sm ghost" data-act="gpurefresh">${ic("refresh")}Recheck GPU</button>
+          </div>
+        </div></div>`;
+      };
       body.innerHTML = `<section class="set-sec"><h2>Speech-to-text engine</h2>
-        <p class="help">Switch between <b>Parakeet-v2</b> and <b>Faster-Whisper</b> anytime. Only one model stays loaded in memory — toggling unloads the other automatically to keep RAM and CPU usage low.</p>
+        <p class="help">Switch between <b>Parakeet-v2</b> and <b>Faster-Whisper</b> anytime. Clicking <b>Faster-Whisper</b> automatically loads and runs it on your NVIDIA GPU when available (and checks live VRAM if Ollama or another app is running).</p>
         <div class="ai-state" id="asr_state_bar">
           ${asrPill}
           <span class="sub" id="asr_state_msg">${esc(asr.message || "")}</span>
@@ -3599,18 +3680,20 @@ async function drawSettings() {
           <div class="card-head">
             <div>
               <h2>Transcription model</h2>
-              <p class="sub">Both engines run locally with INT8 optimization.</p>
+              <p class="sub">${hasGpu ? `Detected GPU: <b>${esc(gpuName)}</b> — auto-selected for Faster-Whisper.` : "Both engines run locally with INT8 optimization."}</p>
             </div>
           </div>
           <div class="stack">
+            ${renderGpuMeter(gh, asr.device, asr.compute_type)}
+            ${isWhisper ? renderGpuWarn(gh) : `<div id="asr_gpu_warn"></div>`}
             <div class="asr-grid">
               <button type="button" class="asr-opt ${!isWhisper ? "on" : ""}" data-act="asrengine" data-engine="parakeet">
                 <b>${ic("bolt")}Parakeet-v2 (ONNX)${!isWhisper ? ' <span class="pill brand">Active</span>' : ""}</b>
-                <small>Fast English · Low RAM · sherpa-onnx INT8</small>
+                <small>Fast English · Low RAM · Runs on CPU without touching GPU VRAM</small>
               </button>
               <button type="button" class="asr-opt ${isWhisper ? "on" : ""}" data-act="asrengine" data-engine="faster-whisper">
                 <b>${ic("bolt")}Faster-Whisper (VAD)${isWhisper ? ' <span class="pill brand">Active</span>' : ""}</b>
-                <small>Hindi, Hinglish &amp; English · Silero noise filter</small>
+                <small>${hasGpu ? `Auto-loads on ${esc(gpuName)} · ` : ""}Hindi, Hinglish &amp; English · Silero noise filter</small>
               </button>
             </div>
             ${isWhisper ? `<div class="fields">
@@ -3618,7 +3701,7 @@ async function drawSettings() {
                 <select id="asr_wmodel" data-act-change="asrcfg">
                   ${models.map(m => `<option value="${esc(m.id)}" ${m.id === asr.whisper_model ? "selected" : ""}>${esc(m.label)}</option>`).join("")}
                 </select>
-                <span class="hint">Small is fast and accurate on CPU INT8. Larger models help with heavy accents or noisy game audio.</span>
+                <span class="hint">Small (~1.1 GB VRAM) is fast and smooth even alongside other apps. Larger models need more free GPU memory.</span>
               </label>
               <label class="f">Caption language mode
                 <select id="asr_lang" data-act-change="asrcfg">
@@ -3629,28 +3712,28 @@ async function drawSettings() {
                 <span class="hint">Auto uses Silero VAD + language guard so noisy English never turns into wrong scripts.</span>
               </label>
             </div>
-            <div class="row"><button type="button" class="btn primary" data-act="asrsave">${ic("check")}Apply &amp; load model</button></div>` : ""}
+            <div class="row"><button type="button" class="btn primary" data-act="asrsave">${ic("bolt")}${hasGpu ? "Load model on GPU" : "Apply & load model"}</button></div>` : ""}
             ${!asr.faster_whisper_installed ? `<div class="note" style="margin:0">${ic("warn")}<span><b>Faster-Whisper is not installed yet.</b> Run <code>pip install -r requirements.txt</code> (or <code>pip install faster-whisper</code>) and restart PeakCut. Parakeet-v2 keeps working meanwhile.</span></div>` : ""}
           </div>
         </div></section>
         <section class="set-sec"><h2>Hardware &amp; GPU acceleration</h2>
-        <p class="help">Offload video rendering, scaling, and subtitle burning to an NVIDIA GPU (NVENC) when available to speed up rendering and keep CPU usage low.</p>
+        <p class="help">Offload video rendering (NVENC) and Faster-Whisper transcription to your NVIDIA GPU when available to keep things fast and CPU usage low.</p>
         <div class="ai-state">
-          ${g.enabled && g.supported ? `<span class="pill ok">${ic("check")}GPU acceleration active</span><span class="sub">${esc(g.name)}</span>`
-            : g.supported ? `<span class="pill warn">${ic("pause")}GPU acceleration off</span><span class="sub">Using CPU mode (libx264). Detected: ${esc(g.name)}</span>`
-            : `<span class="pill">${ic("warn")}No GPU encoder detected</span><span class="sub">Using multi-core CPU encoder (libx264).</span>`}
+          ${gpuEnabled ? `<span class="pill ok">${ic("check")}GPU acceleration active</span><span class="sub">${esc(gpuName)}</span>`
+            : hasGpu ? `<span class="pill warn">${ic("pause")}GPU acceleration off</span><span class="sub">Using CPU mode. Detected: ${esc(gpuName)}</span>`
+            : `<span class="pill">${ic("warn")}No NVIDIA GPU detected</span><span class="sub">Using multi-core CPU encoder (libx264).</span>`}
         </div>
         <div class="card">
           <div class="card-head">
             <div>
-              <h2>NVIDIA NVENC encoding</h2>
-              <p class="sub">${g.enabled && g.supported ? `Rendering uses <b>${esc(g.name)}</b>.` : "Rendering uses multi-threaded CPU libx264 encoding."}</p>
+              <h2>NVIDIA GPU acceleration</h2>
+              <p class="sub">${gpuEnabled ? `Rendering &amp; Faster-Whisper use <b>${esc(gpuName)}</b>.` : "Using multi-threaded CPU mode."}</p>
             </div>
-            <button class="btn ${g.enabled && g.supported ? "danger" : "primary"}" data-act="gputoggle" ${g.supported ? "" : "disabled"}>
-              ${g.enabled && g.supported ? ic("x") + "Turn GPU off" : ic("bolt") + "Turn GPU on"}
+            <button class="btn ${gpuEnabled ? "danger" : "primary"}" data-act="gputoggle" ${hasGpu ? "" : "disabled"}>
+              ${gpuEnabled ? ic("x") + "Turn GPU off" : ic("bolt") + "Turn GPU on"}
             </button>
           </div>
-          ${!g.supported ? `<p class="sub">No supported NVENC hardware encoder was detected on this machine.</p>` : ""}
+          ${!hasGpu ? `<p class="sub">No supported NVIDIA GPU was detected on this machine.</p>` : ""}
         </div>
         <div class="card">
           <div class="card-head">
@@ -3660,11 +3743,23 @@ async function drawSettings() {
             </div>
           </div>
           <ul style="padding-left:18px;margin:0;line-height:1.8" class="sub">
-            <li><b>Video encoding:</b> NVIDIA NVENC when enabled, otherwise multi-core CPU libx264.</li>
+            <li><b>Video encoding:</b> ${gStatus.nvenc && gpuEnabled ? `NVIDIA NVENC (${esc(gpuName)})` : "Multi-core CPU libx264"}.</li>
             <li><b>Speech-to-text:</b> Local ${isWhisper ? `Faster-Whisper (${esc(asr.whisper_model)}, ${esc((asr.device || "cpu").toUpperCase())} ${esc(asr.compute_type || "int8")}, Silero VAD)` : `Parakeet-v2 (${esc((asr.device || "cpu").toUpperCase())} ONNX INT8)`}.</li>
+            <li><b>VRAM safety:</b> Checks live GPU usage (including Ollama) before loading and switches to compact GPU INT8 or suggests a smaller model if VRAM is full.</li>
             <li><b>Memory:</b> Switching engines unloads the previous speech model automatically.</li>
           </ul>
         </div></section>`;
+      const wmSel = $("#asr_wmodel");
+      if (wmSel) {
+        wmSel.addEventListener("change", async () => {
+          try {
+            const chk = await api(`/api/asr?fresh=1&model=${encodeURIComponent(wmSel.value)}`);
+            const mEl = $("#asr_gpu_meter"), wEl = $("#asr_gpu_warn");
+            if (mEl) mEl.outerHTML = renderGpuMeter(chk.gpu, chk.device, chk.compute_type);
+            if (wEl) wEl.outerHTML = renderGpuWarn(chk.gpu);
+          } catch {}
+        });
+      }
       if (asr.status === "loading") pollAsrStatus();
     }
   } catch (e) { body.innerHTML = `<div class="set-load">${esc(e.message)}</div>`; }
@@ -3676,11 +3771,12 @@ function pollAsrStatus() {
   _asrPollTimer = setTimeout(async () => {
     if (S.view !== "settings" || S.stab !== "hardware") return;
     try {
-      const asr = S.asr = await api("/api/asr");
+      const asr = S.asr = await api("/api/asr?fresh=1");
       const bar = $("#asr_state_bar");
       if (bar) {
+        const isW = asr.engine === "faster-whisper";
         const pill = asr.status === "ready"
-          ? `<span class="pill ok">${ic("check")}Ready</span>`
+          ? `<span class="pill ok">${ic("check")}${isW && asr.device === "cuda" ? "Running on GPU" : "Ready"}</span>`
           : asr.status === "loading"
           ? `<span class="pill warn">${ic("clock")}Loading model…</span>`
           : asr.status === "not_installed"
@@ -3694,8 +3790,10 @@ function pollAsrStatus() {
         pollAsrStatus();
       } else if (asr.status === "ready") {
         toast(asr.message || "Speech model loaded and ready.", "ok");
+        drawSettings();
       } else if (asr.status === "error") {
         toast(asr.message || "Speech model failed to load.", "bad");
+        drawSettings();
       }
     } catch {}
   }, 1200);
@@ -3833,78 +3931,17 @@ function syncLiveOverlay() {
     const seamFrac = isSwap ? (1 - splitRatio) : splitRatio;
     seamEl.style.top = (seamFrac * 100) + "%";
   }
-
-  const hookEnabled = $("#dlg_hook_enabled") ? $("#dlg_hook_enabled").checked : true;
-  const hookText = $("#dlg_hook_text") ? $("#dlg_hook_text").value.trim() : "";
-  const hookStyle = $("#dlg_hook_style") ? $("#dlg_hook_style").value : "default";
-  const hookBox = $("#liveHookBox");
-  const hookTextEl = $("#liveHookText");
-
-  if (hookBox && hookTextEl) {
-    if (!hookEnabled || !hookText) {
-      hookBox.style.display = "none";
-    } else {
-      hookBox.style.display = "block";
-      hookTextEl.textContent = hookText;
-      hookBox.classList.toggle("nobox", hookStyle === "nobox");
-
-      const wrap = $("#vwrap");
-      const wrapW = wrap ? wrap.clientWidth : 360;
-      const scale = wrapW / 1080;
-      const fs = Math.max(12, Math.round(hookSize * scale));
-      hookBox.style.fontSize = fs + "px";
-      const halfH = hookBox.clientHeight ? Math.round(hookBox.clientHeight / 2) : 0;
-      hookBox.style.top = `calc(${((hookY / 1920) * 100)}% - ${halfH}px)`;
-    }
-  }
 }
 
 function setupOverlayDraggables() {
-  const hookBox = $("#liveHookBox");
-  const wrap = $("#vwrap");
-  if (!hookBox || !wrap) return;
-
-  let dragging = false;
-  let startClientY = 0;
-  let startHookY = 300;
-
-  const onDown = (e) => {
-    dragging = true;
-    startClientY = e.clientY;
-    startHookY = $("#dlg_hook_y") ? Number($("#dlg_hook_y").value) : 300;
-    try { hookBox.setPointerCapture(e.pointerId); } catch {}
-    e.preventDefault();
-  };
-
-  const onMove = (e) => {
-    if (!dragging) return;
-    const wrapRect = wrap.getBoundingClientRect();
-    if (!wrapRect.height) return;
-    const dy = e.clientY - startClientY;
-    const dVideoY = dy * (1920 / wrapRect.height);
-    const newY = Math.max(80, Math.min(1800, Math.round(startHookY + dVideoY)));
-    if ($("#dlg_hook_y")) {
-      $("#dlg_hook_y").value = newY;
-    }
-    syncLiveOverlay();
-  };
-
-  const onUp = (e) => {
-    if (!dragging) return;
-    dragging = false;
-    try { hookBox.releasePointerCapture(e.pointerId); } catch {}
-  };
-
-  hookBox.onpointerdown = onDown;
-  hookBox.onpointermove = onMove;
-  hookBox.onpointerup = onUp;
-  hookBox.onpointercancel = onUp;
+  // Duplicate HTML heading overlay removed; built-in heading is rendered directly in the video.
 }
 
 function drawClipDlg(full) {
   const j = jobOf(D.jid), c = j?.clips.find(x => x.id === D.cid), dlg = $("#clipdlg");
   if (!c) { if (dlg.open) dlg.close(); return; }
-  const m = `/media/${j.id}/`, sig = c.status + (c.version || 0) + (D.edit ? "_" + D.edit.version : "");
+  const isBusySt = s => ["queued", "rendering", "rendering_final", "drafting", "approved"].includes(s);
+  const m = `/media/${j.id}/`, sig = c.status + "_" + (c.version || 0) + "_" + (c.eta_sec || 0) + (D.edit ? "_" + D.edit.version : "");
 
   const idx = j.clips.findIndex(x => x.id === c.id);
   const prevC = idx > 0 ? j.clips[idx - 1] : null;
@@ -3924,31 +3961,30 @@ function drawClipDlg(full) {
 
   const statusBadge = c.status === "awaiting_review" ? `<span class="badge st-review">${ic("clock")}Needs review</span>`
     : c.status === "approved" ? `<span class="badge st-approved">${ic("check")}Approved</span>`
-    : c.status === "rendering_final" ? `<span class="badge st-rendering">${ic("bolt")}Rendering final</span>`
+    : (c.status === "rendering_final" || c.status === "queued" || c.status === "rendering") ? `<span class="badge st-rendering">${ic("bolt")}Rendering</span>`
     : c.status === "done" ? `<span class="badge qc-pass">${ic("check")}Done</span>`
     : c.status === "qc_flagged" ? `<span class="badge qc-fail">${ic("warn")}QC flagged</span>`
     : `<span class="badge">${esc(c.status)}</span>`;
 
-  const vBust = c.draft_v || Date.now();
-  const videoFile = c.file ? `${m}${esc(c.file)}?t=${vBust}&v=${c.version || 0}` : "";
-  const posterFile = c.cover ? `${m}${esc(c.cover)}?t=${vBust}&v=${c.version || 0}` : "";
+  const vBust = (c.version || 0) + "_" + (c.draft_v || 0);
+  const videoFile = c.file ? `${m}${esc(c.file)}?v=${vBust}` : "";
+  const posterFile = c.cover ? `${m}${esc(c.cover)}?v=${vBust}` : "";
+  const cEta = clipEtaText(c);
 
   let stageHtml = "";
   if (c.status === "error" || c.status === "failed") {
     stageHtml = `<div class="err" style="padding:20px;text-align:center">${esc(c.error || "Could not make this clip.")}</div>`;
   } else if (c.status === "drafting") {
-    stageHtml = `<div class="making">Rendering draft preview…</div>`;
-  } else if (c.status === "rendering_final") {
-    stageHtml = `<div class="making">Rendering final 1080p clip…</div>`;
+    stageHtml = `<div class="making">Rendering draft preview…${cEta ? `<br><small style="opacity:.85;font-weight:500">${esc(cEta)}</small>` : ""}</div>`;
+  } else if (c.status === "queued" || c.status === "rendering" || c.status === "rendering_final" || c.status === "approved") {
+    const lbl = c.status === "queued" ? "Queued for remake…" : "Rendering final 1080p clip…";
+    stageHtml = `<div class="making">${lbl}${cEta ? `<br><small style="opacity:.85;font-weight:500">${esc(cEta)}</small>` : ""}</div>`;
   } else if (c.file) {
     stageHtml = `<div class="video-preview-wrap" id="vwrap">
       <video id="dlgVideo" src="${videoFile}" poster="${posterFile}" controls playsinline preload="metadata"></video>
       <div class="live-overlay-container" id="liveOverlayContainer">
         <div id="liveStackSeam" style="position:absolute;left:0;right:0;border-bottom:2px dashed rgba(255,139,51,0.8);pointer-events:none;z-index:5;top:${((camSwap ? (1 - splitRatio) : splitRatio) * 100)}%;display:${layout === 'stack' ? 'block' : 'none'}">
           <span style="position:absolute;right:8px;bottom:2px;font-size:10px;font-weight:700;color:#fff;background:rgba(30,22,18,0.75);padding:1px 6px;border-radius:4px">SPLIT SEAM</span>
-        </div>
-        <div id="liveHookBox" class="live-hook-box ${hk.style === 'nobox' ? 'nobox' : ''}" style="top:${((hk.y_pos || 300) / 1920 * 100)}%;display:${(hk.enabled !== false && (hk.text || c.hook)) ? 'block' : 'none'}">
-          <span id="liveHookText">${esc(hk.text || c.hook || '')}</span>
         </div>
       </div>
     </div>`;
@@ -4017,7 +4053,7 @@ function drawClipDlg(full) {
           </div>
           <label class="f">Style
             <select id="dlg_hook_style">
-              <option value="default" ${(hk.style||'default')==='default'?'selected':''}>Dark boxed backing</option>
+              <option value="default" ${(hk.style||'default')==='default'?'selected':''}>Classic white banner (TikTok style)</option>
               <option value="nobox" ${(hk.style||'default')==='nobox'?'selected':''}>Clean text with outline</option>
             </select>
           </label>
@@ -4164,9 +4200,9 @@ function drawClipDlg(full) {
             <button type="button" class="btn sm" data-act="fastremake" style="flex:1" title="Re-burns captions onto existing video in 2–4s">${ic("bolt")}Fast remake</button>
             <button type="button" class="btn sm" data-act="remake" style="flex:1" title="Full re-render from source video">${ic("scissors")}Save &amp; remake</button>
           </div>
-          ` : (c.status === "approved" || c.status === "rendering_final") ? `
+          ` : (c.status === "approved" || c.status === "rendering_final" || c.status === "queued" || c.status === "rendering") ? `
           <div class="row" style="justify-content:space-between">
-            <span style="font-size:12px;color:var(--brand-deep);font-weight:600">Rendering final 1080p video…</span>
+            <span style="font-size:12px;color:var(--brand-deep);font-weight:600">${c.status === "queued" ? "Queued for remake…" : "Rendering final 1080p video…"}${cEta ? " " + esc(cEta) : ""}</span>
             <button type="button" class="btn sm ghost" data-act="resetreview">Reset to review</button>
           </div>
           ` : `
@@ -4286,19 +4322,41 @@ function drawClipDlg(full) {
       }
     });
     $("#dlg_layout")?.addEventListener("change", e => {
-      const isStack = e.target.value === "stack";
+      const val = e.target.value;
+      const isStack = val === "stack";
       if ($("#dlgStackControls")) $("#dlgStackControls").style.display = isStack ? "flex" : "none";
-      if ($("#dlgFaceControls")) $("#dlgFaceControls").style.display = (isStack || e.target.value === "gameplay") ? "flex" : "none";
-      syncLiveOverlay();
+      if ($("#dlgFaceControls")) $("#dlgFaceControls").style.display = (isStack || val === "gameplay") ? "flex" : "none";
+      if (isStack) {
+        onStackLayoutChange();
+      } else {
+        if ($("#dlg_hook_y")) $("#dlg_hook_y").value = 300;
+        if ($("#dlg_cap_y")) $("#dlg_cap_y").value = (val === "crop" || val === "gameplay") ? 1380 : 1630;
+        syncLiveOverlay();
+      }
     });
 
     setupOverlayDraggables();
     syncLiveOverlay();
   } else if (D.sig !== sig) {
-    $("#stage").innerHTML = stageHtml;
+    const wasBusy = D.lastBusy;
+    const nowBusy = isBusySt(c.status);
+    if (wasBusy !== nowBusy || (!nowBusy && D.lastVer !== (c.version || 0))) {
+      D.lastBusy = nowBusy;
+      D.lastVer = c.version || 0;
+      D.sig = sig;
+      if (!nowBusy && c.status === "done") {
+        api(`/api/jobs/${encodeURIComponent(D.jid)}/clips/${encodeURIComponent(D.cid)}/edit`).then(ed2 => { D.edit = ed2; drawClipDlg(true); }).catch(() => drawClipDlg(true));
+      } else {
+        drawClipDlg(true);
+      }
+      return;
+    }
+    if ($("#stage")) $("#stage").innerHTML = stageHtml;
     setupOverlayDraggables();
     syncLiveOverlay();
   }
+  D.lastBusy = isBusySt(c.status);
+  D.lastVer = c.version || 0;
   D.sig = sig;
   put($("#dposts"), postPills(c));
 }
@@ -4362,10 +4420,10 @@ document.addEventListener("keydown", e => {
   }
 });
 function loop() {
-  const active = S.jobs.some(j => ["queued", "running", "live"].includes(j.status) || j.clips.some(c => c.status === "queued" || c.status === "rendering"));
+  const active = S.jobs.some(j => ["queued", "running", "live"].includes(j.status) || j.clips.some(c => ["queued", "rendering", "rendering_final", "drafting", "approved"].includes(c.status)));
   // quick while something is being made, relaxed otherwise, and slow when the tab is in the background
   const waiting = S.creators.some(c => (c.channels && Object.keys(c.channels).length && !c.profile?.pic) || c.live_job && !jobOf(c.live_job));
-  setTimeout(async () => { await tick(); loop(); }, document.hidden ? 20000 : waiting ? 1000 : active ? 2000 : 4000);
+  setTimeout(async () => { await tick(); loop(); }, document.hidden ? 20000 : waiting ? 1000 : active ? 1500 : 4000);
 }
 
 /* ============================================================ actions */
@@ -4801,10 +4859,24 @@ document.addEventListener("click", async e => {
       finally { b.disabled = false; }
       return;
     }
+    if (a === "approveclipquick") {
+      b.disabled = true;
+      try {
+        const jid = d.j, cid = d.c;
+        await send(`/api/jobs/${encodeURIComponent(jid)}/clips/${encodeURIComponent(cid)}/approve`, {}, "POST");
+        const j = jobOf(jid), c = j?.clips.find(x => x.id === cid);
+        if (c) c.status = "approved";
+        toast("Clip approved! Final render queued.", "ok");
+        draw();
+        await tick();
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
+      return;
+    }
     if (a === "approveclip") {
       b.disabled = true;
       try {
-        const ed = collectClipEdit();
+        const ed = Object.assign(collectClipEdit(), {skip_draft: true});
         await send(`/api/clips/${encodeURIComponent(D.cid)}/edit`, ed, "PUT");
         await send(`/api/clips/${encodeURIComponent(D.cid)}/approve`, {}, "POST");
         const j = jobOf(D.jid), c = j?.clips.find(x => x.id === D.cid);
@@ -4825,9 +4897,9 @@ document.addEventListener("click", async e => {
     if (a === "approveapplyall") {
       b.disabled = true;
       try {
-        const ed = collectClipEdit();
+        const ed = Object.assign(collectClipEdit(), {skip_draft: true});
         await send(`/api/clips/${encodeURIComponent(D.cid)}/edit`, ed, "PUT");
-        await send(`/api/jobs/${encodeURIComponent(D.jid)}/apply-to-all`, collectGlobalPatch(), "POST");
+        await send(`/api/jobs/${encodeURIComponent(D.jid)}/apply-to-all`, Object.assign(collectGlobalPatch(), {skip_draft: false}), "POST");
         await send(`/api/clips/${encodeURIComponent(D.cid)}/approve`, {}, "POST");
         const j = jobOf(D.jid), c = j?.clips.find(x => x.id === D.cid);
         if (c) c.status = "approved";
@@ -4841,9 +4913,27 @@ document.addEventListener("click", async e => {
     if (a === "approvealljob") {
       b.disabled = true;
       try {
-        const res = await send(`/api/jobs/${encodeURIComponent(D.jid)}/approve-all`, {}, "POST");
-        toast(`Approved ${res.count || "all"} remaining clip${res.count === 1 ? "" : "s"} for final render!`, "ok");
-        drawClipDlg(true);
+        const targetJid = d.j || D.jid;
+        if (!targetJid) throw new Error("Could not find which video to approve.");
+        const dlgOpen = $("#clipdlg")?.open && D.jid === targetJid && D.cid;
+        if (dlgOpen) {
+          const curJob = jobOf(targetJid), curClip = curJob?.clips.find(x => x.id === D.cid);
+          if (curClip && ["awaiting_review", "qc_flagged", "failed", "error", "drafting"].includes(curClip.status)) {
+            const ed = Object.assign(collectClipEdit(), {skip_draft: true});
+            await send(`/api/clips/${encodeURIComponent(D.cid)}/edit`, ed, "PUT");
+          }
+        }
+        const res = await send(`/api/jobs/${encodeURIComponent(targetJid)}/approve-all`, {}, "POST");
+        const j = jobOf(targetJid);
+        if (j) {
+          j.clips.forEach(x => {
+            if (["awaiting_review", "qc_flagged", "failed", "error", "drafting"].includes(x.status)) x.status = "approved";
+          });
+        }
+        const cnt = res.count || 0;
+        toast(cnt ? `Approved ${cnt} clip${cnt === 1 ? "" : "s"} for final render!` : "No clips were waiting for approval.", "ok");
+        if (dlgOpen) drawClipDlg(true);
+        else draw();
         await tick();
       } catch (err) { toast(err.message, "bad"); }
       finally { b.disabled = false; }
@@ -4957,36 +5047,47 @@ document.addEventListener("click", async e => {
       return;
     }
     if (a === "remake" || a === "fastremake") {
-      const body = {}; $$("#clipdlg [data-f]").forEach(i => {
-        body[i.dataset.f] = i.type === "checkbox" ? i.checked : i.type === "number" ? Number(i.value) : i.value;
-      });
-      const j = jobOf(D.jid), c = j?.clips.find(x => x.id === D.cid);
-      const wPills = $$("#dlgWordsBox [data-widx]");
-      if (wPills.length && c?.words) {
-        body.words = c.words.map((w, idx) => {
-          const pill = wPills.find(p => p.dataset.widx === String(idx));
-          const txt = pill ? pill.textContent.trim() : w.w;
-          return {...w, w: txt};
+      b.disabled = true;
+      try {
+        const body = {}; $$("#clipdlg [data-f]").forEach(i => {
+          body[i.dataset.f] = i.type === "checkbox" ? i.checked : i.type === "number" ? Number(i.value) : i.value;
         });
-      }
-      if ($("#dlg_cap_anchor")) body.cap_anchor = $("#dlg_cap_anchor").value;
-      body.split_ratio = $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.35;
-      if ($("#dlg_split_divider")) body.split_divider = $("#dlg_split_divider").checked;
-      if ($("#dlg_cam_swap")) body.cam_swap = $("#dlg_cam_swap").type === "checkbox" ? $("#dlg_cam_swap").checked : ($("#dlg_cam_swap").value === "true");
-      if ($("#dlg_hook_enabled")) body.hook_enabled = $("#dlg_hook_enabled").checked;
-      if ($("#dlg_cap_enabled")) body.captions = $("#dlg_cap_enabled").checked;
-      if ($("#dlg_hook_text")) body.hook = $("#dlg_hook_text").value.trim();
-      if ($("#dlg_hook_size")) body.hook_font_size = Number($("#dlg_hook_size").value);
-      if ($("#dlg_hook_y")) body.hook_y = Number($("#dlg_hook_y").value);
-      if ($("#dlg_hook_style")) body.hook_style = $("#dlg_hook_style").value;
-      if ($("#dlg_cap_size")) body.cap_font_size = Number($("#dlg_cap_size").value);
-      if ($("#dlg_cap_y")) body.cap_y = Number($("#dlg_cap_y").value);
-      if ($("#dlg_meme")) body.meme = $("#dlg_meme").value;
-      if ($("#dlg_music")) body.music = $("#dlg_music").value;
+        const j = jobOf(D.jid), c = j?.clips.find(x => x.id === D.cid);
+        const wPills = $$("#dlgWordsBox [data-widx]");
+        if (wPills.length && c?.words) {
+          body.words = c.words.map((w, idx) => {
+            const pill = wPills.find(p => p.dataset.widx === String(idx));
+            const txt = pill ? pill.textContent.trim() : w.w;
+            return {...w, w: txt};
+          });
+        }
+        if ($("#dlg_cap_anchor")) body.cap_anchor = $("#dlg_cap_anchor").value;
+        body.split_ratio = $("#dlg_split_ratio") ? Number($("#dlg_split_ratio").value) : 0.35;
+        if ($("#dlg_split_divider")) body.split_divider = $("#dlg_split_divider").checked;
+        if ($("#dlg_cam_swap")) body.cam_swap = $("#dlg_cam_swap").type === "checkbox" ? $("#dlg_cam_swap").checked : ($("#dlg_cam_swap").value === "true");
+        if ($("#dlg_hook_enabled")) body.hook_enabled = $("#dlg_hook_enabled").checked;
+        if ($("#dlg_cap_enabled")) body.captions = $("#dlg_cap_enabled").checked;
+        if ($("#dlg_hook_text")) body.hook = $("#dlg_hook_text").value.trim();
+        if ($("#dlg_hook_size")) body.hook_font_size = Number($("#dlg_hook_size").value);
+        if ($("#dlg_hook_y")) body.hook_y = Number($("#dlg_hook_y").value);
+        if ($("#dlg_hook_style")) body.hook_style = $("#dlg_hook_style").value;
+        if ($("#dlg_cap_size")) body.cap_font_size = Number($("#dlg_cap_size").value);
+        if ($("#dlg_cap_y")) body.cap_y = Number($("#dlg_cap_y").value);
+        if ($("#dlg_meme")) body.meme = $("#dlg_meme").value;
+        if ($("#dlg_music")) body.music = $("#dlg_music").value;
 
-      await send(`/api/jobs/${D.jid}/clips/${D.cid}/render`, body);
-      toast(a === "fastremake" ? "Fast re-burning captions (2-4s)…" : "Re-making the clip…", "ok");
-      return tick();
+        // Release active <video> file handle immediately so Windows never blocks replacing the MP4
+        const vid = $("#dlgVideo");
+        if (vid) { try { vid.pause(); vid.removeAttribute("src"); vid.load(); } catch {} }
+
+        await send(`/api/jobs/${D.jid}/clips/${D.cid}/render`, body);
+        if (c) { c.status = "queued"; c.render_started = Date.now() / 1000; }
+        toast(a === "fastremake" ? "Fast re-burning captions (2-4s)…" : "Re-making the clip…", "ok");
+        drawClipDlg(true);
+        await tick();
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
+      return;
     }
     if (a === "postnow" || a === "postqueue") {
       const accs = $$("#clipdlg [data-pacc]:checked").map(i => i.value);
@@ -5069,12 +5170,15 @@ document.addEventListener("click", async e => {
       } finally { b.disabled = false; }
       return;
     }
-    if (a === "asrengine" || a === "asrsave") {
+    if (a === "asrengine" || a === "asrsave" || a === "asrquick") {
       b.disabled = true;
       try {
-        const payload = {preload: true};
+        const payload = {preload: true, auto_gpu: true};
         if (a === "asrengine") {
           payload.engine = d.engine;
+        } else if (a === "asrquick") {
+          payload.engine = d.engine || "faster-whisper";
+          if (d.model) payload.whisper_model = d.model;
         } else {
           payload.engine = "faster-whisper";
           const wm = $("#asr_wmodel"), lg = $("#asr_lang");
@@ -5086,12 +5190,27 @@ document.addEventListener("click", async e => {
         S.status = await api("/api/status");
         if (res.status === "not_installed") {
           toast("Saved! Install faster-whisper with: pip install -r requirements.txt", "warn");
+        } else if (res.gpu && res.gpu.high_usage && res.gpu.warning) {
+          toast(res.gpu.warning, "warn");
         } else if (res.status === "loading") {
-          toast(res.message || "Loading speech model in background…", "ok");
+          toast(res.message || "Loading speech model on GPU…", "ok");
         } else {
           toast(res.message || "Speech engine updated!", "ok");
         }
         return drawSettings();
+      } catch (err) { toast(err.message, "bad"); }
+      finally { b.disabled = false; }
+      return;
+    }
+    if (a === "gpurefresh") {
+      b.disabled = true;
+      try {
+        S.status = await api("/api/status");
+        await drawSettings();
+        const gh = S.asr?.gpu || S.status?.gpu;
+        if (gh && gh.high_usage && gh.warning) toast(gh.warning, "warn");
+        else if (gh && gh.available) toast(`GPU checked: ${gh.name || "NVIDIA GPU"} (${gh.free_mb >= 1024 ? (gh.free_mb / 1024).toFixed(1) + " GB" : gh.free_mb + " MB"} free).`, "ok");
+        else toast("GPU checked: no NVIDIA CUDA GPU detected.", "ok");
       } catch (err) { toast(err.message, "bad"); }
       finally { b.disabled = false; }
       return;
@@ -5102,7 +5221,7 @@ document.addEventListener("click", async e => {
         const cur = S.status.gpu?.enabled ?? true;
         const res = await send("/api/gpu/toggle", {enabled: !cur}, "POST");
         S.status = await api("/api/status");
-        toast(res.gpu_enabled ? "GPU acceleration turned ON (NVENC active)!" : "GPU acceleration turned OFF (CPU mode active).", "ok");
+        toast(res.gpu_enabled ? "GPU acceleration turned ON!" : "GPU acceleration turned OFF (CPU mode active).", "ok");
         return drawSettings();
       } catch (err) { toast(err.message, "bad"); }
       finally { b.disabled = false; }

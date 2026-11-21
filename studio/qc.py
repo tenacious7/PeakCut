@@ -5,11 +5,14 @@ import re
 import subprocess
 from pathlib import Path
 
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-def ff_stderr(args: list) -> str:
+
+def ff_stderr(args: list, timeout: int = 25) -> str:
     try:
-        r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", *args],
-                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+        r = subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-nostats", *args],
+                           stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", creationflags=NO_WINDOW, timeout=timeout)
         return r.stderr or ""
     except Exception:
         return ""
@@ -18,7 +21,8 @@ def ff_stderr(args: list) -> str:
 def duration(path: Path) -> float:
     try:
         o = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
-                           capture_output=True, text=True, check=True, timeout=15)
+                           stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                           check=True, creationflags=NO_WINDOW, timeout=12)
         return round(float(o.stdout.strip()), 2)
     except Exception:
         return 0.0
@@ -26,16 +30,16 @@ def duration(path: Path) -> float:
 
 def lufs(path: Path) -> float:
     """Measure integrated loudness in LUFS (-14 is YouTube Shorts/Reels standard)."""
-    e = ff_stderr(["-i", str(path), "-af", "ebur128", "-f", "null", "-"])
+    e = ff_stderr(["-i", str(path), "-vn", "-af", "ebur128", "-f", "null", "-"], timeout=20)
     m = re.findall(r"I:\s+(-?[\d.]+) LUFS", e)
     return round(float(m[-1]), 1) if m else -14.0
 
 
 def detect_artifacts(path: Path) -> tuple:
-    """Detect black frames and frozen picture stretches."""
+    """Detect black frames and frozen picture stretches quickly on downscaled frames."""
     e = ff_stderr(["-i", str(path), "-an", "-vf",
-                   "blackdetect=d=0.35:pix_th=0.10,freezedetect=n=-60dB:d=2.0",
-                   "-f", "null", "-"])
+                   "scale=320:-2,blackdetect=d=0.35:pix_th=0.10,freezedetect=n=-60dB:d=2.0",
+                   "-f", "null", "-"], timeout=25)
     bl = [round(float(x), 2) for x in re.findall(r"black_duration:([\d.]+)", e)]
     fz = [round(float(x), 2) for x in re.findall(r"freeze_duration:\s*([\d.]+)", e)]
     return bl, fz

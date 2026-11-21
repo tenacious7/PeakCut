@@ -6,11 +6,20 @@ Only ONE engine is kept loaded in memory at a time: switching engines in Setting
 inactive model and loads the chosen one in the background with INT8/int8_float16 quantization for low RAM/CPU use."""
 import gc
 import importlib.util
+import json
 import os
 import queue
 import re
+import site
+import subprocess
+import sys
 import threading
 import time
+import urllib.request
+from pathlib import Path
+
+# Silence noisy Windows huggingface_hub symlink warning before faster_whisper/hf imports
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 import numpy as np
 
@@ -40,23 +49,32 @@ _remote_down_until = 0.0
 
 # ------------------------------------------------------------------ dual ASR engine state (Parakeet + Faster-Whisper)
 WHISPER_MODELS = [
-    {"id": "base", "label": "Base (~150 MB · Fastest)", "desc": "Lowest RAM & fastest CPU speed"},
-    {"id": "small", "label": "Small (~500 MB · Recommended)", "desc": "Best balance of speed, accuracy & Hinglish"},
-    {"id": "medium", "label": "Medium (~1.5 GB · High Accuracy)", "desc": "Sharper accents & noisy gameplay audio"},
-    {"id": "large-v3-turbo", "label": "Large-v3-Turbo (~1.6 GB · Best)", "desc": "Top English + Hindi/Hinglish quality"},
+    {"id": "base", "label": "Base (~150 MB · Fastest)", "desc": "Lowest RAM & VRAM (~0.5 GB GPU)", "vram_mb": 550, "vram_int8_mb": 400},
+    {"id": "small", "label": "Small (~500 MB · Recommended)", "desc": "Best balance of speed, accuracy & Hinglish (~1.1 GB GPU)", "vram_mb": 1100, "vram_int8_mb": 750},
+    {"id": "medium", "label": "Medium (~1.5 GB · High Accuracy)", "desc": "Sharper accents & noisy gameplay audio (~2.5 GB GPU)", "vram_mb": 2500, "vram_int8_mb": 1600},
+    {"id": "large-v3-turbo", "label": "Large-v3-Turbo (~1.6 GB · Best)", "desc": "Top English + Hindi/Hinglish quality (~3.1 GB GPU)", "vram_mb": 3100, "vram_int8_mb": 2000},
 ]
-WHISPER_MODEL_IDS = {m["id"] for m in WHISPER_MODELS}
-WHISPER_THREADS = int(os.environ.get("PEAKCUT_WHISPER_THREADS") or min(4, max(2, _CPUS // 2)))
+WHISPER_MODEL_MAP = {m["id"]: m for m in WHISPER_MODELS}
+WHISPER_MODEL_IDS = set(WHISPER_MODEL_MAP)
+WHISPER_THREADS = int(os.environ.get("PEAKCUT_WHISPER_THREADS") or max(4, min(8, _CPUS - 2)))
 WHISPER_HINGLISH_PROMPT = (
     "Natural Hinglish gaming stream. Keep spoken English words like table, chair, game, bro, clutch, "
     "watch, stream, laptop, phone, video, question, athletic, what's up in standard English spelling."
 )
 _ARABIC_SCRIPT_RE = re.compile(r"[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]")
+_NO_WIN = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 _state_lock = threading.RLock()
 _whisper_lock = threading.Lock()
 _whisper_model = None
+_whisper_batched = None
 _whisper_meta = None          # (model_size, device, compute_type)
+_whisper_cuda_note = ""
+_prev_whisper_model = "small"
+_cuda_dll_handles: list = []
+_cuda_dlls_registered = False
+_gpu_cache: dict = {"ts": 0.0, "data": None}
+_gpu_cache_lock = threading.Lock()
 _asr_state = {
     "engine": os.environ.get("PEAKCUT_ASR_ENGINE", "parakeet").strip().lower() or "parakeet",
     "whisper_model": os.environ.get("PEAKCUT_WHISPER_MODEL", "small").strip().lower() or "small",
@@ -67,6 +85,86 @@ _asr_state = {
     "compute_type": "int8",
     "gen": 0,
 }
+
+
+def _register_cuda_dll_dirs() -> list[str]:
+    """On Windows, register nvidia/cublas/cudnn/torch/CUDA Toolkit DLL folders so CTranslate2 can use GPU."""
+    global _cuda_dlls_registered
+    if _cuda_dlls_registered or os.name != "nt":
+        _cuda_dlls_registered = True
+        return []
+    _cuda_dlls_registered = True
+    candidates: list[Path] = []
+
+    # 1. Site-packages inside active venv / Python installation (nvidia-cublas-cu12, nvidia-cudnn-cu12, torch)
+    sp_dirs: list[Path] = []
+    try:
+        for p in site.getsitepackages():
+            sp_dirs.append(Path(p))
+    except Exception:
+        pass
+    try:
+        usp = site.getusersitepackages()
+        if usp:
+            sp_dirs.append(Path(usp))
+    except Exception:
+        pass
+    sp_dirs.append(Path(sys.prefix) / "Lib" / "site-packages")
+
+    for sp in sp_dirs:
+        if not sp.is_dir():
+            continue
+        for rel in (
+            ("nvidia", "cublas", "bin"),
+            ("nvidia", "cudnn", "bin"),
+            ("nvidia", "cuda_runtime", "bin"),
+            ("nvidia", "cuda_nvrtc", "bin"),
+            ("torch", "lib"),
+            ("ctranslate2",),
+        ):
+            d = sp.joinpath(*rel)
+            if d.is_dir():
+                candidates.append(d)
+
+    # 2. System NVIDIA CUDA Toolkit installations
+    for env_k in ("CUDA_PATH", "CUDA_PATH_V12_8", "CUDA_PATH_V12_6", "CUDA_PATH_V12_4", "CUDA_PATH_V12_2", "CUDA_PATH_V12_1", "CUDA_PATH_V12_0"):
+        val = os.environ.get(env_k, "").strip()
+        if val:
+            d = Path(val) / "bin"
+            if d.is_dir():
+                candidates.append(d)
+    cuda_root = Path(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA")
+    if cuda_root.is_dir():
+        for ver in sorted(cuda_root.glob("v12*"), reverse=True):
+            b = ver / "bin"
+            if b.is_dir():
+                candidates.append(b)
+
+    added: list[str] = []
+    seen: set[str] = set()
+    cur_path = os.environ.get("PATH", "")
+    path_parts = [p for p in cur_path.split(os.pathsep) if p]
+    path_lower = {p.lower() for p in path_parts}
+
+    for d in candidates:
+        s = str(d.resolve())
+        key = s.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            if hasattr(os, "add_dll_directory"):
+                _cuda_dll_handles.append(os.add_dll_directory(s))
+        except OSError:
+            pass
+        if key not in path_lower:
+            path_parts.insert(0, s)
+            path_lower.add(key)
+        added.append(s)
+
+    if added:
+        os.environ["PATH"] = os.pathsep.join(path_parts)
+    return added
 
 
 def faster_whisper_installed() -> bool:
@@ -111,15 +209,243 @@ def model_ready() -> bool:
     return fetch_model.ready()
 
 
-def _detect_whisper_device(gpu_on: bool) -> tuple[str, str]:
-    """Pick optimal (device, compute_type) for Faster-Whisper: CUDA int8_float16 if available, else CPU int8."""
-    pref = os.environ.get("PEAKCUT_WHISPER_DEVICE", "auto").strip().lower()
-    if pref == "cpu" or not gpu_on:
-        return "cpu", "int8"
+def _query_ollama_gpu() -> tuple[bool, list[str], int]:
+    """Quick local check for Ollama models currently loaded in GPU VRAM (safe 0.35s timeout)."""
+    try:
+        req = urllib.request.Request("http://127.0.0.1:11434/api/ps", method="GET")
+        with urllib.request.urlopen(req, timeout=0.35) as resp:
+            if getattr(resp, "status", 200) != 200:
+                return False, [], 0
+            data = json.loads(resp.read().decode("utf-8", errors="replace"))
+        models = data.get("models") or []
+        names: list[str] = []
+        vram_bytes = 0
+        for m in models:
+            nm = str(m.get("name") or m.get("model") or "").strip()
+            sv = int(m.get("size_vram") or 0)
+            if sv > 0:
+                vram_bytes += sv
+                if nm:
+                    names.append(nm)
+            elif nm and not m.get("size"):
+                names.append(nm)
+        vram_mb = int(round(vram_bytes / (1024 * 1024))) if vram_bytes > 0 else 0
+        return bool(names or vram_mb > 0), names, vram_mb
+    except Exception:
+        return False, [], 0
+
+
+def _probe_nvidia_raw() -> dict:
+    """Query live NVIDIA GPU name, VRAM (total/used/free MB), utilization, and compute apps via nvidia-smi."""
+    info = {
+        "available": False,
+        "name": "",
+        "total_mb": 0,
+        "used_mb": 0,
+        "free_mb": 0,
+        "used_pct": 0,
+        "util_pct": 0,
+        "cuda_ready": False,
+        "ollama_running": False,
+        "ollama_models": [],
+        "ollama_vram_mb": 0,
+        "busy_apps": [],
+    }
+    _register_cuda_dll_dirs()
     try:
         import ctranslate2
         if ctranslate2.get_cuda_device_count() > 0:
-            return "cuda", os.environ.get("PEAKCUT_WHISPER_COMPUTE", "int8_float16").strip() or "int8_float16"
+            info["cuda_ready"] = True
+            info["available"] = True
+    except Exception:
+        pass
+
+    try:
+        r = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,memory.total,memory.used,memory.free,utilization.gpu", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=2.0, creationflags=_NO_WIN,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            first = r.stdout.strip().splitlines()[0]
+            parts = [p.strip() for p in first.split(",")]
+            if len(parts) >= 4:
+                info["available"] = True
+                info["name"] = parts[0]
+                tot = int(float(parts[1])) if parts[1].replace(".", "", 1).isdigit() else 0
+                used = int(float(parts[2])) if parts[2].replace(".", "", 1).isdigit() else 0
+                free = int(float(parts[3])) if parts[3].replace(".", "", 1).isdigit() else max(0, tot - used)
+                util = int(float(parts[4])) if len(parts) >= 5 and parts[4].replace(".", "", 1).isdigit() else 0
+                info["total_mb"] = tot
+                info["used_mb"] = used
+                info["free_mb"] = free
+                info["used_pct"] = int(round((used / tot) * 100)) if tot > 0 else 0
+                info["util_pct"] = util
+    except Exception:
+        pass
+
+    if info["available"]:
+        # Check GPU compute processes (catches Ollama, local LLMs, games/encoders where reported)
+        try:
+            r2 = subprocess.run(
+                ["nvidia-smi", "--query-compute-apps=process_name,used_memory", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=2.0, creationflags=_NO_WIN,
+            )
+            if r2.returncode == 0 and r2.stdout.strip():
+                apps = []
+                for line in r2.stdout.strip().splitlines():
+                    ps = [p.strip() for p in line.split(",")]
+                    if not ps or not ps[0]:
+                        continue
+                    pname = Path(ps[0]).name
+                    mem = int(float(ps[1])) if len(ps) > 1 and ps[1].replace(".", "", 1).isdigit() else 0
+                    apps.append({"name": pname, "vram_mb": mem})
+                    low = pname.lower()
+                    if "ollama" in low or "llama" in low:
+                        info["ollama_running"] = True
+                        if mem > 0:
+                            info["ollama_vram_mb"] += mem
+                info["busy_apps"] = apps[:6]
+        except Exception:
+            pass
+
+        # Also query Ollama's local API (works reliably even on Windows WDDM where nvidia-smi reports [N/A] per-app VRAM)
+        ol_on, ol_models, ol_mb = _query_ollama_gpu()
+        if ol_on:
+            info["ollama_running"] = True
+            info["ollama_models"] = ol_models
+            if ol_mb > info["ollama_vram_mb"]:
+                info["ollama_vram_mb"] = ol_mb
+
+        if not info["name"]:
+            info["name"] = "NVIDIA CUDA GPU"
+    return info
+
+
+def _fmt_gb(mb: int) -> str:
+    if mb >= 1024:
+        return f"{mb / 1024:.1f} GB"
+    return f"{max(0, int(mb))} MB"
+
+
+def _pick_fitting_model(free_mb: int, current_model: str, prev_model: str = "small") -> str:
+    """Choose the best smaller Whisper model that fits comfortably in available VRAM (preferring previous/small)."""
+    cur_meta = WHISPER_MODEL_MAP.get(current_model, WHISPER_MODEL_MAP["small"])
+    cur_need = cur_meta["vram_int8_mb"]
+    # Prefer the user's previous smaller model (usually 'small') if it fits and is lighter than current
+    for cand in (prev_model, "small", "base"):
+        if cand in WHISPER_MODEL_MAP and cand != current_model:
+            cm = WHISPER_MODEL_MAP[cand]
+            if cm["vram_int8_mb"] < cur_need and free_mb >= cm["vram_int8_mb"] + 150:
+                return cand
+    if current_model != "small" and free_mb >= WHISPER_MODEL_MAP["small"]["vram_int8_mb"]:
+        return "small"
+    if current_model != "base" and free_mb >= WHISPER_MODEL_MAP["base"]["vram_int8_mb"]:
+        return "base"
+    return "parakeet"
+
+
+def gpu_status(selected_model: str = None, fresh: bool = False) -> dict:
+    """Live NVIDIA GPU + VRAM + Ollama status, with smart recommendations for the selected Whisper model."""
+    now = time.monotonic()
+    with _gpu_cache_lock:
+        if not fresh and _gpu_cache["data"] is not None and (now - _gpu_cache["ts"]) < 2.5:
+            raw = dict(_gpu_cache["data"])
+        else:
+            raw = _probe_nvidia_raw()
+            _gpu_cache["ts"] = now
+            _gpu_cache["data"] = dict(raw)
+
+    _, cur_wmod, _, _ = _read_user_asr_settings()
+    wmod = (selected_model or cur_wmod or "small").strip().lower()
+    if wmod not in WHISPER_MODEL_MAP:
+        wmod = "small"
+    m_meta = WHISPER_MODEL_MAP[wmod]
+    need_fp16 = m_meta["vram_mb"]
+    need_int8 = m_meta["vram_int8_mb"]
+
+    already_on_gpu = (
+        _whisper_model is not None
+        and _whisper_meta is not None
+        and _whisper_meta[0] == wmod
+        and _whisper_meta[1] == "cuda"
+    )
+
+    high_usage = False
+    vram_tight = False
+    can_fit_gpu = bool(raw["available"])
+    recommended_model = ""
+    warning = ""
+
+    if raw["available"] and raw["total_mb"] > 0:
+        free_mb = raw["free_mb"]
+        tot_mb = raw["total_mb"]
+        used_pct = raw["used_pct"]
+        # If this exact model is already loaded in VRAM by PeakCut, don't double-count its own footprint
+        effective_free = free_mb + (need_int8 if already_on_gpu else 0)
+
+        ol_label = ""
+        if raw["ollama_running"]:
+            ol_parts = []
+            if raw["ollama_models"]:
+                ol_parts.append(", ".join(raw["ollama_models"][:2]))
+            if raw["ollama_vram_mb"] > 0:
+                ol_parts.append(f"~{_fmt_gb(raw['ollama_vram_mb'])}")
+            ol_label = f"Ollama ({' · '.join(ol_parts)})" if ol_parts else "Ollama"
+
+        if effective_free < need_int8 + 150:
+            high_usage = True
+            can_fit_gpu = False
+            rec = _pick_fitting_model(effective_free, wmod, _prev_whisper_model)
+            recommended_model = rec
+            who = f"{ol_label} is using your GPU" if ol_label else f"GPU memory is {used_pct}% full"
+            if rec == "parakeet":
+                hint = "Stop Ollama / heavy GPU apps to free VRAM, or switch to Parakeet-v2 (fast CPU)."
+            else:
+                hint = f"You can use the {rec} model (or stop Ollama) to run smoothly without running out of GPU memory."
+            warning = (
+                f"High GPU usage right now — {who} ({_fmt_gb(free_mb)} free of {_fmt_gb(tot_mb)}). "
+                f"Whisper {wmod} needs ~{_fmt_gb(need_int8)}–{_fmt_gb(need_fp16)} VRAM. {hint}"
+            )
+        elif effective_free < need_fp16 + 200 or (raw["ollama_running"] and used_pct >= 75):
+            vram_tight = True
+            if raw["ollama_running"] or used_pct >= 80:
+                high_usage = True
+                rec = _pick_fitting_model(effective_free, wmod, _prev_whisper_model)
+                if rec != "parakeet" and rec != wmod:
+                    recommended_model = rec
+                who = f"{ol_label} is active on your GPU" if ol_label else f"GPU memory is {used_pct}% used"
+                rec_txt = f" You can also use the {recommended_model} model for extra headroom." if recommended_model else ""
+                warning = (
+                    f"High GPU usage right now — {who} ({_fmt_gb(free_mb)} free of {_fmt_gb(tot_mb)}). "
+                    f"PeakCut will use compact GPU INT8 mode to save VRAM.{rec_txt}"
+                )
+
+    out = dict(raw)
+    out.update(
+        selected_model=wmod,
+        model_vram_mb=need_fp16,
+        model_vram_int8_mb=need_int8,
+        can_fit_gpu=can_fit_gpu,
+        vram_tight=vram_tight,
+        high_usage=high_usage,
+        recommended_model=recommended_model,
+        previous_model=_prev_whisper_model,
+        warning=warning,
+    )
+    return out
+
+
+def _detect_whisper_device(gpu_on: bool) -> tuple[str, str]:
+    """Pick optimal (device, compute_type) for Faster-Whisper: CUDA float16/int8_float16 if available, else CPU int8."""
+    pref = os.environ.get("PEAKCUT_WHISPER_DEVICE", "auto").strip().lower()
+    if pref == "cpu" or not gpu_on:
+        return "cpu", "int8"
+    _register_cuda_dll_dirs()
+    try:
+        import ctranslate2
+        if ctranslate2.get_cuda_device_count() > 0:
+            env_c = os.environ.get("PEAKCUT_WHISPER_COMPUTE", "").strip()
+            return "cuda", env_c or "float16"
     except Exception:
         pass
     return "cpu", "int8"
@@ -144,67 +470,142 @@ def unload_parakeet():
 
 def unload_whisper():
     """Free the loaded Faster-Whisper model from RAM/VRAM."""
-    global _whisper_model, _whisper_meta
+    global _whisper_model, _whisper_batched, _whisper_meta
     with _whisper_lock:
-        if _whisper_model is not None:
+        if _whisper_model is not None or _whisper_batched is not None:
+            _whisper_batched = None
             _whisper_model = None
             _whisper_meta = None
     gc.collect()
 
 
-def _get_whisper_model(model_size: str = None, gpu_on: bool = None):
-    """Load (or reuse) the optimized Faster-Whisper model under lock. Automatically falls back to CPU INT8 if CUDA fails."""
-    global _whisper_model, _whisper_meta
+def _make_batched_pipeline(model):
+    """Wrap WhisperModel in BatchedInferencePipeline (2x-4x faster) when available in faster-whisper."""
+    try:
+        from faster_whisper import BatchedInferencePipeline
+        return BatchedInferencePipeline(model=model)
+    except Exception:
+        return None
+
+
+def _verify_cuda_model(model) -> None:
+    """Run a tiny 0.4s inference check so missing cuBLAS/cuDNN DLLs are caught immediately on load."""
+    dummy = np.zeros(6400, dtype=np.float32)
+    segs, _ = model.transcribe(dummy, beam_size=1, best_of=1, vad_filter=False, language="en", word_timestamps=False)
+    for _ in segs:
+        break
+
+
+def _get_whisper_model(model_size: str = None, gpu_on: bool = None, force_cpu: bool = False):
+    """Load (or reuse) the optimized Faster-Whisper model under lock. Verifies CUDA DLLs and falls back cleanly to CPU INT8."""
+    global _whisper_model, _whisper_batched, _whisper_meta, _whisper_cuda_note
     _, cfg_model, _, cfg_gpu = _read_user_asr_settings()
     size = (model_size or cfg_model or "small").strip().lower()
     if size not in WHISPER_MODEL_IDS:
         size = "small"
-    use_gpu = cfg_gpu if gpu_on is None else bool(gpu_on)
+    use_gpu = False if force_cpu else (cfg_gpu if gpu_on is None else bool(gpu_on))
     device, compute_type = _detect_whisper_device(use_gpu)
 
     with _whisper_lock:
-        if _whisper_model is not None and _whisper_meta == (size, device, compute_type):
-            return _whisper_model, device, compute_type
+        if _whisper_model is not None and _whisper_meta is not None:
+            if _whisper_meta[0] == size and (not force_cpu or _whisper_meta[1] == "cpu"):
+                if _whisper_meta[1] == device or (device == "cuda" and _whisper_meta[1] == "cpu" and _whisper_cuda_note):
+                    return _whisper_model, _whisper_batched, _whisper_meta[1], _whisper_meta[2]
         if not faster_whisper_installed():
             raise RuntimeError("faster-whisper is not installed. Run: pip install -r requirements.txt")
+        _register_cuda_dll_dirs()
         from faster_whisper import WhisperModel
         # Unload any previous Whisper variant before allocating the new one
+        _whisper_batched = None
         _whisper_model = None
         _whisper_meta = None
         gc.collect()
 
         dl_dir = config.MODELS_DIR / "faster-whisper"
         dl_dir.mkdir(parents=True, exist_ok=True)
-        try:
+        _whisper_cuda_note = ""
+
+        # Check live GPU VRAM / Ollama usage BEFORE allocating on CUDA so we pick compact int8_float16 when tight
+        ginfo = gpu_status(selected_model=size, fresh=True) if device == "cuda" else None
+        model = None
+        used_dev, used_ctype = device, compute_type
+        if device == "cuda":
+            m_meta = WHISPER_MODEL_MAP.get(size, WHISPER_MODEL_MAP["small"])
+            free_mb = ginfo["free_mb"] if (ginfo and ginfo["total_mb"] > 0) else 0
+            # Skip CUDA immediately only if VRAM is critically exhausted (<350 MB free)
+            skip_cuda_oom = bool(ginfo and ginfo["total_mb"] > 0 and free_mb < 350)
+            if skip_cuda_oom:
+                _whisper_cuda_note = ginfo.get("warning") or (
+                    f"High GPU usage right now ({_fmt_gb(free_mb)} free). Using CPU INT8 — try the small model or close Ollama."
+                )
+                used_dev, used_ctype = "cpu", "int8"
+            else:
+                # If VRAM is tight (e.g. Ollama running), prefer compact int8_float16 first so it fits smoothly on GPU!
+                tight = bool(ginfo and ginfo["total_mb"] > 0 and free_mb < m_meta["vram_mb"] + 250)
+                pref_order = ("int8_float16", "int8", "float16") if tight else (compute_type, "float16", "int8_float16", "int8")
+                try_types = []
+                for ct in pref_order:
+                    if ct and ct not in try_types:
+                        try_types.append(ct)
+                last_err = None
+                for ct in try_types:
+                    try:
+                        cand = WhisperModel(
+                            size,
+                            device="cuda",
+                            compute_type=ct,
+                            cpu_threads=WHISPER_THREADS,
+                            num_workers=1,
+                            download_root=str(dl_dir),
+                        )
+                        _verify_cuda_model(cand)
+                        model = cand
+                        used_dev, used_ctype = "cuda", ct
+                        break
+                    except Exception as e:
+                        last_err = e
+                        cand = None
+                        gc.collect()
+                if model is None:
+                    err_s = str(last_err or "")
+                    low_e = err_s.lower()
+                    if any(k in low_e for k in ("out of memory", "oom", "alloc", "cuda error 2")):
+                        rec = _pick_fitting_model(free_mb, size, _prev_whisper_model) if free_mb else "small"
+                        ol_txt = " (Ollama is using GPU memory)" if (ginfo and ginfo.get("ollama_running")) else ""
+                        _whisper_cuda_note = (
+                            f"High GPU usage right now{ol_txt} — not enough free VRAM for {size}. "
+                            f"Running on CPU INT8 for now; switch to the {rec} model or close Ollama for GPU speed."
+                        )
+                    elif any(k in low_e for k in ("cublas", "cudnn", "dll", "cannot be loaded", "not found")):
+                        _whisper_cuda_note = "GPU detected, but CUDA DLLs missing (run: pip install nvidia-cublas-cu12 nvidia-cudnn-cu12). Using CPU INT8."
+                    else:
+                        _whisper_cuda_note = f"GPU fallback to CPU INT8 ({err_s[:90]})." if err_s else "GPU unavailable; using CPU INT8."
+                    used_dev, used_ctype = "cpu", "int8"
+
+        if model is None:
             model = WhisperModel(
                 size,
-                device=device,
-                compute_type=compute_type,
+                device="cpu",
+                compute_type="int8",
                 cpu_threads=WHISPER_THREADS,
                 num_workers=1,
                 download_root=str(dl_dir),
             )
-        except Exception:
-            if device != "cpu":
-                device, compute_type = "cpu", "int8"
-                model = WhisperModel(
-                    size,
-                    device=device,
-                    compute_type=compute_type,
-                    cpu_threads=WHISPER_THREADS,
-                    num_workers=1,
-                    download_root=str(dl_dir),
-                )
-            else:
-                raise
+            used_dev, used_ctype = "cpu", "int8"
+
         _whisper_model = model
-        _whisper_meta = (size, device, compute_type)
-        return _whisper_model, device, compute_type
+        _whisper_batched = _make_batched_pipeline(model)
+        _whisper_meta = (size, used_dev, used_ctype)
+        # Invalidate GPU cache so UI immediately reflects new free VRAM after loading
+        with _gpu_cache_lock:
+            _gpu_cache["ts"] = 0.0
+        return _whisper_model, _whisper_batched, used_dev, used_ctype
 
 
 def switch_engine(engine: str, whisper_model: str = None, language: str = None, preload: bool = True) -> dict:
     """Switch active ASR engine, immediately unload the inactive model to save RAM/VRAM,
-    and optionally warm-load the newly selected model in a background thread."""
+    and optionally warm-load the newly selected model in a background thread (automatically using GPU when available)."""
+    global _prev_whisper_model
     eng = (engine or "parakeet").strip().lower()
     if eng not in ("parakeet", "faster-whisper"):
         raise ValueError(f"Unknown speech engine: {eng}")
@@ -212,6 +613,8 @@ def switch_engine(engine: str, whisper_model: str = None, language: str = None, 
     wmod = (whisper_model or cur_wmod or "small").strip().lower()
     if wmod not in WHISPER_MODEL_IDS:
         wmod = "small"
+    if cur_wmod in WHISPER_MODEL_IDS and cur_wmod != wmod:
+        _prev_whisper_model = cur_wmod
     lang = (language or cur_lang or "auto").strip().lower()
     if lang not in ("auto", "en", "hi"):
         lang = "auto"
@@ -234,28 +637,40 @@ def switch_engine(engine: str, whisper_model: str = None, language: str = None, 
                     device="cpu",
                     compute_type="int8",
                 )
-            return asr_status()
+            return asr_status(fresh_gpu=True)
         dev, ctype = _detect_whisper_device(gpu_on)
+        ginfo = gpu_status(selected_model=wmod, fresh=True)
+        gpu_label = ginfo["name"] if (dev == "cuda" and ginfo.get("name")) else ("GPU CUDA" if dev == "cuda" else "CPU INT8")
         with _state_lock:
-            already = _whisper_model is not None and _whisper_meta == (wmod, dev, ctype)
+            already = _whisper_model is not None and _whisper_meta is not None and _whisper_meta[0] == wmod and _whisper_meta[1] == dev
             _asr_state.update(
                 status="ready" if already else ("loading" if preload else "idle"),
-                message=f"Faster-Whisper ({wmod}, {dev.upper()} {ctype}) ready." if already else (
-                    f"Loading Faster-Whisper ({wmod}) in background…" if preload else "Ready to load on next clip."
+                message=(
+                    f"Faster-Whisper ({wmod}) running on {gpu_label} ({_whisper_meta[2]})."
+                    if already
+                    else (f"Loading Faster-Whisper ({wmod}) on {gpu_label}…" if preload else "Ready to load on next clip.")
                 ),
-                device=dev,
-                compute_type=ctype,
+                device=_whisper_meta[1] if already else dev,
+                compute_type=_whisper_meta[2] if already else ctype,
             )
         if preload and not already:
             def _load_w():
                 try:
-                    _, d_used, c_used = _get_whisper_model(wmod, gpu_on=gpu_on)
+                    _, _, d_used, c_used = _get_whisper_model(wmod, gpu_on=gpu_on)
+                    g_now = gpu_status(selected_model=wmod, fresh=True)
+                    g_name = g_now.get("name") or "NVIDIA GPU"
                     with _state_lock:
                         if _asr_state["gen"] != gen:
                             return
+                        if d_used == "cpu" and _whisper_cuda_note:
+                            msg = _whisper_cuda_note
+                        elif d_used == "cuda":
+                            msg = f"Faster-Whisper ({wmod}) running on {g_name} (CUDA {c_used}, Batched + Silero VAD)."
+                        else:
+                            msg = f"Faster-Whisper ({wmod}, CPU {c_used}, Batched + Silero VAD) ready."
                         _asr_state.update(
                             status="ready",
-                            message=f"Faster-Whisper ({wmod}, {d_used.upper()} {c_used}, Silero VAD) ready.",
+                            message=msg,
                             device=d_used,
                             compute_type=c_used,
                         )
@@ -296,15 +711,16 @@ def switch_engine(engine: str, whisper_model: str = None, language: str = None, 
                             return
                         _asr_state.update(status="error", message=f"Failed to load Parakeet-v2: {e}")
             threading.Thread(target=_load_p, daemon=True, name="asr-load-parakeet").start()
-    return asr_status()
+    return asr_status(fresh_gpu=True)
 
 
-def asr_status() -> dict:
-    """Current speech-to-text engine configuration, install state, and live load status."""
+def asr_status(fresh_gpu: bool = False) -> dict:
+    """Current speech-to-text engine configuration, install state, live load status, and GPU/Ollama VRAM check."""
     eng, wmod, lang, gpu_on = _read_user_asr_settings()
     fw_ok = faster_whisper_installed()
     from . import fetch_model
     pk_ok = fetch_model.ready()
+    ginfo = gpu_status(selected_model=wmod, fresh=fresh_gpu)
     with _state_lock:
         st = dict(_asr_state)
     # Sync with user settings if not currently loading a switch
@@ -322,12 +738,21 @@ def asr_status() -> dict:
         elif fw_loaded:
             st["status"] = "ready"
             st["device"], st["compute_type"] = _whisper_meta[1], _whisper_meta[2]
-            st["message"] = f"Faster-Whisper ({wmod}, {st['device'].upper()} {st['compute_type']}, Silero VAD) loaded."
+            if st["device"] == "cpu" and _whisper_cuda_note:
+                st["message"] = _whisper_cuda_note
+            elif st["device"] == "cuda":
+                g_name = ginfo.get("name") or "NVIDIA GPU"
+                st["message"] = f"Faster-Whisper ({wmod}) running on {g_name} (CUDA {st['compute_type']}, Batched + Silero VAD)."
+            else:
+                st["message"] = f"Faster-Whisper ({wmod}, CPU {st['compute_type']}, Batched + Silero VAD) loaded."
         elif st["status"] not in ("loading", "error"):
             dev, ctype = _detect_whisper_device(gpu_on)
             st["status"] = "idle"
             st["device"], st["compute_type"] = dev, ctype
-            st["message"] = f"Faster-Whisper ({wmod}, {dev.upper()} {ctype}) ready to load."
+            if dev == "cuda" and ginfo.get("name"):
+                st["message"] = f"Faster-Whisper ({wmod}) ready to load on {ginfo['name']} (GPU)."
+            else:
+                st["message"] = f"Faster-Whisper ({wmod}, {dev.upper()} {ctype}) ready to load."
     else:
         st["device"] = PROVIDER
         st["compute_type"] = "int8" if PROVIDER == "cpu" else "fp16"
@@ -346,6 +771,8 @@ def asr_status() -> dict:
         "message": st["message"],
         "device": st["device"],
         "compute_type": st["compute_type"],
+        "gpu_enabled": bool(gpu_on),
+        "gpu": ginfo,
         "faster_whisper_installed": fw_ok,
         "parakeet_installed": pk_ok,
         "parakeet_loaded": pk_loaded,
@@ -705,8 +1132,9 @@ def _extract_whisper_words(segments, total_sec: float, on_progress=None) -> list
     return out
 
 
-def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = "") -> list:
-    """Faster-Whisper (CTranslate2 INT8 / int8_float16) with Silero VAD noise filtering & anti-Arabic hallucination guard."""
+def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = "", word_timestamps: bool = True) -> list:
+    """Faster-Whisper (CTranslate2 CUDA float16 / CPU INT8) with BatchedInferencePipeline,
+    Silero VAD noise filtering, and instant pre-decode language hallucination guard."""
     if len(audio) < 4800:
         return []
     wav = audio.astype(np.float32) / 32768.0
@@ -714,11 +1142,11 @@ def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = ""
         return []
 
     _, wmod, pref_lang, gpu_on = _read_user_asr_settings()
-    model, device, compute_type = _get_whisper_model(wmod, gpu_on=gpu_on)
+    model, batched, device, compute_type = _get_whisper_model(wmod, gpu_on=gpu_on)
     with _state_lock:
         _asr_state.update(status="ready", device=device, compute_type=compute_type)
 
-    # Resolve language: explicit setting wins, else reliable hint, else auto with hallucination guard
+    # Resolve language: explicit setting wins, else reliable hint, else auto with fast pre-decode guard
     hint = (lang_hint or "").strip().lower().split("-")[0]
     chosen_lang = None
     if pref_lang in ("en", "hi"):
@@ -729,61 +1157,71 @@ def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = ""
     total_sec = len(wav) / 16000.0
     vad_params = {"min_silence_duration_ms": 400, "speech_pad_ms": 200}
 
-    def _run(lang_arg):
+    def _call_transcribe(cur_model, cur_batched, cur_device, lang_arg, use_vad=True):
         prompt = WHISPER_HINGLISH_PROMPT if lang_arg == "hi" else None
+        # BatchedInferencePipeline is 2x-4x faster on both GPU (batch 16) and CPU (batch 8) for longer audio
+        use_batch = cur_batched is not None and total_sec >= 25.0
         kwargs = {
             "beam_size": 1,
             "best_of": 1,
-            "vad_filter": True,
-            "vad_parameters": vad_params,
-            "word_timestamps": True,
+            "vad_filter": use_vad,
+            "word_timestamps": bool(word_timestamps),
             "condition_on_previous_text": False,
             "no_speech_threshold": 0.6,
             "compression_ratio_threshold": 2.4,
             "language": lang_arg,
         }
+        if use_vad:
+            kwargs["vad_parameters"] = vad_params
         if prompt:
             kwargs["initial_prompt"] = prompt
+        if use_batch:
+            kwargs["batch_size"] = 16 if cur_device == "cuda" else 8
+            return cur_batched.transcribe(wav, **kwargs)
+        return cur_model.transcribe(wav, **kwargs)
+
+    def _run_once(cur_model, cur_batched, cur_device, lang_arg, use_vad=True):
         with _whisper_lock:
-            segments, info = model.transcribe(wav, **kwargs)
+            segments, info = _call_transcribe(cur_model, cur_batched, cur_device, lang_arg, use_vad=use_vad)
+            # Check auto-detected language BEFORE iterating segments so a 10-min block is NEVER decoded twice!
+            if lang_arg is None and info is not None:
+                det_lang = str(getattr(info, "language", "") or "").lower()
+                det_prob = float(getattr(info, "language_probability", 1.0) or 0.0)
+                if (det_lang not in ("en", "hi") and det_prob < 0.78) or (det_lang in ("ar", "ur", "fa") and det_prob < 0.88):
+                    segments, info = _call_transcribe(cur_model, cur_batched, cur_device, "en", use_vad=use_vad)
             got_words = _extract_whisper_words(segments, total_sec, on_progress=on_progress)
         return got_words, info
 
     try:
-        raw_words, info = _run(chosen_lang)
-    except Exception:
-        # Retry once without VAD if onnxruntime/silero VAD asset fails in an offline environment
-        with _whisper_lock:
-            segments, info = model.transcribe(
-                wav,
-                beam_size=1,
-                best_of=1,
-                vad_filter=False,
-                word_timestamps=True,
-                condition_on_previous_text=False,
-                language=chosen_lang,
-                initial_prompt=WHISPER_HINGLISH_PROMPT if chosen_lang == "hi" else None,
-            )
-            raw_words = _extract_whisper_words(segments, total_sec, on_progress=on_progress)
+        raw_words, info = _run_once(model, batched, device, chosen_lang, use_vad=True)
+    except Exception as first_err:
+        err_low = str(first_err).lower()
+        # If CUDA failed mid-inference (e.g. VRAM OOM or missing DLL), fall back cleanly to CPU INT8
+        if device == "cuda" and any(k in err_low for k in ("cuda", "cublas", "cudnn", "out of memory", "dll")):
+            model, batched, device, compute_type = _get_whisper_model(wmod, gpu_on=False, force_cpu=True)
+            with _state_lock:
+                _asr_state.update(status="ready", device=device, compute_type=compute_type)
+            raw_words, info = _run_once(model, batched, device, chosen_lang, use_vad=True)
+        else:
+            # Retry once without VAD / batching if Silero VAD asset fails in an offline environment
+            raw_words, info = _run_once(model, None, device, chosen_lang, use_vad=False)
 
-    # Guard against Whisper auto-detect hallucinating Arabic/random scripts on noisy English gaming audio
-    if chosen_lang is None and info is not None:
-        det_lang = str(getattr(info, "language", "") or "").lower()
-        det_prob = float(getattr(info, "language_probability", 1.0) or 0.0)
-        sample_txt = " ".join(w["w"] for w in raw_words[:40])
-        has_arabic = bool(_ARABIC_SCRIPT_RE.search(sample_txt))
-        if (det_lang not in ("en", "hi") and det_prob < 0.78) or (has_arabic and det_prob < 0.88):
-            raw_words, _ = _run("en")
+    # Lightweight final guard: only re-run if Arabic script still slipped into short clips under auto-detect
+    if chosen_lang is None and total_sec <= 120.0 and raw_words:
+        sample_txt = " ".join(w["w"] for w in raw_words[:30])
+        det_prob = float(getattr(info, "language_probability", 1.0) or 0.0) if info is not None else 0.0
+        if _ARABIC_SCRIPT_RE.search(sample_txt) and det_prob < 0.90:
+            raw_words, _ = _run_once(model, batched, device, "en", use_vad=True)
 
     if on_progress:
         on_progress(1.0)
     return _clean_words(raw_words)
 
 
-def transcribe(audio: np.ndarray, on_progress=None, lang_hint: str = "") -> list:
+def transcribe(audio: np.ndarray, on_progress=None, lang_hint: str = "", word_timestamps: bool = True) -> list:
     """Returns [{'w': word, 's': start_sec, 'e': end_sec}, ...] using the active ASR engine
     (Parakeet-v2 or Faster-Whisper). Falls back gracefully to Parakeet if Faster-Whisper is not installed."""
     eng = active_engine()
     if eng == "faster-whisper" and faster_whisper_installed():
-        return _transcribe_whisper(audio, on_progress=on_progress, lang_hint=lang_hint)
+        return _transcribe_whisper(audio, on_progress=on_progress, lang_hint=lang_hint, word_timestamps=word_timestamps)
     return _transcribe_parakeet(audio, on_progress=on_progress)

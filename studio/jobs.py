@@ -54,7 +54,7 @@ class _FairQueue:
                     self.turn.append(user)
                 self.lines[user].append(item)
             self.epoch += 1
-            self.cv.notify()
+            self.cv.notify_all()
 
     def get(self, quick_only=False):
         with self.cv:
@@ -397,7 +397,7 @@ def _load_file(f: Path, uid: str):
         c.setdefault("captions", job["options"]["captions"])
         if c.get("src"):
             c["src"] = _remap(c["src"], f.parent / "clips")
-        if c.get("status") in ("rendering", "queued"):
+        if c.get("status") in ("rendering", "rendering_final", "drafting", "queued", "approved"):
             if buffered and not c.get("src"):
                 c["status"] = "queued"  # the stream is still on disk: live.recover() finishes these
                 job["recover"] = True
@@ -640,74 +640,132 @@ def request_render(jid, cid, changes: dict):
     if new.get("layout") in ("gameplay", "stack") and not new.get("facecam"):
         if job.get("facecam"):
             new["facecam"] = job["facecam"]
-        else:
-            face = _facecam(job, src=clip.get("src"))
-            if face:
-                new["facecam"] = face
 
     raw_file = Path(job["dir"]) / "clips" / f"{cid}_raw.mp4"
+    time_changed = (new.get("start") != clip.get("start") or new.get("end") != clip.get("end"))
+    layout_changed = (
+        new.get("layout") != clip.get("layout") or
+        new.get("split_ratio") != clip.get("split_ratio") or
+        new.get("split_divider") != clip.get("split_divider") or
+        new.get("cam_swap") != clip.get("cam_swap") or
+        new.get("facecam") != clip.get("facecam") or
+        new.get("cam_fallback") != clip.get("cam_fallback")
+    )
+    audio_changed = (
+        new.get("meme") != clip.get("meme") or
+        new.get("music") != clip.get("music") or
+        new.get("meme_vol") != clip.get("meme_vol") or
+        new.get("music_db") != clip.get("music_db")
+    )
     if raw_file.is_file():
-        time_changed = (new.get("start") != clip.get("start") or new.get("end") != clip.get("end"))
-        layout_changed = (
-            new.get("layout") != clip.get("layout") or
-            new.get("split_ratio") != clip.get("split_ratio") or
-            new.get("split_divider") != clip.get("split_divider") or
-            new.get("cam_swap") != clip.get("cam_swap") or
-            new.get("facecam") != clip.get("facecam") or
-            new.get("cam_fallback") != clip.get("cam_fallback")
-        )
-        audio_changed = (
-            new.get("meme") != clip.get("meme") or
-            new.get("music") != clip.get("music") or
-            new.get("meme_vol") != clip.get("meme_vol") or
-            new.get("music_db") != clip.get("music_db")
-        )
         new["_fast_caption_only"] = not (time_changed or layout_changed or audio_changed)
     else:
         new["_fast_caption_only"] = False
+
+    if layout_changed or time_changed or audio_changed:
+        try:
+            raw_file.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    # If switching FROM split-screen (stack) to a non-stack layout, reset stack-specific hook/caption Y if untouched
+    old_layout = clip.get("layout")
+    new_layout = new.get("layout")
+    if old_layout == "stack" and new_layout != "stack":
+        old_hy = clip.get("hook_y")
+        if new.get("hook_y") == old_hy:
+            new["hook_y"] = 300
+        old_cy = clip.get("cap_y")
+        if new.get("cap_y") == old_cy:
+            new["cap_y"] = 1380 if new_layout in ("crop", "gameplay") else 1630
 
     edit_file = Path(job["dir"]) / "clips" / f"{cid}_edit.json"
     if edit_file.is_file():
         ed = edit.load_edit(edit_file)
         if ed:
-            if "captions" in new:
-                ed.setdefault("caption", {})["enabled"] = bool(new["captions"])
-            if "hook_enabled" in new:
-                ed.setdefault("hook", {})["enabled"] = bool(new["hook_enabled"])
-            if "hook" in new:
-                ed.setdefault("hook", {})["text"] = str(new["hook"])
-            if "hook_y" in new and new["hook_y"] is not None:
-                ed.setdefault("hook", {})["y_pos"] = float(new["hook_y"])
-            if "cap_y" in new and new["cap_y"] is not None:
-                ed.setdefault("caption", {})["y_pos"] = float(new["cap_y"])
-            if "layout" in new:
-                ed["layout"] = new["layout"]
+            ed["start"] = new["start"]
+            ed["end"] = new["end"]
+            ed["layout"] = new["layout"]
             if "split_ratio" in new:
                 ed["split_ratio"] = new["split_ratio"]
             if "split_divider" in new:
                 ed["split_divider"] = bool(new["split_divider"])
             if "cam_swap" in new:
                 ed["cam_swap"] = bool(new["cam_swap"])
+            cap_ed = ed.setdefault("caption", {})
+            if "captions" in new:
+                cap_ed["enabled"] = bool(new["captions"])
+            if "style" in new:
+                cap_ed["style"] = new["style"]
+            if "cap_font_size" in changes:
+                try:
+                    cap_ed["font_size"] = int(float(changes["cap_font_size"]))
+                except (ValueError, TypeError):
+                    pass
+            if "cap_y" in new and new["cap_y"] is not None:
+                cap_ed["y_pos"] = float(new["cap_y"])
+            if "words" in new and isinstance(new["words"], list):
+                cap_ed["words"] = [
+                    {"text": str(w.get("w", "")), "start": float(w.get("s", 0.0)), "end": float(w.get("e", 0.0))}
+                    for w in new["words"]
+                ]
+                cap_ed["words_edited"] = True
+            hk_ed = ed.setdefault("hook", {})
+            if "hook_enabled" in new:
+                hk_ed["enabled"] = bool(new["hook_enabled"])
+            if "hook" in new:
+                hk_ed["text"] = str(new["hook"])
+            if "hook_font_size" in new and new["hook_font_size"] is not None:
+                hk_ed["font_size"] = int(new["hook_font_size"])
+            if "hook_style" in new and new["hook_style"]:
+                hk_ed["style"] = str(new["hook_style"])
+            if "hook_y" in new and new["hook_y"] is not None:
+                hk_ed["y_pos"] = float(new["hook_y"])
+            aud_ed = ed.setdefault("audio", {})
+            if "meme" in new:
+                aud_ed["meme"] = bool(new["meme"] and new["meme"] != "none")
+                aud_ed["meme_mood"] = str(new["meme"] or "none")
+            if "music" in new:
+                aud_ed["music"] = bool(new["music"] and new["music"] != "none")
+                aud_ed["music_bed"] = str(new["music"] or "none")
+            ed["version"] = int(ed.get("version", 1)) + 1
             edit.save_edit(edit_file, ed)
 
-    clip.update(new, status="queued")
+    dur = max(3.0, float(new["end"]) - float(new["start"]))
+    est_sec = max(3, int(round(dur * (0.16 if new.get("_fast_caption_only") else (0.28 if render._nvenc_ok else 0.55)))))
+    clip.update(new, status="queued", error=None, eta_sec=est_sec, render_started=time.time())
     save(job)
     _q.put(("clip", jid, cid))
 
 
 def render_one(job, clip, words, quality="final"):
     d = Path(job["dir"])
+    dur = max(3.0, float(clip.get("end", 30.0)) - float(clip.get("start", 0.0)))
+    is_fast = bool(clip.get("_fast_caption_only")) or quality == "draft"
+    est_sec = max(3, int(round(dur * (0.16 if is_fast else (0.28 if render._nvenc_ok else 0.55)))))
     if quality == "draft":
         clip["status"] = "drafting"
     else:
         clip["status"] = "rendering_final"
+    clip["eta_sec"] = est_sec
+    clip["render_started"] = time.time()
     save(job)
     try:
-        if not clip.get("src") and not job.get("source_path"):
+        # Resolve an existing source video on disk; re-fetch piece if missing
+        src = None
+        if clip.get("src") and Path(clip["src"]).is_file():
+            src = Path(clip["src"])
+        elif job.get("source_path") and Path(job["source_path"]).is_file():
+            src = Path(job["source_path"])
+            clip.pop("src", None)
+            clip.pop("src_offset", None)
+            clip.pop("src_end", None)
+        if src is None:
+            clip.pop("src", None)
             _piece_again(job, clip)
+            src = Path(clip["src"])
         off = clip.get("src_offset", 0.0)
-        src = Path(clip["src"]) if clip.get("src") else Path(job["source_path"])
-        if not clip.get("src"):
+        if not clip.get("src") and job.get("duration"):
             clip["end"] = min(clip["end"], job["duration"])
         if clip.get("layout") in ("gameplay", "stack") and not clip.get("facecam"):
             clip_win = (max(0.0, float(clip["start"]) - off), max(0.0, float(clip["end"]) - off))
@@ -764,7 +822,9 @@ def render_one(job, clip, words, quality="final"):
                     ]
                 edit.save_edit(edit_file, ed)
 
-        out = render.render_clip(src, d / "clips", clip["id"], local, near, job["width"], job["height"], quality=quality)
+        out = render.render_clip(src, d / "clips", clip["id"], local, near, job.get("width") or 1920, job.get("height") or 1080, quality=quality)
+        clip.pop("eta_sec", None)
+        clip.pop("render_started", None)
         if quality == "draft":
             clip.update(out, status="awaiting_review", error=None)
             clip["version"] = clip.get("version", 0) + 1
@@ -789,9 +849,38 @@ def render_one(job, clip, words, quality="final"):
                     except Exception:  # noqa: BLE001
                         traceback.print_exc()
     except Exception as e:  # noqa: BLE001
+        clip.pop("eta_sec", None)
+        clip.pop("render_started", None)
         clip.update(status="failed" if quality == "draft" else "error", error=safe.friendly(e, 400))
         creators.log(job["creator"], f"Clip failed: {safe.friendly(e, 200)}")
+    _refresh_review_stage(job)
     save(job)
+
+
+def _refresh_review_stage(job: dict) -> None:
+    """Keep job['stage'] accurate as clips move from awaiting_review -> approved/rendering_final -> done."""
+    if job.get("status") != "done":
+        return
+    clips = job.get("clips") or []
+    if not clips:
+        return
+    awaiting = sum(1 for c in clips if c.get("status") in ("awaiting_review", "drafting"))
+    rendering = sum(1 for c in clips if c.get("status") in ("approved", "rendering_final", "rendering", "queued"))
+    if rendering:
+        job["stage"] = f"Rendering {rendering} approved clip{'s' if rendering != 1 else ''}"
+    elif awaiting:
+        job["stage"] = f"{awaiting} clip{'s' if awaiting != 1 else ''} ready for review"
+    else:
+        job["stage"] = "Done"
+
+
+def _mark_clip_approved(clip: dict) -> None:
+    dur = max(3.0, float(clip.get("end", 30.0)) - float(clip.get("start", 0.0)))
+    est = max(4, int(round(dur * (0.28 if render._nvenc_ok else 0.55))))
+    clip["status"] = "approved"
+    clip["error"] = None
+    clip["eta_sec"] = est
+    clip["render_started"] = time.time()
 
 
 def approve_clip(jid: str, cid: str) -> dict:
@@ -802,9 +891,10 @@ def approve_clip(jid: str, cid: str) -> dict:
     if not clip:
         raise ValueError("No such clip")
     if clip.get("status") == "rendering_final":
-        raise ValueError("Clip is currently rendering")
+        return clip
 
-    clip["status"] = "approved"
+    _mark_clip_approved(clip)
+    _refresh_review_stage(job)
     save(job)
     _q.put(("clip_final", jid, cid))
 
@@ -839,8 +929,9 @@ def approve_clip(jid: str, cid: str) -> dict:
                         other_ed = edit.load_edit(other_ef) if other_ef.is_file() else edit.init_edit(job, other, None, other.get("facecam"))
                         merged = edit.deep_merge_global(other_ed, patch)
                         edit.save_edit(other_ef, merged)
-                        other["status"] = "approved"
+                        _mark_clip_approved(other)
                         _q.put(("clip_final", jid, other["id"]))
+                _refresh_review_stage(job)
                 save(job)
     return clip
 
@@ -852,15 +943,16 @@ def approve_all(jid: str) -> list:
     approved = []
     for c in job["clips"]:
         if c.get("status") in ("awaiting_review", "qc_flagged", "failed", "error", "drafting"):
-            c["status"] = "approved"
+            _mark_clip_approved(c)
             _q.put(("clip_final", jid, c["id"]))
             approved.append(c)
     if approved:
+        _refresh_review_stage(job)
         save(job)
     return approved
 
 
-def apply_to_all(jid: str, patch: dict) -> list:
+def apply_to_all(jid: str, patch: dict, skip_draft: bool = False) -> list:
     job = _jobs.get(jid)
     if not job or job.get("user") != ctx.uid():
         raise ValueError("No such video")
@@ -885,8 +977,9 @@ def apply_to_all(jid: str, patch: dict) -> list:
         if "facecam" in merged and not merged.get("facecam_override"):
             fc = merged["facecam"]
             c["facecam"] = [fc["x"], fc["y"], fc["w"], fc["h"]] if fc else None
-        c["status"] = "drafting"
-        _q.put(("clip_draft", jid, cid))
+        if not skip_draft:
+            c["status"] = "drafting"
+            _q.put(("clip_draft", jid, cid))
         updated.append(c)
     if updated:
         save(job)
@@ -962,10 +1055,11 @@ CLIP_MINUTES = float(config.env("PEAKCUT_CLIP_MINUTES", "15"))     # the longest
 
 
 def _wait_for_clips(job, futures, began, workers):
-    """Wait for a video's clips, but not for ever. A clip that hangs (a download that stalls, an encoder that
-    freezes) used to keep the whole video "in progress", and no other clip could be re-made. Now it is marked as
-    failed after CLIP_MINUTES and the video finishes with the clips that did work."""
+    """Wait for a video's clips, updating live ETA and bounding hung clips."""
     left, given_up = list(futures), 0
+    total = len(left)
+    wait_t0 = time.time()
+    last_eta_at = 0.0
     late = "This clip took too long and was stopped. Open it and press Save and re-make to try again."
     while left:
         if is_paused(job["id"]):
@@ -979,12 +1073,24 @@ def _wait_for_clips(job, futures, began, workers):
             if (t and time.time() - t > CLIP_MINUTES * 60) or (not t and given_up >= workers):
                 given_up += 1
                 clip.update(status="error", error=late)
+                clip.pop("eta_sec", None)
                 creators.log(job["creator"], f"Clip stopped after {CLIP_MINUTES:g} minutes: {clip.get('title') or clip.get('hook') or clip['id']}")
                 save(job)
                 continue
             still.append((f, clip))
         left = still
         if left:
+            now = time.time()
+            if now - last_eta_at >= 2.0:
+                last_eta_at = now
+                done_n = max(0, total - len(left))
+                if done_n > 0:
+                    avg = (now - wait_t0) / done_n
+                    eta = max(2, int(round(avg * len(left))))
+                else:
+                    eta = max(4, int(round(sum(max(5, int((c["end"] - c["start"]) * 0.4)) for _, c in left) / max(1, workers))))
+                pct = 0.92 + 0.07 * (done_n / max(1, total))
+                _set(job, progress=max(job.get("progress", 0.92), pct), eta_sec=eta)
             time.sleep(1)
 
 
@@ -1009,8 +1115,8 @@ PAD = 8                # seconds kept either side of a fetched piece, so clips c
 
 
 def _piece_again(job, clip):
-    """Remaking a clip whose own piece of the video was never fetched (its first try failed) and whose whole video
-    is not here: fetch the piece now, cut exactly at the asked time, so no sound matching is needed."""
+    """Remaking a clip whose own piece of the video is missing and whose whole video is not here:
+    fetch just the clip's range quickly (without slow force_keyframes_at_cuts full-video decoding)."""
     src = job.get("source") or {}
     if src.get("type") != "url" or not src.get("url"):
         raise RuntimeError("The original video is no longer here, so this clip can't be made again. Add the video again.")
@@ -1019,7 +1125,7 @@ def _piece_again(job, clip):
     until = clip["end"] + PAD if not job.get("duration") else min(job["duration"], clip["end"] + PAD)
     try:
         piece = media.download_section(src["url"], d / "clips", f"{clip['id']}.src", want, until,
-                                       int(job["options"]["quality"]), exact=True)
+                                       int(job["options"]["quality"]), exact=False)
         meta = media.probe(piece)
     except Exception as e:  # noqa: BLE001
         raise RuntimeError(f"Could not fetch this part of the video: {safe.friendly(e, 250)}") from e
@@ -1266,22 +1372,24 @@ def _run_job(job):
             cam = job.get("facecam") or (src_file and _facecam(job, src=src_file))
             if cam:
                 clip["facecam"] = cam
+        whisper_active = (transcribe.active_engine() == "faster-whisper")
         should_retranscribe = bool(
-            yt and (
+            (yt and (
                 yt[1].lower().startswith("en")
-                or transcribe.active_engine() == "faster-whisper"
+                or whisper_active
                 or brain.needs_translation(yt[1])
-            )
+            ))
+            # When Faster-Whisper scanned the full video fast with word_timestamps=False,
+            # run crisp word_timestamps=True ONLY on this short selected clip!
+            or (not yt and whisper_active and not o.get("custom_ranges"))
         )
         if clip["status"] not in ("error", "failed") and clip.get("captions", True) and should_retranscribe:
-            # The clip was found with YouTube's transcript. What is shown on screen comes from our own local model
-            # (Parakeet-v2 or Faster-Whisper with Silero VAD), run on just this clip: full punctuation, nothing
-            # blanked out, crisp word timings, and no YouTube auto-caption hallucinations.
+            # Run crisp word-level timestamps on just this short clip (fast even on CPU, instant on GPU).
             a0, b0 = max(lo, int((clip["start"] - 1.5) * 16000)), min(hi, int((clip["end"] + 1.5) * 16000))
             try:
                 tw = [dict(w, s=round(w["s"] + a0 / 16000, 2), e=round(w["e"] + a0 / 16000, 2))
-                      for w in transcribe.transcribe(audio[a0:b0], lang_hint=job.get("lang") or "")]
-            except Exception:  # noqa: BLE001 - the clip is still made, with YouTube's words
+                      for w in transcribe.transcribe(audio[a0:b0], lang_hint=job.get("lang") or "", word_timestamps=True)]
+            except Exception:  # noqa: BLE001 - the clip is still made, with existing words
                 tw = []
             if len(tw) >= 3:
                 exact[clip["id"]] = (a0 / 16000, b0 / 16000, tw)
@@ -1328,17 +1436,33 @@ def _run_job(job):
     # network, the transcript is work on this machine), so neither waits for the other.
     ahead = ThreadPoolExecutor(2, thread_name_prefix="ahead")
     heard, now_on = {}, [done_blocks]
+    asr_t0 = [0.0]
+    asr_base_samples = blocks[done_blocks][0] if done_blocks < len(blocks) else hi
 
     def hear(i):
         if i < len(blocks) and i >= done_blocks and i not in heard:
             a_, b_ = blocks[i]
-            last = [0.0]
+            last = [0.0, 0.0]  # [last_p, last_ts]
+            use_word_ts = (transcribe.active_engine() != "faster-whisper")
 
             def tp(p, i=i, a_=a_, b_=b_):
-                if now_on[0] == i and p - last[0] > 0.05:      # only the part being shown moves the bar
-                    last[0] = p
-                    _set(job, progress=max(job["progress"], 0.14 + 0.78 * ((a_ - lo) + p * (b_ - a_)) / max(1, hi - lo)))
-            heard[i] = ahead.submit(ctx.bind(transcribe.transcribe), audio[a_:b_], tp, job.get("lang") or "")
+                now = time.time()
+                if asr_t0[0] <= 0.0:
+                    asr_t0[0] = now
+                if now_on[0] == i and (p - last[0] > 0.02 or now - last[1] >= 2.0):
+                    last[0], last[1] = p, now
+                    cur_samples = (a_ - lo) + p * (b_ - a_)
+                    total_samples = max(1, hi - lo)
+                    prog = 0.14 + 0.78 * cur_samples / total_samples
+                    done_since = max(0.0, (a_ + p * (b_ - a_)) - asr_base_samples)
+                    rem_samples = max(0.0, hi - (a_ + p * (b_ - a_)))
+                    elapsed = now - asr_t0[0]
+                    kw = {}
+                    if elapsed >= 3.0 and done_since >= 16000 * 3.0:
+                        rate = done_since / elapsed
+                        kw["eta_sec"] = max(1, int(round(rem_samples / max(1.0, rate))))
+                    _set(job, progress=max(job["progress"], prog), **kw)
+            heard[i] = ahead.submit(ctx.bind(transcribe.transcribe), audio[a_:b_], tp, job.get("lang") or "", use_word_ts)
 
     # The ad breaks and static screens of the whole video, found once. It reads the video end to end,
     # so it is done here rather than for each clip, and only when asked for.
@@ -1538,11 +1662,17 @@ def _run_job(job):
                 _set(job, stage="Reading the transcript" + where)
                 bw = [dict(w, s=round(w["s"] - shift, 2), e=round(w["e"] - shift, 2)) for w in yt[0] if a / 16000 <= w["s"] < b / 16000]
             else:
+                if asr_t0[0] <= 0.0:
+                    asr_t0[0] = time.time()
                 _set(job, stage="Writing the transcript" + where)
                 now_on[0] = bi
                 hear(bi)
-                hear(bi + 1)
+                # Parakeet can run multiple copies in parallel; Faster-Whisper shares one model lock
+                if transcribe.active_engine() != "faster-whisper":
+                    hear(bi + 1)
                 bw = heard.pop(bi).result()
+                if transcribe.active_engine() == "faster-whisper" and bi + 1 < len(blocks):
+                    hear(bi + 1)  # starts next block while AI evaluates this block over the network
             _set(job, progress=max(job["progress"], 0.14 + 0.78 * (b - lo) / max(1, hi - lo)))
             words += [dict(w, s=round(w["s"] + shift, 2), e=round(w["e"] + shift, 2)) for w in bw]
             (d / "words.json").write_text(json.dumps(words), encoding="utf-8")
@@ -1637,7 +1767,7 @@ def _run_job(job):
         stage = "Done"
     else:
         stage = "Done, but nothing clip-worthy was found"
-    _set(job, status="done", stage=stage, progress=1.0, took=round(time.time() - t0))
+    _set(job, status="done", stage=stage, progress=1.0, eta_sec=None, took=round(time.time() - t0))
     try:
         from . import notices
         name = job.get("title") or job["source"].get("name") or "your video"
@@ -1667,7 +1797,9 @@ def _worker(quick_only=False):
             if kind == "job":
                 _run_job(job)
             elif kind in ("clip_final", "clip"):
-                clip = next(c for c in job["clips"] if c["id"] == cid)
+                clip = next((c for c in job["clips"] if c["id"] == cid), None)
+                if not clip or (kind == "clip_final" and clip.get("status") == "done"):
+                    continue
                 words = []
                 if clip.get("captions", True):
                     wf = Path(job["dir"]) / "words.json"
@@ -1675,7 +1807,10 @@ def _worker(quick_only=False):
                         words = json.loads(wf.read_text(encoding="utf-8"))
                 render_one(job, clip, words, quality="final")
             elif kind == "clip_draft":
-                clip = next(c for c in job["clips"] if c["id"] == cid)
+                clip = next((c for c in job["clips"] if c["id"] == cid), None)
+                # Never let an earlier queued draft overwrite a clip that was already approved or finished!
+                if not clip or clip.get("status") in ("approved", "rendering_final", "done"):
+                    continue
                 words = []
                 if clip.get("captions", True):
                     wf = Path(job["dir"]) / "words.json"
@@ -1684,15 +1819,24 @@ def _worker(quick_only=False):
                 render_one(job, clip, words, quality="draft")
         except media.JobPaused:
             _paused.discard(job["id"])
-            _set(job, status="paused", stage="Paused by you")
+            _set(job, status="paused", stage="Paused by you", eta_sec=None)
         except Exception as e:  # noqa: BLE001
             (Path(job["dir"]) / "error.log").write_text(traceback.format_exc(), encoding="utf-8")
             if kind == "job":
                 for c in job["clips"]:
-                    if c.get("status") in ("queued", "rendering", "drafting"):
+                    if c.get("status") in ("queued", "rendering", "rendering_final", "drafting", "approved"):
                         c.update(status="error", error="The video stopped before this clip was made.")
-                _set(job, status="error", error=safe.friendly(e), stage="Stopped")
+                        c.pop("eta_sec", None)
+                _set(job, status="error", error=safe.friendly(e), stage="Stopped", eta_sec=None)
                 creators.log(job["creator"], f"Video failed: {safe.friendly(e)[:200]}")
+            elif kind in ("clip", "clip_final", "clip_draft") and cid:
+                clip = next((c for c in job.get("clips", []) if c["id"] == cid), None)
+                if clip and clip.get("status") in ("queued", "rendering", "rendering_final", "drafting", "approved"):
+                    clip.pop("eta_sec", None)
+                    clip.pop("render_started", None)
+                    clip.update(status="failed" if kind == "clip_draft" else "error", error=safe.friendly(e, 400))
+                    _refresh_review_stage(job)
+                    save(job)
         finally:
             ctx._uid.reset(token)
             if kind == "job":
@@ -1717,5 +1861,6 @@ def start():
     _pick_up_after_restart()
     for _ in range(max(1, config.JOB_WORKERS)):
         threading.Thread(target=_worker, daemon=True).start()
-    threading.Thread(target=_worker, args=(True,), daemon=True).start()   # re-making a single clip never waits behind whole videos
+    for _ in range(2):
+        threading.Thread(target=_worker, args=(True,), daemon=True).start()   # re-making single clips never waits behind whole videos
     threading.Thread(target=_live_worker, daemon=True).start()
