@@ -57,11 +57,21 @@ WHISPER_MODELS = [
 WHISPER_MODEL_MAP = {m["id"]: m for m in WHISPER_MODELS}
 WHISPER_MODEL_IDS = set(WHISPER_MODEL_MAP)
 WHISPER_THREADS = int(os.environ.get("PEAKCUT_WHISPER_THREADS") or max(4, min(8, _CPUS - 2)))
-WHISPER_HINGLISH_PROMPT = (
-    "यह हिंदी और इंग्लिश (Hinglish) गेमिंग स्ट्रीम है। "
-    "भाई, यार, अरे, क्या, bro, clutch, kill, zone, push, game, car, bike, stream, video."
-)
+# Used ONLY when retrying a segment that drifted into Urdu/Arabic script — never injected on the primary pass
+# so Whisper cannot hallucinate prompt words during quiet audio or background music.
+WHISPER_HINDI_RETRY_PROMPT = "यह हिंदी में सामान्य बातचीत है।"
+WHISPER_HINGLISH_PROMPT = WHISPER_HINDI_RETRY_PROMPT
 _ARABIC_SCRIPT_RE = re.compile(r"[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]")
+_WHISPER_HALLUCINATION_PHRASES = {
+    "thank you", "thank you.", "thank you!", "thanks", "thanks.",
+    "thank you for watching", "thank you for watching.", "thank you for watching!",
+    "thanks for watching", "thanks for watching.", "thanks for watching!",
+    "please subscribe", "subscribe", "subscribe.", "like and subscribe",
+    "subtitles by", "amara.org", "you", "you.", "...", "..", ".",
+    "धन्यवाद", "धन्यवाद।", "सब्सक्राइब करें", "सब्सक्राइब करें।",
+    "वीडियो देखने के लिए धन्यवाद", "वीडियो देखने के लिए धन्यवाद।",
+    "देखने के लिए धन्यवाद", "देखने के लिए धन्यवाद।",
+}
 _NO_WIN = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 _state_lock = threading.RLock()
@@ -191,7 +201,7 @@ def _read_user_asr_settings() -> tuple[str, str, str, bool]:
         eng = "parakeet"
     if wmod not in WHISPER_MODEL_IDS:
         wmod = "small"
-    if lang not in ("auto", "en", "hi"):
+    if lang not in ("auto", "en", "hi", "hinglish"):
         lang = "auto"
     return eng, wmod, lang, gpu_on
 
@@ -461,8 +471,11 @@ def _pick_whisper_batch_size(device: str, lang_arg: str | None = None) -> int:
 
 
 def _detect_whisper_device(gpu_on: bool) -> tuple[str, str]:
-    """Pick optimal (device, compute_type) for Faster-Whisper: CUDA int8 on GTX 16-series / <=4 GB VRAM,
-    CUDA float16 on >=6 GB RTX cards, else CPU int8."""
+    """Pick optimal (device, compute_type) for Faster-Whisper:
+    - GTX 16-series / <=4.5 GB VRAM: CUDA int8_float32 (same tiny VRAM as int8, full FP32 compute so Turing
+      cards never hit FP16/int8_float16 NaN or softmax degradation on Hindi/multilingual tokens).
+    - >=6 GB RTX cards: CUDA float16.
+    - Otherwise: CPU int8."""
     pref = os.environ.get("PEAKCUT_WHISPER_DEVICE", "auto").strip().lower()
     if pref == "cpu" or not gpu_on:
         return "cpu", "int8"
@@ -475,7 +488,7 @@ def _detect_whisper_device(gpu_on: bool) -> tuple[str, str]:
                 return "cuda", env_c
             ginfo = gpu_status(fresh=False)
             if _is_low_vram_gpu(ginfo):
-                return "cuda", "int8"
+                return "cuda", "int8_float32"
             return "cuda", "float16"
     except Exception:
         pass
@@ -520,10 +533,19 @@ def _make_batched_pipeline(model):
 
 
 def _verify_cuda_model(model) -> None:
-    """Run a tiny 0.4s inference check so missing cuBLAS/cuDNN DLLs are caught immediately on load."""
-    dummy = np.zeros(6400, dtype=np.float32)
-    segs, _ = model.transcribe(dummy, beam_size=1, best_of=1, vad_filter=False, language="en", word_timestamps=False)
-    for _ in segs:
+    """Run a 0.8s non-zero inference check so missing cuBLAS/cuDNN DLLs AND GTX 16xx FP16 NaN corruption
+    are caught immediately on load (zeros alone can hide FP16 NaN bugs)."""
+    import math
+    t = np.arange(12800, dtype=np.float32) / 16000.0
+    probe = (0.12 * np.sin(2.0 * np.pi * 220.0 * t) + 0.06 * np.sin(2.0 * np.pi * 440.0 * t)).astype(np.float32)
+    segs, _ = model.transcribe(probe, beam_size=1, best_of=1, vad_filter=False, language="hi", word_timestamps=False)
+    for seg in segs:
+        lp = getattr(seg, "avg_logprob", 0.0)
+        nsp = getattr(seg, "no_speech_prob", 0.0)
+        if lp is not None and not math.isfinite(float(lp)):
+            raise RuntimeError("CUDA compute type produced non-finite logits (NaN)")
+        if nsp is not None and not math.isfinite(float(nsp)):
+            raise RuntimeError("CUDA compute type produced non-finite no_speech_prob (NaN)")
         break
 
 
@@ -571,15 +593,17 @@ def _get_whisper_model(model_size: str = None, gpu_on: bool = None, force_cpu: b
                 )
                 used_dev, used_ctype = "cpu", "int8"
             else:
-                # GTX 1650 / <=4 GB GPUs lack FP16 Tensor Cores and run fastest + lowest VRAM in int8!
+                # GTX 1650 / <=4.5 GB Turing GPUs: CTranslate2 maps 'int8' -> 'int8_float16' on sm>=7.0,
+                # which can cause FP16 NaN / logit degradation on Hindi Devanagari tokens.
+                # 'int8_float32' keeps tiny INT8 VRAM while running full-precision FP32 compute!
                 low_vram = _is_low_vram_gpu(ginfo)
                 tight = bool(ginfo and ginfo["total_mb"] > 0 and free_mb < m_meta["vram_mb"] + 250)
                 if low_vram:
-                    pref_order = ("int8", "int8_float32", "int8_float16", "float16")
+                    pref_order = ("int8_float32", "float32", "int8")
                 elif tight:
-                    pref_order = ("int8_float16", "int8", "float16")
+                    pref_order = ("int8_float32", "int8_float16", "float16", "int8")
                 else:
-                    pref_order = (compute_type, "float16", "int8_float16", "int8")
+                    pref_order = (compute_type, "float16", "int8_float32", "int8_float16")
                 try_types = []
                 for ct in pref_order:
                     if ct and ct not in try_types:
@@ -653,7 +677,7 @@ def switch_engine(engine: str, whisper_model: str = None, language: str = None, 
     if cur_wmod in WHISPER_MODEL_IDS and cur_wmod != wmod:
         _prev_whisper_model = cur_wmod
     lang = (language or cur_lang or "auto").strip().lower()
-    if lang not in ("auto", "en", "hi"):
+    if lang not in ("auto", "en", "hi", "hinglish"):
         lang = "auto"
 
     with _state_lock:
@@ -1144,38 +1168,117 @@ def _transcribe_parakeet(audio: np.ndarray, on_progress=None) -> list:
     return _clean_words(raw_words)
 
 
+def _prepare_whisper_audio(audio: np.ndarray) -> tuple[np.ndarray, float]:
+    """Convert int16 PCM to clean float32, remove DC offset, and gently level quiet vocals so Silero VAD
+    never drops conversational Hindi speech while avoiding clipping loud gameplay peaks."""
+    wav = audio.astype(np.float32) / 32768.0
+    if len(wav) == 0:
+        return wav, 0.0
+    wav = wav - float(np.mean(wav))
+    rms = float(np.sqrt(np.mean(wav * wav)))
+    if rms < 0.0012:
+        return wav, rms
+    peak = float(np.max(np.abs(wav)))
+    # Gently lift quiet tracks (e.g. -28 dBFS mic audio) up toward ~-20 dBFS without clipping peaks
+    if rms < 0.065 and peak > 1e-6:
+        gain = min(0.08 / rms, 0.92 / peak, 8.0)
+        if gain > 1.08:
+            wav = np.clip(wav * gain, -1.0, 1.0).astype(np.float32)
+    return wav, rms
+
+
+def _is_hallucination_segment(seg, text: str) -> bool:
+    """Filter out Whisper silence/music/SFX hallucinations without dropping real speech."""
+    import math
+    txt = (text or "").strip()
+    if not txt:
+        return True
+    nsp = getattr(seg, "no_speech_prob", None)
+    lp = getattr(seg, "avg_logprob", None)
+    cr = getattr(seg, "compression_ratio", None)
+    nsp_f = float(nsp) if (nsp is not None and math.isfinite(float(nsp))) else 0.0
+    lp_f = float(lp) if (lp is not None and math.isfinite(float(lp))) else 0.0
+    cr_f = float(cr) if (cr is not None and math.isfinite(float(cr))) else 0.0
+
+    # Pure non-speech / garbage decode
+    if nsp_f >= 0.88:
+        return True
+    if nsp_f >= 0.72 and lp_f < -0.70:
+        return True
+    if lp_f < -1.35:
+        return True
+    if cr_f > 2.6 and lp_f < -0.65:
+        return True
+
+    norm = re.sub(r"\s+", " ", txt).strip().lower()
+    if norm in _WHISPER_HALLUCINATION_PHRASES and (nsp_f >= 0.35 or lp_f < -0.55):
+        return True
+    if re.fullmatch(r"[\W_]+", txt):
+        return True
+    return False
+
+
 def _extract_whisper_words(segments, total_sec: float, on_progress=None) -> list:
     out = []
     for seg in segments:
+        seg_text = str(getattr(seg, "text", "") or "").strip()
+        if on_progress and total_sec > 0:
+            on_progress(min(1.0, float(getattr(seg, "end", 0.0) or 0.0) / total_sec))
+        if _is_hallucination_segment(seg, seg_text):
+            continue
+        seg_nsp = float(getattr(seg, "no_speech_prob", 0.0) or 0.0)
         seg_words = getattr(seg, "words", None) or []
         if seg_words:
             for wd in seg_words:
                 txt = str(getattr(wd, "word", "") or "").strip()
                 if not txt:
                     continue
+                prob = getattr(wd, "probability", None)
+                if prob is not None and float(prob) < 0.03 and seg_nsp >= 0.50:
+                    continue
                 s = round(max(0.0, float(getattr(wd, "start", seg.start) or 0.0)), 2)
                 e = round(max(s + 0.08, float(getattr(wd, "end", s + 0.15) or (s + 0.15))), 2)
                 out.append({"w": txt, "s": s, "e": e})
         else:
-            parts = str(getattr(seg, "text", "") or "").strip().split()
+            parts = seg_text.split()
             if parts:
                 s0 = float(getattr(seg, "start", 0.0) or 0.0)
                 e0 = max(s0 + 0.2, float(getattr(seg, "end", s0 + 0.4) or (s0 + 0.4)))
                 step = (e0 - s0) / len(parts)
                 for idx, p in enumerate(parts):
                     out.append({"w": p, "s": round(s0 + idx * step, 2), "e": round(s0 + (idx + 1) * step, 2)})
-        if on_progress and total_sec > 0:
-            on_progress(min(1.0, float(getattr(seg, "end", 0.0) or 0.0) / total_sec))
     return out
 
 
+def _filter_supported_kwargs(fn, kwargs: dict) -> dict:
+    """Keep only kwargs supported by the installed faster-whisper version."""
+    import inspect
+    try:
+        sig = inspect.signature(fn)
+        if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+            return kwargs
+        allowed = set(sig.parameters.keys())
+        return {k: v for k, v in kwargs.items() if k in allowed}
+    except Exception:
+        return kwargs
+
+
+def _arabic_word_ratio(words: list) -> float:
+    if not words:
+        return 0.0
+    sample = words[:60]
+    hits = sum(1 for w in sample if _ARABIC_SCRIPT_RE.search(str(w.get("w") or "")))
+    return hits / max(1, len(sample))
+
+
 def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = "", word_timestamps: bool = True) -> list:
-    """Faster-Whisper (CTranslate2 CUDA float16 / CPU INT8) with BatchedInferencePipeline,
-    Silero VAD noise filtering, and instant pre-decode language hallucination guard."""
+    """Faster-Whisper (CTranslate2 CUDA int8_float32/float16 / CPU INT8) tuned for clear, accurate
+    Hindi, Hinglish, and English transcription with gentle Silero VAD, beam search, hallucination filtering,
+    and automatic sparse-speech / Urdu-script recovery."""
     if len(audio) < 4800:
         return []
-    wav = audio.astype(np.float32) / 32768.0
-    if float(np.sqrt((wav ** 2).mean())) < 0.003:
+    wav, raw_rms = _prepare_whisper_audio(audio)
+    if raw_rms < 0.0012:
         return []
 
     _, wmod, pref_lang, gpu_on = _read_user_asr_settings()
@@ -1183,7 +1286,7 @@ def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = ""
     with _state_lock:
         _asr_state.update(status="ready", device=device, compute_type=compute_type)
 
-    # Resolve language: explicit per-video confirmation wins over auto; 'hinglish' uses Hindi+English Whisper mode
+    # Resolve language: explicit per-video confirmation wins over Settings; 'hinglish' uses Hindi+English mode
     hint = (lang_hint or "").strip().lower()
     if hint in ("hinglish", "hi-en", "en-hi"):
         hint_norm = "hinglish"
@@ -1209,47 +1312,83 @@ def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = ""
             hinglish_mode = (pref_norm == "hi")
 
     total_sec = len(wav) / 16000.0
-    vad_params = {"min_silence_duration_ms": 400, "speech_pad_ms": 200}
+    # Gentle Silero VAD: catches soft/conversational Hindi voices without clipping word edges
+    vad_params = {
+        "threshold": 0.35,
+        "min_speech_duration_ms": 150,
+        "min_silence_duration_ms": 650,
+        "speech_pad_ms": 300,
+    }
 
-    def _call_transcribe(cur_model, cur_batched, cur_device, lang_arg, use_vad=True):
-        prompt = WHISPER_HINGLISH_PROMPT if (lang_arg == "hi" or hinglish_mode) else None
-        # BatchedInferencePipeline with VRAM-aware batch_size (batch 4 on 4 GB GTX 1650 prevents shared-RAM lag)
-        use_batch = cur_batched is not None and total_sec >= 25.0
+    def _call_transcribe(cur_model, cur_batched, cur_device, lang_arg, use_vad=True, prompt_override=None):
+        is_hi = (lang_arg == "hi") or hinglish_mode
+        # NEVER use BatchedInferencePipeline for clip precision passes (<=120s), word_timestamps=True, or Hindi/Hinglish:
+        # BatchedInferencePipeline splits audio at VAD pauses, drops context, and has known word-timestamp alignment bugs
+        # on multi-byte Devanagari tokens. Reserve it strictly for long (>120s) coarse non-Hindi scouting scans.
+        use_batch = (
+            cur_batched is not None
+            and not word_timestamps
+            and total_sec >= 120.0
+            and not is_hi
+        )
+        # Beam search dramatically improves Hindi/Hinglish accuracy (greedy beam_size=1 drops/mangles easy Hindi words!)
+        if word_timestamps or total_sec <= 120.0:
+            beam = 5
+            best_of = 5
+        elif is_hi:
+            beam = 3
+            best_of = 3
+        else:
+            beam = 2
+            best_of = 2
+
         kwargs = {
-            "beam_size": 1,
-            "best_of": 1,
+            "beam_size": beam,
+            "best_of": best_of,
+            "patience": 1.0,
+            "temperature": (0.0, 0.2, 0.4, 0.6, 0.8),
             "vad_filter": use_vad,
             "word_timestamps": bool(word_timestamps),
             "condition_on_previous_text": False,
-            "no_speech_threshold": 0.65 if (lang_arg == "hi" or hinglish_mode) else 0.6,
-            "compression_ratio_threshold": 2.4,
+            "no_speech_threshold": 0.6,
+            "log_prob_threshold": -1.0,
+            "compression_ratio_threshold": 2.2,
+            "repetition_penalty": 1.05,
             "language": lang_arg,
             "task": "transcribe",
         }
+        if word_timestamps:
+            kwargs["hallucination_silence_threshold"] = 1.5
         if use_vad:
             kwargs["vad_parameters"] = vad_params
-        if prompt:
-            kwargs["initial_prompt"] = prompt
+        if prompt_override:
+            kwargs["initial_prompt"] = prompt_override
         if use_batch:
             kwargs["batch_size"] = _pick_whisper_batch_size(cur_device, lang_arg)
-            return cur_batched.transcribe(wav, **kwargs)
-        return cur_model.transcribe(wav, **kwargs)
+            fn = cur_batched.transcribe
+        else:
+            fn = cur_model.transcribe
+        return fn(wav, **_filter_supported_kwargs(fn, kwargs))
 
-    def _run_once(cur_model, cur_batched, cur_device, lang_arg, use_vad=True):
+    def _run_once(cur_model, cur_batched, cur_device, lang_arg, use_vad=True, prompt_override=None):
         with _whisper_lock:
-            segments, info = _call_transcribe(cur_model, cur_batched, cur_device, lang_arg, use_vad=use_vad)
+            segments, info = _call_transcribe(
+                cur_model, cur_batched, cur_device, lang_arg,
+                use_vad=use_vad, prompt_override=prompt_override,
+            )
             # Check auto-detected language BEFORE iterating segments so a 10-min block is NEVER decoded twice!
             if lang_arg is None and info is not None:
                 det_lang = str(getattr(info, "language", "") or "").lower()
                 det_prob = float(getattr(info, "language_probability", 1.0) or 0.0)
-                if det_lang == "ur":
-                    # Whisper frequently tags spoken Hindi/Hinglish as Urdu ('ur'): decode as Hindi, NEVER English!
+                if det_lang in ("ur", "mr", "ne", "pa"):
+                    # Whisper frequently tags spoken Hindi/Hinglish as Urdu/Marathi/Nepali: decode as Hindi!
                     segments, info = _call_transcribe(cur_model, cur_batched, cur_device, "hi", use_vad=use_vad)
                 elif (det_lang not in ("en", "hi") and det_prob < 0.78) or (det_lang in ("ar", "fa") and det_prob < 0.88):
                     segments, info = _call_transcribe(cur_model, cur_batched, cur_device, "en", use_vad=use_vad)
             got_words = _extract_whisper_words(segments, total_sec, on_progress=on_progress)
         return got_words, info
 
+    used_vad = True
     try:
         raw_words, info = _run_once(model, batched, device, chosen_lang, use_vad=True)
     except Exception as first_err:
@@ -1262,16 +1401,42 @@ def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = ""
             raw_words, info = _run_once(model, batched, device, chosen_lang, use_vad=True)
         else:
             # Retry once without VAD / batching if Silero VAD asset fails in an offline environment
+            used_vad = False
             raw_words, info = _run_once(model, None, device, chosen_lang, use_vad=False)
 
-    # Lightweight final guard: if Arabic/Urdu script slipped into auto-detect on short audio, re-decode cleanly
-    if chosen_lang is None and total_sec <= 120.0 and raw_words:
-        sample_txt = " ".join(w["w"] for w in raw_words[:30])
+    # Sparse/empty speech safety net: if Silero VAD dropped real speech on an audible clip (<= 150s),
+    # retry once with vad_filter=False so clear Hindi/English audio NEVER ends up with missing captions!
+    min_expected = max(3, int(total_sec / 6.5))
+    if used_vad and total_sec <= 150.0 and raw_rms >= 0.005 and len(raw_words) < min_expected:
+        try:
+            retry_words, retry_info = _run_once(model, None, device, chosen_lang, use_vad=False)
+            if len(retry_words) > len(raw_words):
+                raw_words, info = retry_words, retry_info
+                used_vad = False
+        except Exception:
+            pass
+
+    # Devanagari/Urdu script guard: works BOTH when language='hi' AND on auto-detect!
+    # Whisper sometimes slips into vowel-less Urdu/Arabic script even when language='hi'.
+    if total_sec <= 150.0 and raw_words and _arabic_word_ratio(raw_words) >= 0.25:
         det_lang = str(getattr(info, "language", "") or "").lower() if info is not None else ""
         det_prob = float(getattr(info, "language_probability", 1.0) or 0.0) if info is not None else 0.0
-        if _ARABIC_SCRIPT_RE.search(sample_txt) and det_prob < 0.90:
-            fallback_lang = "hi" if det_lang in ("ur", "hi") else "en"
-            raw_words, _ = _run_once(model, batched, device, fallback_lang, use_vad=True)
+        if chosen_lang == "hi" or hinglish_mode or det_lang in ("hi", "ur"):
+            try:
+                deva_words, _ = _run_once(
+                    model, None, device, "hi", use_vad=used_vad, prompt_override=WHISPER_HINDI_RETRY_PROMPT
+                )
+                if deva_words and _arabic_word_ratio(deva_words) < _arabic_word_ratio(raw_words):
+                    raw_words = deva_words
+            except Exception:
+                pass
+        elif chosen_lang is None and det_prob < 0.90:
+            try:
+                en_words, _ = _run_once(model, None, device, "en", use_vad=used_vad)
+                if en_words:
+                    raw_words = en_words
+            except Exception:
+                pass
 
     if on_progress:
         on_progress(1.0)
