@@ -52,15 +52,19 @@ def _tokens():
 def brief() -> dict:
     """The few numbers every page shows. Counted at most every ten seconds per user."""
     uid, now = ctx.uid(), time.time()
+    rt = ai.runtime_state()
     got = _brief.get(uid)
     if got and now - got[0] < 10:
-        return dict(got[1])
+        out = dict(got[1])
+        out.update(provider_id=rt["provider"], active=rt["active"], active_model=rt["model"], active_purpose=rt["purpose"])
+        return out
     midnight = time.mktime(time.localtime(now)[:3] + (0, 0, 0, 0, 0, -1))
     u = db.usage.c
     with db.engine.connect() as c:
         today = c.execute(sa.select(sa.func.count(), sa.func.coalesce(sa.func.sum(_tokens()), 0)).where(
             u.user_id == uid, u.t >= midnight)).first()
-    out = {"ready": ai.ready(), "provider": ai.label(), "model": (ai.models() or [""])[0],
+    out = {"ready": ai.ready(), "provider": ai.label(), "provider_id": rt["provider"], "model": (ai.models() or [""])[0],
+           "active": rt["active"], "active_model": rt["model"], "active_purpose": rt["purpose"],
            "today_calls": int(today[0]), "today_tokens": int(today[1]),
            "problem": ai.problem["text"] if ai.problem["text"] and now - ai.problem["at"] < 6 * 3600 else ""}
     _brief[uid] = (now, out)

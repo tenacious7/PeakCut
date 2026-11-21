@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import brain, config, creators, ctx, edit, facecam, games, load, media, meme, quality, render, roman, rules, safe, transcribe, usage
+from . import accounts, ai, brain, config, creators, ctx, edit, facecam, games, load, media, meme, quality, render, roman, rules, safe, transcribe, usage
 
 class _FairQueue:
     """Whose video is next. Each person has their own line and the lines take turns, so someone who adds ten
@@ -627,7 +627,11 @@ def request_render(jid, cid, changes: dict):
                               round(max(0.01, min(1.0, float(fc["h"]))), 4)]
         elif fc is None:
             new["facecam"] = None
-    if "words" in changes and isinstance(changes["words"], list):
+    force_full = bool(changes.get("force_full"))
+    words_dirty = bool(changes.get("words_dirty"))
+    hook_dirty = bool(changes.get("hook_dirty"))
+
+    if "words" in changes and isinstance(changes["words"], list) and (words_dirty or "words_dirty" not in changes):
         valid_words = []
         for w in changes["words"]:
             if isinstance(w, dict) and "w" in w:
@@ -637,7 +641,13 @@ def request_render(jid, cid, changes: dict):
                     "e": round(float(w.get("e", 0.0)), 2)
                 })
         new["words"] = valid_words
-        new["words_edited"] = True
+        if words_dirty:
+            new["words_edited"] = True
+    elif force_full and not clip.get("words_edited"):
+        # Re-apply latest caption normalization & Hinglish/Romanization pipeline on full remake
+        new.pop("fixed_words", None)
+        new.pop("fixed_for", None)
+
     if new.get("style") not in render.STYLES:
         new["style"] = DEFAULTS["style"]
     if new.get("layout") not in render.LAYOUTS:
@@ -666,16 +676,22 @@ def request_render(jid, cid, changes: dict):
         new.get("meme_vol") != clip.get("meme_vol") or
         new.get("music_db") != clip.get("music_db")
     )
-    if raw_file.is_file():
+    if force_full:
+        new["_fast_caption_only"] = False
+    elif raw_file.is_file():
         new["_fast_caption_only"] = not (time_changed or layout_changed or audio_changed)
     else:
         new["_fast_caption_only"] = False
 
-    if layout_changed or time_changed or audio_changed:
+    if force_full or layout_changed or time_changed or audio_changed:
         try:
             raw_file.unlink(missing_ok=True)
         except OSError:
             pass
+
+    # On full remake without manual hook drag, let render.py apply the latest default below-split placement
+    if force_full and not hook_dirty and new.get("layout") == "stack":
+        new["hook_y"] = None
 
     # If switching FROM split-screen (stack) to a non-stack layout, reset stack-specific hook/caption Y if untouched
     old_layout = clip.get("layout")
@@ -713,7 +729,7 @@ def request_render(jid, cid, changes: dict):
                     pass
             if "cap_y" in new and new["cap_y"] is not None:
                 cap_ed["y_pos"] = float(new["cap_y"])
-            if "words" in new and isinstance(new["words"], list):
+            if words_dirty and "words" in new and isinstance(new["words"], list):
                 cap_ed["words"] = [
                     {"text": str(w.get("w", "")), "start": float(w.get("s", 0.0)), "end": float(w.get("e", 0.0))}
                     for w in new["words"]
@@ -730,7 +746,9 @@ def request_render(jid, cid, changes: dict):
                 hk_ed["max_w"] = max(360, min(1020, int(new["hook_max_w"])))
             if "hook_style" in new and new["hook_style"]:
                 hk_ed["style"] = str(new["hook_style"])
-            if "hook_y" in new and new["hook_y"] is not None:
+            if force_full and not hook_dirty and new.get("layout") == "stack":
+                hk_ed.pop("y_pos", None)
+            elif "hook_y" in new and new["hook_y"] is not None:
                 hk_ed["y_pos"] = float(new["hook_y"])
             aud_ed = ed.setdefault("audio", {})
             if "meme" in new:
@@ -744,9 +762,81 @@ def request_render(jid, cid, changes: dict):
 
     dur = max(3.0, float(new["end"]) - float(new["start"]))
     est_sec = max(3, int(round(dur * (0.16 if new.get("_fast_caption_only") else (0.28 if render._nvenc_ok else 0.55)))))
-    clip.update(new, status="queued", error=None, eta_sec=est_sec, render_started=time.time())
+    new["version"] = int(clip.get("version", 0)) + 1
+    if force_full and not clip.get("words_edited"):
+        clip.pop("fixed_words", None)
+        clip.pop("fixed_for", None)
+    clip.update(new, status="queued", error=None, error_detail=None, eta_sec=est_sec, render_started=time.time())
     save(job)
     _q.put(("clip", jid, cid))
+
+
+def remake_job(jid: str, mode: str = "rerender", retranscribe: bool = False) -> dict:
+    """Remake an existing video job using the already-downloaded video/audio files on disk,
+    applying the latest code, layout rules, caption normalization, and AI model."""
+    job = _jobs.get(jid)
+    if not job or job.get("user") != ctx.uid():
+        raise ValueError("No such video")
+    if job.get("status") in ("queued", "running", "live"):
+        raise ValueError("This video is still being processed. Wait until it finishes or pause it first.")
+    d = Path(job["dir"])
+    clips_dir = d / "clips"
+    clips_dir.mkdir(parents=True, exist_ok=True)
+    mode = (mode or "rerender").strip().lower()
+
+    if mode == "rerender" and job.get("clips"):
+        # Re-render every clip from the saved source video with the latest code & layout defaults
+        for c in job["clips"]:
+            cid = c["id"]
+            # Delete stale _raw.mp4 and old edit.json geometry so latest renderer & below-split defaults apply
+            for stale in (clips_dir / f"{cid}_raw.mp4", clips_dir / f"{cid}_edit.json"):
+                try:
+                    stale.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            c["_fast_caption_only"] = False
+            c.pop("fixed_words", None)
+            c.pop("fixed_for", None)
+            c.pop("error_detail", None)
+            if c.get("layout") == "stack":
+                c["hook_y"] = None
+            c["version"] = int(c.get("version", 0)) + 1
+            dur = max(3.0, float(c.get("end", 30.0)) - float(c.get("start", 0.0)))
+            est_sec = max(4, int(round(dur * (0.28 if render._nvenc_ok else 0.55))))
+            c.update(status="queued", error=None, eta_sec=est_sec, render_started=time.time())
+        job["error"] = None
+        job.pop("error_detail", None)
+        job["stage"] = f"Remaking {len(job['clips'])} clip{'s' if len(job['clips']) != 1 else ''} with latest code"
+        save(job)
+        for c in job["clips"]:
+            _q.put(("clip", jid, c["id"]))
+        return job
+
+    # Full re-process using the saved local video on disk (no re-download!)
+    if retranscribe:
+        try:
+            (d / "words.json").unlink(missing_ok=True)
+        except OSError:
+            pass
+    # Clean old rendered clips so fresh clips are created cleanly
+    for f in clips_dir.glob("*"):
+        if f.is_file() and not f.name.startswith("piece_"):
+            try:
+                f.unlink(missing_ok=True)
+            except OSError:
+                pass
+    job["clips"] = []
+    job["done_blocks"] = 0
+    job["error"] = None
+    job.pop("error_detail", None)
+    job.pop("ai", None)
+    job["status"] = "queued"
+    job["progress"] = 0.0
+    job["stage"] = "Queued to remake with latest code (using saved video)"
+    job["remaking"] = True
+    save(job)
+    _q.put(("job", jid))
+    return job
 
 
 def render_one(job, clip, words, quality="final"):
@@ -856,6 +946,7 @@ def render_one(job, clip, words, quality="final"):
         out = render.render_clip(src, d / "clips", clip["id"], local, near, job.get("width") or 1920, job.get("height") or 1080, quality=quality)
         clip.pop("eta_sec", None)
         clip.pop("render_started", None)
+        clip.pop("error_detail", None)
         if quality == "draft":
             clip.update(out, status="awaiting_review", error=None)
             clip["version"] = clip.get("version", 0) + 1
@@ -882,10 +973,159 @@ def render_one(job, clip, words, quality="final"):
     except Exception as e:  # noqa: BLE001
         clip.pop("eta_sec", None)
         clip.pop("render_started", None)
-        clip.update(status="failed" if quality == "draft" else "error", error=safe.friendly(e, 400))
-        creators.log(job["creator"], f"Clip failed: {safe.friendly(e, 200)}")
+        where = f"Rendering clip {clip.get('id', '')} ({'draft preview' if quality == 'draft' else 'final 1080p'})"
+        detail = _classify_error(e, where=where)
+        clip.update(status="failed" if quality == "draft" else "error", error=detail["what"], error_detail=detail)
+        creators.log(job["creator"], f"Clip failed ({where}): {detail['what'][:200]}")
     _refresh_review_stage(job)
     save(job)
+
+
+def _classify_error(e: Exception, where: str = "Processing") -> dict:
+    """Turn any backend exception into a clear, actionable diagnostic object for the UI error popup."""
+    raw = safe.friendly(e, 450)
+    low = raw.lower()
+    tip = "Try again, or open the error details below if this keeps happening."
+    action = ""
+    if any(k in low for k in ("ollama", "11434", "connection refused")) or ("connect" in low and ai.provider() == "ollama"):
+        tip = "Make sure Ollama is running (`ollama serve`) and the model name matches `ollama list` in Settings → AI."
+        action = "ai"
+    elif any(k in low for k in ("did not answer with json", "json", "401", "403", "404", "429", "api key", "quota", "rate limit", "not found", "ai did not answer")):
+        tip = "Check your AI service, model name, or API key under Settings → AI, then press Save and test."
+        action = "ai"
+    elif any(k in low for k in ("cuda", "cublas", "cudnn", "out of memory", "vram", "nvenc")):
+        tip = "Your GPU ran low on VRAM or hit a driver issue. Check Settings → Hardware & Speech (or switch to a smaller Whisper model / CPU)."
+        action = "hardware"
+    elif any(k in low for k in ("sign in to confirm", "bot", "cookies", "youtube", "403", "format", "yt-dlp", "could not fetch")):
+        tip = "YouTube blocked or interrupted the download. Refresh your YouTube cookies in Settings → YouTube & Cookies, or retry."
+        action = "youtube"
+    elif any(k in low for k in ("permission", "being used by another process", "winerror 32", "access is denied")):
+        tip = "Windows had the video file locked (often by the browser player or antivirus). Close the preview and click Save draft / Remake again."
+    elif "ffmpeg" in low:
+        tip = "FFmpeg failed while encoding this clip. Check that the source video isn't corrupted and disk space isn't full."
+    return {
+        "where": where or "Processing",
+        "what": raw or "Something went wrong.",
+        "tip": tip,
+        "action": action,
+        "type": type(e).__name__,
+    }
+
+
+def live_runtime() -> dict:
+    """Live snapshot of active AI, Speech-to-Text, and GPU/Video rendering for the Home & Clip glowing indicators."""
+    ai_rt = ai.runtime_state()
+    asr_rt = transcribe.live_state()
+    gpu_hw = transcribe.gpu_status() if hasattr(transcribe, "gpu_status") else {}
+    has_nvenc = render.check_nvenc() if hasattr(render, "check_nvenc") else False
+    try:
+        gpu_on = accounts.settings().get("gpu_enabled", True) and getattr(config, "USE_GPU", True)
+    except Exception:
+        gpu_on = getattr(config, "USE_GPU", True)
+    has_gpu = bool(has_nvenc or gpu_hw.get("available"))
+    gpu_enabled = bool(gpu_on and has_gpu)
+
+    # Check if any job or clip for this user is actively rendering/encoding video
+    rendering_clips = 0
+    running_jobs = 0
+    uid = ctx.uid_or_none() if hasattr(ctx, "uid_or_none") else None
+    for j in list(_jobs.values()):
+        if uid and j.get("user") != uid:
+            continue
+        if j.get("status") in ("running", "queued"):
+            running_jobs += 1
+        for c in j.get("clips") or []:
+            if c.get("status") in ("rendering", "rendering_final", "drafting"):
+                rendering_clips += 1
+
+    gpu_active = bool(gpu_enabled and (
+        rendering_clips > 0
+        or (asr_rt["active"] and asr_rt.get("device") == "cuda")
+        or (ai_rt["active"] and ai_rt.get("provider") == "ollama")
+    ))
+    gpu_short = gpu_hw.get("name") or ("NVIDIA NVENC" if has_nvenc else "CPU")
+    gpu_short = gpu_short.replace("NVIDIA GeForce ", "").replace("NVIDIA ", "").strip()
+    epoch = int(ai_rt.get("epoch", 0)) + int(asr_rt.get("epoch", 0)) + rendering_clips * 17 + running_jobs * 7
+    short_label = ai_rt["label"].replace(" (on this machine)", "").replace(" (OpenAI-compatible)", "")
+    return {
+        "epoch": epoch,
+        "busy": bool(ai_rt["active"] or asr_rt["active"] or rendering_clips > 0 or running_jobs > 0),
+        "ai": {
+            "active": ai_rt["active"],
+            "ready": ai_rt["ready"],
+            "provider_id": ai_rt["provider"],
+            "provider": short_label,
+            "label": ai_rt["label"],
+            "model": ai_rt["model"],
+            "active_model": ai_rt["model"] if ai_rt["active"] else "",
+            "purpose": ai_rt["purpose"],
+            "active_purpose": ai_rt["purpose"],
+        },
+        "asr": {
+            "active": asr_rt["active"],
+            "engine": asr_rt["engine"],
+            "label": "Faster-Whisper" if asr_rt["engine"] == "faster-whisper" else "Parakeet v2",
+            "model": asr_rt["model"],
+            "device": asr_rt["device"],
+            "compute_type": asr_rt["compute_type"],
+        },
+        "gpu": {
+            "active": gpu_active,
+            "available": has_gpu,
+            "enabled": gpu_enabled,
+            "name": gpu_short,
+            "full_name": gpu_hw.get("name") or ("NVIDIA GPU" if has_nvenc else "CPU"),
+            "vram_mb": gpu_hw.get("total_mb") or 0,
+            "nvenc": bool(has_nvenc),
+            "rendering_clips": rendering_clips,
+        },
+    }
+
+
+def regen_clip_titles(jid: str, cid: str) -> dict:
+    """Regenerate 3 fresh scroll-stopping heading + post title options for a single clip."""
+    job = _jobs.get(jid)
+    if not job or job.get("user") != ctx.uid():
+        raise ValueError("No such video")
+    clip = next((c for c in job.get("clips") or [] if c["id"] == cid), None)
+    if not clip:
+        raise ValueError("No such clip")
+    d = Path(job["dir"])
+    ef = d / "clips" / f"{cid}_edit.json"
+    ed = edit.load_edit(ef) if ef.is_file() else None
+
+    words_src = []
+    if ed and (ed.get("caption") or {}).get("words"):
+        words_src = ed["caption"]["words"]
+    elif clip.get("words"):
+        words_src = clip["words"]
+    else:
+        wf = d / "words.json"
+        if wf.is_file():
+            try:
+                all_w = json.loads(wf.read_text(encoding="utf-8"))
+                s0, e0 = float(clip.get("start", 0.0)), float(clip.get("end", 30.0))
+                words_src = [w for w in all_w if s0 - 1.0 <= float(w.get("s", 0.0)) <= e0 + 1.0]
+            except Exception:
+                words_src = []
+    text = " ".join(str(w.get("text") or w.get("w") or "").strip() for w in words_src).strip()
+    if not text:
+        text = f"{clip.get('hook') or ''} {clip.get('title') or ''} {clip.get('reason') or ''}".strip()
+
+    lang = (job.get("options") or {}).get("speech_lang") or job.get("lang") or ""
+    res = brain.regenerate_titles(
+        text=text,
+        title=job.get("title") or "",
+        uploader=job.get("uploader") or "",
+        game=job.get("game"),
+        lang=lang,
+        current_hook=(ed.get("hook", {}).get("text") if ed else None) or clip.get("hook") or "",
+        current_title=clip.get("title") or "",
+    )
+    clip["hook_options"] = res["hook_options"]
+    clip["title_options"] = res["title_options"]
+    save(job)
+    return res
 
 
 def _refresh_review_stage(job: dict) -> None:
@@ -1204,7 +1444,8 @@ def _fetch_piece(job, clip, full_audio):
         job.setdefault("width", meta["width"])
         job.setdefault("height", meta["height"])
     except Exception as e:  # noqa: BLE001
-        clip.update(status="error", error=f"Could not fetch this part of the video: {safe.friendly(e, 250)}")
+        detail = _classify_error(e, where=f"Downloading clip slice {clip.get('id', '')}")
+        clip.update(status="error", error=f"Could not fetch this part of the video: {detail['what'][:250]}", error_detail=detail)
 
 
 BLOCK = 10 * 60         # long videos are transcribed and clipped one block at a time
@@ -1310,7 +1551,18 @@ def _run_job(job):
         _set(job, stage="Getting the audio")
     fetch = ThreadPoolExecutor(1)
     video = None
-    if src["type"] == "url":
+    existing_src = Path(job["source_path"]) if job.get("source_path") and Path(job["source_path"]).is_file() else None
+    used_existing = False
+    if existing_src is not None:
+        # Reuse the already-downloaded video on disk (zero re-download on remake!)
+        used_existing = True
+        pieces, audio_file = False, existing_src
+        info = media.probe(audio_file)
+        _set(job, source_path=str(audio_file), width=info["width"], height=info["height"],
+             duration=job.get("duration") or info["duration"], stage="Reusing saved video on disk", progress=0.08)
+        if not job.get("thumb") and media.save_thumb(d, video=audio_file):
+            _set(job, thumb=True)
+    elif src["type"] == "url":
         meta = media.info(src["url"])
         if meta["kind"] != "video":
             raise RuntimeError("That link is a channel or playlist, not a single video. Paste the link of one video.")
@@ -1376,7 +1628,7 @@ def _run_job(job):
     media.extract_audio(audio_file, wav)
     audio = media.load_audio(wav)
     wav.unlink(missing_ok=True)
-    if src["type"] == "url":
+    if src["type"] == "url" and not used_existing:
         audio_file.unlink(missing_ok=True)
         if o.get("range_start"):
             silence = np.zeros(int(o["range_start"] * 16000), dtype=audio.dtype)
@@ -1388,7 +1640,8 @@ def _run_job(job):
     span = (hi - lo) / 16000
     db = media.loudness_per_second(audio[lo:hi])
 
-    vlock, vstate = threading.Lock(), {}
+    vlock, vstate = threading.Lock(), ({"path": existing_src} if used_existing else {})
+    remaking = bool(job.pop("remaking", False))
 
     def whole_video():
         """Wait for the background download once; retry it, or give up and use pieces."""
@@ -1465,7 +1718,14 @@ def _run_job(job):
     speech_lang = (o.get("speech_lang") or "auto").strip().lower()
     if speech_lang in ("en", "hi", "hinglish"):
         job["lang"] = speech_lang
-    if src["type"] == "url" and config.YT_TRANSCRIPT and media.is_youtube(src["url"]):
+    if remaking and (d / "words.json").is_file():
+        try:
+            cached_w = json.loads((d / "words.json").read_text(encoding="utf-8"))
+            if isinstance(cached_w, list) and _covers(cached_w, lo / 16000, hi / 16000):
+                yt = (cached_w, job.get("lang") or "")
+        except Exception:
+            pass
+    elif src["type"] == "url" and config.YT_TRANSCRIPT and media.is_youtube(src["url"]):
         try:
             yt = media.youtube_words(src["url"])
         except Exception:  # noqa: BLE001 - no transcript to borrow: ours is written as usual
@@ -1572,7 +1832,9 @@ def _run_job(job):
                 # DIRECT CLIP: Never drop, never scout, exact start and end!
                 transcript_text = " ".join(w.get("text") or w.get("w") or "" for w in clip_words).strip()
                 hook_text = ""
+                hook_opts = []
                 title_text = ""
+                title_opts = []
                 highlight_words = []
                 if transcript_text and len(transcript_text.split()) >= 3:
                     try:
@@ -1580,7 +1842,9 @@ def _run_job(job):
                                               uploader=job.get("uploader") or "", game=game)
                         if desc:
                             hook_text = desc.get("hook") or ""
+                            hook_opts = desc.get("hook_options") or []
                             title_text = desc.get("title") or ""
+                            title_opts = desc.get("title_options") or []
                             highlight_words = desc.get("highlight_words") or []
                     except Exception:
                         pass
@@ -1594,7 +1858,9 @@ def _run_job(job):
                     "start": round(r_start, 2),
                     "end": round(r_end, 2),
                     "hook": hook_text,
+                    "hook_options": hook_opts,
                     "title": title_text,
+                    "title_options": title_opts,
                     "score": 100,
                     "category": "custom",
                     "highlight_words": highlight_words,
@@ -1887,19 +2153,22 @@ def _worker(quick_only=False):
             _set(job, status="paused", stage="Paused by you", eta_sec=None)
         except Exception as e:  # noqa: BLE001
             (Path(job["dir"]) / "error.log").write_text(traceback.format_exc(), encoding="utf-8")
+            failed_stage = job.get("stage") or "Processing video"
             if kind == "job":
+                detail = _classify_error(e, where=failed_stage)
                 for c in job["clips"]:
                     if c.get("status") in ("queued", "rendering", "rendering_final", "drafting", "approved"):
-                        c.update(status="error", error="The video stopped before this clip was made.")
+                        c.update(status="error", error="The video stopped before this clip was made.", error_detail=detail)
                         c.pop("eta_sec", None)
-                _set(job, status="error", error=safe.friendly(e), stage="Stopped", eta_sec=None)
-                creators.log(job["creator"], f"Video failed: {safe.friendly(e)[:200]}")
+                _set(job, status="error", error=detail["what"], error_detail=detail, stage="Stopped", eta_sec=None)
+                creators.log(job["creator"], f"Video failed ({failed_stage}): {detail['what'][:200]}")
             elif kind in ("clip", "clip_final", "clip_draft") and cid:
                 clip = next((c for c in job.get("clips", []) if c["id"] == cid), None)
                 if clip and clip.get("status") in ("queued", "rendering", "rendering_final", "drafting", "approved"):
+                    detail = _classify_error(e, where=f"Clip {cid} ({kind})")
                     clip.pop("eta_sec", None)
                     clip.pop("render_started", None)
-                    clip.update(status="failed" if kind == "clip_draft" else "error", error=safe.friendly(e, 400))
+                    clip.update(status="failed" if kind == "clip_draft" else "error", error=detail["what"], error_detail=detail)
                     _refresh_review_stage(job)
                     save(job)
         finally:
