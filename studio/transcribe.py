@@ -1278,6 +1278,43 @@ def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = ""
     return _clean_words(raw_words)
 
 
+_live_asr_lock = threading.Lock()
+_live_asr = {"count": 0, "engine": "", "model": "", "device": "", "compute_type": "", "epoch": 0}
+
+
+def live_state() -> dict:
+    """Live speech-to-text runtime activity (used by home/clip status badges)."""
+    eng, wmod, _lang, gpu_on = _read_user_asr_settings()
+    with _live_asr_lock:
+        active = _live_asr["count"] > 0
+        e_now = _live_asr["engine"] if active and _live_asr["engine"] else eng
+        m_now = _live_asr["model"] if active and _live_asr["model"] else (wmod if e_now == "faster-whisper" else "parakeet-v2")
+        d_now = _live_asr["device"] if active and _live_asr["device"] else ""
+        c_now = _live_asr["compute_type"] if active and _live_asr["compute_type"] else ""
+        if not d_now:
+            if e_now == "faster-whisper":
+                d_now, c_now = _detect_whisper_device(gpu_on)
+            else:
+                d_now, c_now = PROVIDER, ("int8" if PROVIDER == "cpu" else "fp16")
+        return {
+            "active": active,
+            "count": _live_asr["count"],
+            "engine": e_now,
+            "model": m_now,
+            "device": d_now,
+            "compute_type": c_now,
+            "epoch": _live_asr["epoch"],
+        }
+
+
+def _bump_asr_rt():
+    try:
+        from . import ctx
+        ctx.bump()
+    except Exception:
+        pass
+
+
 def transcribe(audio: np.ndarray, on_progress=None, lang_hint: str = "", word_timestamps: bool = True,
                engine_override: str = None) -> list:
     """Returns [{'w': word, 's': start_sec, 'e': end_sec}, ...] using the active ASR engine
@@ -1287,6 +1324,25 @@ def transcribe(audio: np.ndarray, on_progress=None, lang_hint: str = "", word_ti
     hint_low = (lang_hint or "").strip().lower()
     if not engine_override and hint_low in ("hi", "hinglish", "hi-en", "en-hi") and faster_whisper_installed():
         eng = "faster-whisper"
-    if eng == "faster-whisper" and faster_whisper_installed():
-        return _transcribe_whisper(audio, on_progress=on_progress, lang_hint=lang_hint, word_timestamps=word_timestamps)
-    return _transcribe_parakeet(audio, on_progress=on_progress)
+    use_fw = eng == "faster-whisper" and faster_whisper_installed()
+    _e_cfg, wmod, _l_cfg, gpu_on = _read_user_asr_settings()
+    if use_fw:
+        dev, ctype = _detect_whisper_device(gpu_on)
+        run_eng, run_mod = "faster-whisper", wmod
+    else:
+        dev, ctype = PROVIDER, ("int8" if PROVIDER == "cpu" else "fp16")
+        run_eng, run_mod = "parakeet", "parakeet-v2"
+    with _live_asr_lock:
+        _live_asr["count"] += 1
+        _live_asr.update(engine=run_eng, model=run_mod, device=dev, compute_type=ctype)
+        _live_asr["epoch"] += 1
+    _bump_asr_rt()
+    try:
+        if use_fw:
+            return _transcribe_whisper(audio, on_progress=on_progress, lang_hint=lang_hint, word_timestamps=word_timestamps)
+        return _transcribe_parakeet(audio, on_progress=on_progress)
+    finally:
+        with _live_asr_lock:
+            _live_asr["count"] = max(0, _live_asr["count"] - 1)
+            _live_asr["epoch"] += 1
+        _bump_asr_rt()

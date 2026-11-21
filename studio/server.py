@@ -316,7 +316,7 @@ def _page(name, shared=False):
     """A page. The browser keeps its copy and asks each time whether it has changed; when it has not, the answer
     is a few bytes ("not modified") instead of the whole page again. Signed-in pages are never kept by anything
     in between (a proxy or CDN), only by the person's own browser."""
-    return FileResponse(WEB / name, headers={"Cache-Control": ("public" if shared else "private") + ", no-cache"})
+    return FileResponse(WEB / name, headers={"Cache-Control": ("public, no-cache" if shared else "private, no-store, max-age=0, must-revalidate")})
 
 
 _LANDING: dict = {}
@@ -593,7 +593,8 @@ def status(request: Request):
             "memes": {k: v for k, v in meme.MEME_MOODS.items() if k != "none"},
             "music_beds": {k: v for k, v in meme.MUSIC_BEDS.items() if k != "none"},
             "gpu": gpu_info,
-            "asr": transcribe.asr_status()}
+            "asr": transcribe.asr_status(),
+            "runtime": jobs.live_runtime()}
 
 
 @app.post("/api/gpu/toggle")
@@ -722,7 +723,8 @@ def _creator_rows():
 
 
 def _sync_token() -> str:
-    return f"{BOOT}.{ctx.version()}.{jobs.queue_epoch() if jobs.busy_count() else 0}"
+    rt_ep = jobs.live_runtime().get("epoch", 0)
+    return f"{BOOT}.{ctx.version()}.{jobs.queue_epoch() if jobs.busy_count() else 0}.{rt_ep}"
 
 
 def _sync_unchanged(v: str):
@@ -745,7 +747,8 @@ def sync(v: str = ""):
         return _sync_unchanged(v) or {"v": token}
     from . import notices
     return {"v": token, "jobs": [jobs.public(j) for j in jobs.list_jobs()], "creators": _creator_rows(),
-            "accounts": accounts.list_accounts(), "ai": usage.brief(), "unread": notices.unread()}
+            "accounts": accounts.list_accounts(), "ai": usage.brief(), "runtime": jobs.live_runtime(),
+            "unread": notices.unread()}
 
 
 @app.get("/api/jobs")
@@ -1160,6 +1163,18 @@ def approve_clip_endpoint(cid: str, jid: str = None):
         raise HTTPException(400, str(e))
 
 
+@app.post("/api/jobs/{jid}/clips/{cid}/regen-titles")
+def regen_clip_titles_endpoint(jid: str, cid: str):
+    _need_verified()
+    _job_or_404(jid)
+    try:
+        return jobs.regen_clip_titles(jid, cid)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, ai.explain(e) or "Could not regenerate titles: " + _ai_error(e))
+
+
 @app.post("/api/jobs/{jid}/apply-to-all")
 def apply_to_all_endpoint(jid: str, body: dict = Body(...)):
     _job_or_404(jid)
@@ -1199,6 +1214,21 @@ def pause_job(jid: str):
     job = _job_or_404(jid)
     try:
         updated = jobs.pause(jid)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return jobs.public(updated)
+
+
+@app.post("/api/jobs/{jid}/remake")
+def remake_job_endpoint(jid: str, body: dict = Body(default={})):
+    _need_verified()
+    _job_or_404(jid)
+    try:
+        updated = jobs.remake_job(
+            jid,
+            mode=str((body or {}).get("mode") or "rerender"),
+            retranscribe=bool((body or {}).get("retranscribe", False)),
+        )
     except ValueError as e:
         raise HTTPException(400, str(e))
     return jobs.public(updated)
@@ -1358,7 +1388,7 @@ def media_file(jid: str, name: str, download: int = 0):
     f = Path(_job_or_404(jid)["dir"]) / "clips" / name
     if not f.is_file():
         raise HTTPException(404)
-    return FileResponse(f, filename=name if download else None, headers={"Cache-Control": "private, max-age=300"})
+    return FileResponse(f, filename=name if download else None, headers={"Cache-Control": "private, no-cache, must-revalidate"})
 
 
 @app.get("/api/audio/sample/{category}/{name}")
@@ -1688,7 +1718,7 @@ def ai_models(request: Request, body: dict = Body(default={})):
     _admin(request)
     _throttle("aimodels:" + ctx.uid(), 30, 600)
     try:
-        return {"models": ai.list_models(body.get("provider"), body.get("base_url"), body.get("key"))}
+        return ai.list_models_detail(body.get("provider"), body.get("base_url"), body.get("key"))
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:  # noqa: BLE001

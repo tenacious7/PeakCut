@@ -15,7 +15,10 @@ import base64
 import json
 import os
 import re
+import shutil
+import subprocess
 import threading
+import time
 
 import httpx
 
@@ -38,6 +41,61 @@ NO_KEY = {"ollama", "custom"}       # a model running on your own machine needs 
 # ---------------------------------------------------------------- the settings in use
 _lock = threading.Lock()
 _saved = {"at": None, "data": {}}
+
+# ---------------------------------------------------------------- live runtime activity (for UI status indicators)
+_rt_lock = threading.Lock()
+_rt = {"count": 0, "provider": "", "label": "", "model": "", "purpose": "", "since": 0.0, "epoch": 0}
+
+
+def _bump_rt():
+    try:
+        from . import ctx
+        ctx.bump()
+    except Exception:
+        pass
+
+
+def _rt_enter(prov: str, model: str, purpose: str = ""):
+    with _rt_lock:
+        _rt["count"] += 1
+        _rt["provider"] = prov
+        _rt["label"] = PROVIDERS.get(prov, (prov or "AI",))[0]
+        _rt["model"] = model or ""
+        _rt["purpose"] = purpose or "Working"
+        if _rt["count"] == 1:
+            _rt["since"] = time.time()
+        _rt["epoch"] += 1
+    _bump_rt()
+
+
+def _rt_exit():
+    with _rt_lock:
+        _rt["count"] = max(0, _rt["count"] - 1)
+        if _rt["count"] == 0:
+            _rt["purpose"] = ""
+            _rt["since"] = 0.0
+        _rt["epoch"] += 1
+    _bump_rt()
+
+
+def runtime_state() -> dict:
+    """Whether an AI request is currently in flight, and which provider/model is handling it."""
+    c = current()
+    with _rt_lock:
+        active = _rt["count"] > 0
+        prov = _rt["provider"] if active and _rt["provider"] else c["provider"]
+        mod = _rt["model"] if active and _rt["model"] else (c["models"][0] if c["models"] else "")
+        return {
+            "active": active,
+            "count": _rt["count"],
+            "provider": prov,
+            "label": PROVIDERS.get(prov, (prov or "Not set up",))[0],
+            "model": mod,
+            "purpose": _rt["purpose"] if active else "",
+            "since": _rt["since"] if active else 0.0,
+            "epoch": _rt["epoch"],
+            "ready": ready(),
+        }
 
 
 def _file():
@@ -142,12 +200,95 @@ def save(provider_id: str, model_ids, address: str = "", new_key=None) -> dict:
     return public()
 
 
-def list_models(provider_id=None, address=None, with_key=None) -> list:
-    """The model ids a service offers, so the settings page can show a list to pick from."""
+def _ollama_origin(address: str | None = None) -> str:
+    """Base HTTP origin of an Ollama server (without trailing /v1 or /api)."""
+    raw = str(address or "").strip().rstrip("/")
+    if not raw:
+        c = current()
+        raw = (c["base_url"] if c["provider"] == "ollama" else "") or "http://127.0.0.1:11434"
+    raw = re.sub(r"/(?:v1|api)(?:/.*)?$", "", raw, flags=re.I).rstrip("/")
+    return raw or "http://127.0.0.1:11434"
+
+
+def list_ollama_models(address: str | None = None) -> list:
+    """List ONLY real local Ollama chat models (including custom Modelfile creations like reasoning-queen).
+    Queries native /api/tags first (skipping cloud/remote proxy stubs and embedding-only models),
+    and only falls back to /v1/models or `ollama list` CLI when /api/tags returns nothing."""
+    origin = _ollama_origin(address)
+    if "127.0.0.1" in origin or "localhost" in origin:
+        ensure_ollama_running()
+    found: list[str] = []
+    seen: set[str] = set()
+
+    def _add(name: str):
+        n = str(name or "").strip()
+        if not n:
+            return
+        low = n.lower()
+        # Skip pure embedding models that cannot generate clip JSON
+        if "embed" in low or "rerank" in low:
+            return
+        if n not in seen:
+            seen.add(n)
+            found.append(n)
+
+    # 1. Native Ollama /api/tags — authoritative list of local models (includes custom Modelfile models)
+    tags_ok = False
+    try:
+        r = httpx.get(f"{origin}/api/tags", timeout=5.0)
+        if r.status_code == 200:
+            tags_ok = True
+            for m in r.json().get("models", []) or []:
+                if not isinstance(m, dict):
+                    continue
+                # Skip Ollama cloud/remote stub entries that are not downloaded locally
+                if m.get("remote_host") or m.get("remote_model"):
+                    continue
+                _add(m.get("name") or m.get("model") or "")
+    except Exception:
+        pass
+
+    # 2. Only fall back to /v1/models if native /api/tags did not answer or returned empty
+    if not found and not tags_ok:
+        try:
+            r = httpx.get(f"{origin}/v1/models", timeout=5.0)
+            if r.status_code == 200:
+                for m in r.json().get("data", []) or []:
+                    if isinstance(m, dict):
+                        _add(m.get("id") or "")
+        except Exception:
+            pass
+
+    # 3. CLI fallback (`ollama list`) if HTTP returned nothing on localhost
+    if not found and ("127.0.0.1" in origin or "localhost" in origin):
+        try:
+            exe = shutil.which("ollama") or (os.environ.get("LOCALAPPDATA", "") + r"\Programs\Ollama\ollama.exe")
+            if exe and os.path.isfile(exe):
+                cp = subprocess.run([exe, "list"], capture_output=True, text=True, timeout=6)
+                if cp.returncode == 0:
+                    for line in (cp.stdout or "").splitlines()[1:]:
+                        parts = line.strip().split()
+                        if parts:
+                            _add(parts[0])
+        except Exception:
+            pass
+
+    return found[:400]
+
+
+def list_models_detail(provider_id=None, address=None, with_key=None) -> dict:
+    """Return discovered model ids together with the exact provider and endpoint queried."""
     c = current()
     p = ALIASES.get(str(provider_id or c["provider"]).lower(), str(provider_id or c["provider"]).lower())
     if p not in PROVIDERS:
         raise ValueError("Choose one of the AI services in the list.")
+    lbl = PROVIDERS[p][0]
+    if p == "ollama":
+        origin = _ollama_origin(address)
+        found = list_ollama_models(address)
+        if not found:
+            raise AIError("Could not reach Ollama or no local models are installed yet. Make sure Ollama is running (`ollama serve`) and check `ollama list`.")
+        return {"models": found, "provider": p, "label": lbl, "source": origin}
     k = str(with_key or "").strip() or (c["key"] if c["provider"] == p else "")
     base = str(address or "").strip().rstrip("/") or (c["base_url"] if c["provider"] == p else "") or PROVIDERS[p][1]
     if not base:
@@ -167,7 +308,12 @@ def list_models(provider_id=None, address=None, with_key=None) -> list:
                  if "generateContent" in (m.get("supportedGenerationMethods") or [])]
     else:
         found = [m.get("id", "") for m in data.get("data", []) if isinstance(m, dict)]
-    return sorted({m for m in found if m})[:400]
+    return {"models": sorted({m for m in found if m})[:400], "provider": p, "label": lbl, "source": base}
+
+
+def list_models(provider_id=None, address=None, with_key=None) -> list:
+    """The model ids a service offers, so the settings page can show a list to pick from."""
+    return list_models_detail(provider_id, address, with_key)["models"]
 
 
 def test() -> dict:
@@ -260,19 +406,37 @@ def _json_chunks(text: str):
     return out
 
 
-def _parse(text):
-    """The JSON in an answer, even if the model wrapped it in a code fence or a sentence.
+def _strip_reasoning(text: str) -> str:
+    """Remove <think>...</think> reasoning blocks emitted by local reasoning models (Qwen3/DeepSeek-R1/custom Modelfiles)."""
+    s = (text or "").strip()
+    if not s:
+        return ""
+    s = re.sub(r"<think>[\s\S]*?</think>", "", s, flags=re.I).strip()
+    # Handle truncated/unclosed <think> where JSON still appears after it, or strip dangling tag
+    if "<think>" in s.lower():
+        m = re.search(r"[\[{]", s)
+        if m:
+            s = s[m.start():].strip()
+    return s
 
-    A model that is not careful sometimes puts a sentence in front of the JSON,
-    or a second object after it, or forgets a comma. The JSON is looked for
-    inside the answer rather than demanded of it."""
-    text = (text or "").strip()
-    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
+
+def _parse(text):
+    """The JSON in an answer, even if the model wrapped it in <think> blocks, a code fence, or a sentence.
+
+    A model that is not careful sometimes puts reasoning or a sentence in front of the JSON,
+    or a second object after it. The JSON is looked for inside the answer rather than demanded of it."""
+    text = _strip_reasoning(text)
+    # Extract fenced JSON block if present anywhere in the response
+    fence = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text, flags=re.I)
+    if fence:
+        text = fence.group(1).strip()
+    else:
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text).strip()
     out = None
     try:
         out = json.loads(text)
     except ValueError:
-        for chunk in _json_chunks(text):
+        for chunk in reversed(_json_chunks(text)):
             try:
                 out = json.loads(chunk)
                 break
@@ -292,7 +456,7 @@ def _parse(text):
 
 
 # ---------------------------------------------------------------- one call
-def call(model: str, prompt: str, schema: dict, timeout: float | None = None):
+def call(model: str, prompt: str, schema: dict, timeout: float | None = None, purpose: str = ""):
     """Ask one model. Returns (the parsed JSON answer, tokens sent, tokens written back).
 
     `timeout` is how long one answer may take. A live stream passes a short one, because a slow
@@ -300,9 +464,16 @@ def call(model: str, prompt: str, schema: dict, timeout: float | None = None):
     for prefix in ("ollama:", "ollama/", "local:", "local/"):
         if model.lower().startswith(prefix):
             target_model = model[len(prefix):]
-            return call_ollama(target_model, prompt, schema, timeout=timeout)
-    how = PROVIDERS[provider()][2]
-    return {"gemini": _gemini, "openai": _openai, "anthropic": _anthropic}[how](model, prompt, schema, timeout)
+            return call_ollama(target_model, prompt, schema, timeout=timeout, purpose=purpose)
+    prov = provider()
+    how = PROVIDERS[prov][2]
+    _rt_enter(prov, model, purpose or "Thinking")
+    try:
+        if prov == "ollama":
+            ensure_ollama_running()
+        return {"gemini": _gemini, "openai": _openai, "anthropic": _anthropic}[how](model, prompt, schema, timeout)
+    finally:
+        _rt_exit()
 
 
 def ensure_ollama_running() -> bool:
@@ -352,11 +523,15 @@ def get_local_ollama_model() -> str | None:
     return None
 
 
-def call_ollama(model: str, prompt: str, schema: dict, timeout: float | None = None):
+def call_ollama(model: str, prompt: str, schema: dict, timeout: float | None = None, purpose: str = ""):
     """Directly call a local Ollama instance on 127.0.0.1:11434."""
     ensure_ollama_running()
-    return _openai(model, prompt, schema, timeout=timeout or 180,
-                   base_url_override="http://127.0.0.1:11434/v1", key_override="")
+    _rt_enter("ollama", model, purpose or "Local AI")
+    try:
+        return _openai(model, prompt, schema, timeout=timeout or 180,
+                       base_url_override="http://127.0.0.1:11434/v1", key_override="")
+    finally:
+        _rt_exit()
 
 
 def see(prompt: str, image: bytes, timeout: float | None = None) -> tuple[str, int, int]:
@@ -474,21 +649,35 @@ def _from_events(text: str) -> dict:
 
 def _openai(model, prompt, schema, timeout=None, base_url_override=None, key_override=None):
     burl = (base_url_override or base_url()).rstrip("/")
+    is_ollama = bool(base_url_override and "11434" in base_url_override) or provider() == "ollama" or "11434" in burl
+    if is_ollama and not burl.lower().endswith("/v1"):
+        burl = f"{_ollama_origin(burl)}/v1"
     k = key() if key_override is None else key_override
     headers = {"Authorization": f"Bearer {k}"} if k else {}
     body = {"model": model, "messages": [{"role": "user", "content": _wrapped(prompt, schema)}], "stream": False}
-    # Most services accept these two extras; a few models refuse one of them, so they are dropped on a refusal.
-    extras = [{"temperature": 0.4, "response_format": {"type": "json_object"}}, {"response_format": {"type": "json_object"}}, {}]
+    # Reasoning models on Ollama (e.g. reasoning-queen, deepseek-r1, qwen3-thinking) can stall or return empty
+    # text when forced into strict json_object grammar mode, so send plain JSON instructions first for them.
+    mlow = (model or "").lower()
+    is_reasoning = any(tok in mlow for tok in ("reason", "r1", "think", "qwq", "o1", "o3"))
+    if is_ollama and is_reasoning:
+        extras = [{"temperature": 0.4}, {}]
+    else:
+        extras = [{"temperature": 0.4, "response_format": {"type": "json_object"}}, {"response_format": {"type": "json_object"}}, {}]
     r = None
+    req_timeout = httpx.Timeout(timeout or 180, connect=15.0)
     for extra in extras:
-        r = httpx.post(f"{burl}/chat/completions", json={**body, **extra}, headers=headers, timeout=timeout or 180)
+        r = httpx.post(f"{burl}/chat/completions", json={**body, **extra}, headers=headers, timeout=req_timeout)
         if r.status_code not in (400, 422):
             break
     if r.status_code != 200:
         _fail(r, model)
     data = _openai_body(r)
+    msg = (data.get("choices") or [{}])[0].get("message") or {}
+    content = msg.get("content") or ""
+    if not content.strip() and (msg.get("reasoning") or msg.get("reasoning_content")):
+        content = msg.get("reasoning") or msg.get("reasoning_content") or ""
     u = data.get("usage") or {}
-    return _parse(data["choices"][0]["message"].get("content")), int(u.get("prompt_tokens") or 0), int(u.get("completion_tokens") or 0)
+    return _parse(content), int(u.get("prompt_tokens") or 0), int(u.get("completion_tokens") or 0)
 
 
 def _anthropic(model, prompt, schema, timeout=None):
