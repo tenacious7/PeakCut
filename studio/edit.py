@@ -165,18 +165,24 @@ def init_edit(job: dict, clip: dict, words: list = None, facecam: list = None) -
         except (ValueError, TypeError):
             fc_dict["zoom"] = 1.0
 
-    # Normalize words
+    # Normalize words (accept absolute timestamps, piece-local timestamps shifted by src_offset, or clip-relative 0..dur)
     cap_words = []
     w_src = clip.get("words") or words or []
     c_start = float(clip.get("start", 0.0) or 0.0)
     c_end = float(clip.get("end", c_start + 30.0) or (c_start + 30.0))
+    c_off = float(clip.get("src_offset", 0.0) or 0.0)
+    loc_start = max(0.0, c_start - c_off)
+    loc_end = max(loc_start + 0.5, c_end - c_off)
     for w in w_src:
         text = str(w.get("text") if "text" in w else w.get("w", ""))
         if roman.needs_roman(text):
             text = roman.to_roman(text)
         s = round(float(w.get("start") if "start" in w else w.get("s", 0.0)), 2)
         e = round(float(w.get("end") if "end" in w else w.get("e", s + 0.3)), 2)
-        if text.strip() and (c_start - 2.0 <= s <= c_end + 2.0 or 0 <= s <= (c_end - c_start) + 2.0):
+        in_abs = (c_start - 2.0 <= s <= c_end + 2.0)
+        in_loc = (loc_start - 2.0 <= s <= loc_end + 2.0)
+        in_rel = (0.0 <= s <= (c_end - c_start) + 2.0)
+        if text.strip() and (in_abs or in_loc or in_rel):
             cap_words.append({"text": text, "start": s, "end": e})
 
     hook_text = str(clip.get("hook") or "").strip()

@@ -1175,6 +1175,25 @@ def regen_clip_titles_endpoint(jid: str, cid: str):
         raise HTTPException(502, ai.explain(e) or "Could not regenerate titles: " + _ai_error(e))
 
 
+@app.post("/api/jobs/{jid}/clips/{cid}/regen-captions")
+def regen_clip_captions_endpoint(jid: str, cid: str, body: dict = Body(default={})):
+    _need_verified()
+    _job_or_404(jid)
+    try:
+        return jobs.regen_clip_captions(
+            jid,
+            cid,
+            engine=str((body or {}).get("engine") or ""),
+            whisper_model=str((body or {}).get("whisper_model") or ""),
+            language=str((body or {}).get("language") or ""),
+            fix_with_ai=bool((body or {}).get("fix_with_ai", True)),
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, safe.friendly(e, 240))
+
+
 @app.post("/api/jobs/{jid}/apply-to-all")
 def apply_to_all_endpoint(jid: str, body: dict = Body(...)):
     _job_or_404(jid)

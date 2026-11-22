@@ -328,7 +328,106 @@ def _execute_download(opts: dict, url: str):
         raise e
 
 
-def _video_format(height):
+_LANG_NAMES = {
+    "hi": "Hindi", "en": "English", "es": "Spanish", "fr": "French", "de": "German",
+    "pt": "Portuguese", "ru": "Russian", "ar": "Arabic", "ja": "Japanese", "ko": "Korean",
+    "id": "Indonesian", "tr": "Turkish", "vi": "Vietnamese", "th": "Thai", "it": "Italian",
+    "pl": "Polish", "nl": "Dutch", "ta": "Tamil", "te": "Telugu", "bn": "Bengali",
+    "mr": "Marathi", "gu": "Gujarati", "kn": "Kannada", "ml": "Malayalam", "pa": "Punjabi",
+    "ur": "Urdu", "zh": "Chinese", "fil": "Filipino", "ms": "Malay", "uk": "Ukrainian",
+}
+
+
+def _clean_audio_lang(audio_lang: str = "") -> str:
+    s = re.sub(r"[^a-zA-Z0-9-]", "", str(audio_lang or "").strip())
+    return s[:16]
+
+
+def _extract_audio_tracks(info_dict: dict) -> list:
+    """Extract available audio tracks (e.g. MrBeast Hindi/English/Spanish dubs) from yt-dlp formats."""
+    formats = info_dict.get("formats") or []
+    orig_lang = str(info_dict.get("language") or "").strip().lower()
+    seen: dict = {}
+    for f in formats:
+        if not isinstance(f, dict):
+            continue
+        if f.get("acodec") in (None, "none"):
+            continue
+        raw_code = str(f.get("language") or "").strip()
+        if not raw_code or raw_code.lower() in ("und", "none", "unknown"):
+            continue
+        code = _clean_audio_lang(raw_code)
+        if not code:
+            continue
+        base = code.split("-")[0].lower()
+        note = str(f.get("format_note") or "").strip()
+        note_low = note.lower()
+        # Skip audio-description tracks when normal track exists
+        if "descriptive" in note_low and base in seen:
+            continue
+        pref = f.get("language_preference")
+        is_orig = (
+            "original" in note_low
+            or "default" in note_low
+            or (isinstance(pref, (int, float)) and pref >= 10)
+            or (orig_lang and (code.lower() == orig_lang or base == orig_lang.split("-")[0]))
+        )
+        nice_name = _LANG_NAMES.get(base)
+        if not nice_name:
+            cleaned_note = re.sub(r"\b(original|default|dubbed|medium|low|high|audio|drc)\b", "", note, flags=re.I).strip(" ,()-")
+            nice_name = cleaned_note if cleaned_note else code.upper()
+        cur = seen.get(base)
+        if not cur or (is_orig and not cur["original"]):
+            seen[base] = {
+                "code": base,
+                "raw_code": code,
+                "name": nice_name,
+                "original": bool(is_orig),
+            }
+
+    tracks = []
+    for t in seen.values():
+        lbl = f"{t['name']} (Original)" if t["original"] else t["name"]
+        tracks.append({"code": t["code"], "label": lbl, "original": t["original"]})
+
+    # Sort: Original first, then Hindi & English near top, then alphabetical
+    def _sort_key(t):
+        if t["original"]:
+            return (0, t["label"].lower())
+        if t["code"] == "hi":
+            return (1, t["label"].lower())
+        if t["code"] == "en":
+            return (2, t["label"].lower())
+        return (3, t["label"].lower())
+
+    tracks.sort(key=_sort_key)
+    return tracks
+
+
+def _audio_format(audio_lang: str = "") -> str:
+    lang = _clean_audio_lang(audio_lang)
+    if lang:
+        base = lang.split("-")[0]
+        return (
+            f"ba[language={lang}][ext=m4a]/ba[language={lang}]/"
+            f"ba[language^={base}][ext=m4a]/ba[language^={base}]/"
+            f"ba[ext=m4a]/ba/worst"
+        )
+    return "ba[ext=m4a]/ba/worst"
+
+
+def _video_format(height, audio_lang: str = ""):
+    lang = _clean_audio_lang(audio_lang)
+    if lang:
+        base = lang.split("-")[0]
+        return (
+            f"bv*[height<={height}][vcodec^=avc1]+ba[language={lang}]/"
+            f"bv*[height<={height}]+ba[language={lang}]/"
+            f"bv*[height<={height}][vcodec^=avc1]+ba[language^={base}]/"
+            f"bv*[height<={height}]+ba[language^={base}]/"
+            f"bv*[height<={height}][vcodec^=avc1]+ba[ext=m4a]/"
+            f"bv*[height<={height}]+ba/b[height<={height}]/b"
+        )
     return f"bv*[height<={height}][vcodec^=avc1]+ba[ext=m4a]/bv*[height<={height}]+ba/b[height<={height}]/b"
 
 
@@ -379,7 +478,8 @@ def info(url: str) -> dict:
         raise
     out = {"title": i.get("title") or "", "uploader": i.get("uploader") or i.get("channel") or "",
            "duration": float(i.get("duration") or 0), "is_live": bool(i.get("is_live")),
-           "thumbnail": i.get("thumbnail") or "", "kind": i.get("_type") or "video"}
+           "thumbnail": i.get("thumbnail") or "", "kind": i.get("_type") or "video",
+           "audio_tracks": _extract_audio_tracks(i)}
     if len(_INFO_CACHE) > 300:
         _INFO_CACHE.pop(next(iter(_INFO_CACHE)))
     _INFO_CACHE[url] = (now, dict(out))
@@ -547,7 +647,7 @@ def preview(url: str) -> dict:
         except Exception:
             thumb = ""
     out = {"title": i["title"][:200], "uploader": i["uploader"][:120], "duration": i["duration"],
-           "is_live": i["is_live"], "thumb": thumb}
+           "is_live": i["is_live"], "thumb": thumb, "audio_tracks": i.get("audio_tracks") or []}
     if len(_PREVIEWS) > 300:
         _PREVIEWS.pop(next(iter(_PREVIEWS)))
     _PREVIEWS[url] = out
@@ -647,7 +747,8 @@ def _download_staged(url: str, out_dir: Path, stem: str, opts: dict) -> Path:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def download_audio(url: str, job_dir: Path, on_progress=None, is_paused=None, start=None, end=None) -> Path:
+def download_audio(url: str, job_dir: Path, on_progress=None, is_paused=None, start=None, end=None,
+                   audio_lang: str = "") -> Path:
     """Audio only: a few seconds even for long videos, and all the AI needs to pick clips."""
     def hook(d):
         if is_paused and is_paused():
@@ -664,7 +765,7 @@ def download_audio(url: str, job_dir: Path, on_progress=None, is_paused=None, st
                 on_progress(pct)
 
     opts = {
-        "format": "ba[ext=m4a]/ba/worst",
+        "format": _audio_format(audio_lang),
         "progress_hooks": [hook],
         "is_audio": True,
         "external_downloader": None,
@@ -679,16 +780,16 @@ def download_audio(url: str, job_dir: Path, on_progress=None, is_paused=None, st
     return _download_staged(url, job_dir, "audio_src", opts)
 
 
-def download(url: str, job_dir: Path, height=720) -> Path:
+def download(url: str, job_dir: Path, height=720, audio_lang: str = "") -> Path:
     """The whole video. Used for shorter videos, where this is quicker than fetching pieces."""
-    opts = {"format": _video_format(height), "merge_output_format": "mp4"}
+    opts = {"format": _video_format(height, audio_lang=audio_lang), "merge_output_format": "mp4"}
     if is_youtube(url):
         opts["external_downloader"] = None
     return _download_staged(url, job_dir, "source", opts)
 
 
 def download_section(url: str, out_dir: Path, stem: str, start: float, end: float, height=720, exact=False,
-                     on_progress=None, is_paused=None) -> Path:
+                     on_progress=None, is_paused=None, audio_lang: str = "") -> Path:
     """Just one stretch of the video. The cut lands on a keyframe, so find_offset() pins the true start; with
     exact=True the cut is made at exactly `start` instead (slower), for when there is nothing to match against."""
     from yt_dlp.utils import download_range_func
@@ -703,7 +804,7 @@ def download_section(url: str, out_dir: Path, stem: str, start: float, end: floa
             except TypeError:
                 on_progress(pct)
 
-    opts = {"format": _video_format(height), "merge_output_format": "mp4",
+    opts = {"format": _video_format(height, audio_lang=audio_lang), "merge_output_format": "mp4",
             "download_ranges": download_range_func(None, [(max(0.0, start), end)]),
             "progress_hooks": [hook],
             "external_downloader": None}
@@ -731,7 +832,8 @@ def probe(path: Path) -> dict:
     v = next((s for s in data["streams"] if s["codec_type"] == "video"), None)
     if not v:
         raise RuntimeError("This file has no video track.")
-    if not any(s["codec_type"] == "audio" for s in data["streams"]):
+    a = next((s for s in data["streams"] if s["codec_type"] == "audio"), None)
+    if not a:
         raise RuntimeError("This file has no audio track, so there is nothing to transcribe.")
     w, h = int(v["width"]), int(v["height"])
     if w * h > 3840 * 2160 or w < 16 or h < 16:
@@ -739,7 +841,16 @@ def probe(path: Path) -> dict:
     rot = str((v.get("side_data_list") or [{}])[0].get("rotation", "0"))
     if rot.lstrip("-") in ("90", "270"):
         w, h = h, w
-    return {"width": w, "height": h, "duration": float(data["format"]["duration"])}
+    fmt_dur = float(data["format"]["duration"])
+    aud_dur = fmt_dur
+    try:
+        if a.get("duration") is not None:
+            ad = float(a["duration"])
+            if ad > 0:
+                aud_dur = ad
+    except (ValueError, TypeError):
+        pass
+    return {"width": w, "height": h, "duration": fmt_dur, "audio_duration": aud_dur}
 
 
 def extract_audio(src: Path, wav: Path):
