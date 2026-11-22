@@ -797,6 +797,9 @@ def remake_job(jid: str, mode: str = "rerender", retranscribe: bool = False) -> 
             c["_fast_caption_only"] = False
             c.pop("fixed_words", None)
             c.pop("fixed_for", None)
+            if retranscribe:
+                c.pop("words", None)
+                c.pop("src_words", None)
             c.pop("error_detail", None)
             if c.get("layout") == "stack":
                 c["hook_y"] = None
@@ -814,10 +817,11 @@ def remake_job(jid: str, mode: str = "rerender", retranscribe: bool = False) -> 
 
     # Full re-process using the saved local video on disk (no re-download!)
     if retranscribe:
-        try:
-            (d / "words.json").unlink(missing_ok=True)
-        except OSError:
-            pass
+        for stale_w in (d / "words.json", d / "words_en.json"):
+            try:
+                stale_w.unlink(missing_ok=True)
+            except OSError:
+                pass
     # Clean old rendered clips so fresh clips are created cleanly
     for f in clips_dir.glob("*"):
         if f.is_file() and not f.name.startswith("piece_"):
@@ -1324,7 +1328,7 @@ def set_job_facecam(jid: str, facecam: dict | list) -> dict:
 
 
 def _caption_words(job, clip, words, off):
-    span = [round(clip["start"], 2), round(clip["end"], 2), "en2"]      # "en2": captions made always-English
+    span = [round(clip["start"], 2), round(clip["end"], 2), "en3"]      # "en3": Roman Hinglish / English captions
     if clip.get("fixed_for") == span and clip.get("fixed_words") and not any(
             roman.needs_roman(w.get("w", "")) for w in clip["fixed_words"]):
         raw = clip["fixed_words"]          # already tidied for this exact span: no second AI call
@@ -1453,11 +1457,13 @@ PROGRESSIVE_FROM = 20 * 60
 
 
 def _covers(words: list, start: float, end: float) -> bool:
-    """Is a borrowed transcript good enough to find clips with? It has to reach the end of the part being clipped
+    """Is a borrowed transcript good enough to find clips with? It has to cover most of the part being clipped
     and have a normal amount of talking in it; otherwise our own model writes the transcript."""
     inside = [w for w in words if start <= w["s"] <= end]
+    if not inside:
+        return False
     minutes = max(0.5, (end - start) / 60)
-    return len(inside) >= 25 * minutes and inside[-1]["s"] >= start + 0.85 * (end - start)
+    return len(inside) >= max(8, int(12 * minutes)) and inside[-1]["s"] >= start + 0.72 * (end - start)
 
 
 def _facecam(job, src=None, window=None) -> list | None:
@@ -1675,30 +1681,40 @@ def _run_job(job):
             cam = job.get("facecam") or (src_file and _facecam(job, src=src_file))
             if cam:
                 clip["facecam"] = cam
-        speech_lang = (o.get("speech_lang") or "auto").strip().lower()
-        whisper_active = (transcribe.active_engine() == "faster-whisper") or (
+        speech_lang = _eff_speech_lang
+        user_chose_whisper = transcribe.active_engine() == "faster-whisper"
+        whisper_active = user_chose_whisper or (
             speech_lang in ("hi", "hinglish") and transcribe.faster_whisper_installed()
         )
+        yt_lang = str(yt[1] or "").lower() if yt else ""
+        # When user is on Parakeet (not Whisper) and YouTube gave us real Hindi captions, KEEP YouTube's
+        # Hindi captions instead of overwriting them — Parakeet-v2 is English-only and YouTube's Hindi track works great!
+        keep_yt_hindi = bool(yt and yt_lang.startswith("hi") and not user_chose_whisper)
         should_retranscribe = bool(
-            (yt and (
-                yt[1].lower().startswith("en")
-                or whisper_active
-                or brain.needs_translation(yt[1])
-            ))
-            # When Faster-Whisper scanned the full video fast with word_timestamps=False,
-            # run crisp word_timestamps=True ONLY on this short selected clip!
-            or (not yt and whisper_active and not o.get("custom_ranges"))
+            not keep_yt_hindi and (
+                (yt and (
+                    yt_lang.startswith("en")
+                    or user_chose_whisper
+                    or brain.needs_translation(yt_lang)
+                ))
+                # When Faster-Whisper scanned the full video fast with word_timestamps=False,
+                # run crisp word_timestamps=True ONLY on this short selected clip!
+                or (not yt and whisper_active and not o.get("custom_ranges"))
+            )
         )
         if clip["status"] not in ("error", "failed") and clip.get("captions", True) and should_retranscribe:
             # Run crisp word-level timestamps on just this short clip (fast even on CPU, instant on GPU).
             a0, b0 = max(lo, int((clip["start"] - 1.5) * 16000)), min(hi, int((clip["end"] + 1.5) * 16000))
             eff_lang_hint = speech_lang if speech_lang in ("en", "hi", "hinglish") else (job.get("lang") or "")
+            existing_slice = [w for w in words_now if clip["start"] - 1.0 <= w["s"] <= clip["end"] + 1.0]
             try:
                 tw = [dict(w, s=round(w["s"] + a0 / 16000, 2), e=round(w["e"] + a0 / 16000, 2))
                       for w in transcribe.transcribe(audio[a0:b0], lang_hint=eff_lang_hint, word_timestamps=True)]
             except Exception:  # noqa: BLE001 - the clip is still made, with existing words
                 tw = []
-            if len(tw) >= 3:
+            # Only replace a valid YouTube Hindi transcript if Whisper produced solid speech coverage
+            min_needed = max(3, int(len(existing_slice) * 0.45)) if (yt and yt_lang.startswith("hi") and existing_slice) else 3
+            if len(tw) >= min_needed:
                 exact[clip["id"]] = (a0 / 16000, b0 / 16000, tw)
                 words_now = tw
                 clip.pop("fixed_for", None)
@@ -1715,7 +1731,16 @@ def _run_job(job):
     words, tokens, model = [], 0, None
     done_blocks = 0
     yt = None
-    speech_lang = (o.get("speech_lang") or "auto").strip().lower()
+    _opt_lang = (o.get("speech_lang") or "auto").strip().lower()
+    if _opt_lang in ("en", "hi", "hinglish"):
+        _eff_speech_lang = _opt_lang
+    else:
+        try:
+            _cfg_lang = str((accounts.settings() or {}).get("asr_language") or "auto").strip().lower()
+        except Exception:
+            _cfg_lang = "auto"
+        _eff_speech_lang = _cfg_lang if _cfg_lang in ("en", "hi", "hinglish") else "auto"
+    speech_lang = _eff_speech_lang
     if speech_lang in ("en", "hi", "hinglish"):
         job["lang"] = speech_lang
     if remaking and (d / "words.json").is_file():
@@ -1727,7 +1752,7 @@ def _run_job(job):
             pass
     elif src["type"] == "url" and config.YT_TRANSCRIPT and media.is_youtube(src["url"]):
         try:
-            yt = media.youtube_words(src["url"])
+            yt = media.youtube_words(src["url"], prefer_lang=speech_lang)
         except Exception:  # noqa: BLE001 - no transcript to borrow: ours is written as usual
             yt = None
         if yt and not _covers(yt[0], lo / 16000, hi / 16000):
@@ -1739,6 +1764,11 @@ def _run_job(job):
         if speech_lang not in ("en", "hi", "hinglish"):
             # Never let YouTube's auto-tag override Auto speech detection unless we actually borrowed YouTube's captions
             job["lang"] = yt[1] if yt else ""
+    if not yt and speech_lang in ("hi", "hinglish") and not transcribe.faster_whisper_installed():
+        notes.append(
+            "Parakeet-v2 only understands English and this video has no Hindi YouTube transcript. "
+            "Install and enable Faster-Whisper in Settings for accurate local Hindi/Hinglish captions."
+        )
     if resuming:
         try:
             words = json.loads((d / "words.json").read_text(encoding="utf-8"))

@@ -14,20 +14,42 @@ _CONS = {"क": "k", "ख": "kh", "ग": "g", "घ": "gh", "ङ": "n", "च": "c
          "ञ": "n", "ट": "t", "ठ": "th", "ड": "d", "ढ": "dh", "ण": "n", "त": "t", "थ": "th", "द": "d", "ध": "dh",
          "न": "n", "प": "p", "फ": "ph", "ब": "b", "भ": "bh", "म": "m", "य": "y", "र": "r", "ल": "l", "व": "v",
          "श": "sh", "ष": "sh", "स": "s", "ह": "h", "ळ": "l",
-         "क़": "q", "ख़": "kh", "ग़": "gh", "ज़": "z", "फ़": "f", "ड़": "r", "ढ़": "rh", "य़": "y"}
-_NUKTA = {"क": "q", "ख": "kh", "ग": "gh", "ज": "z", "फ": "f", "ड": "r", "ढ": "rh", "य": "y"}
+         "क़": "q", "ख़": "kh", "ग़": "gh", "ज़": "z", "फ़": "f", "ड़": "d", "ढ़": "dh", "य़": "y"}
+_NUKTA = {"क": "q", "ख": "kh", "ग": "gh", "ज": "z", "फ": "f", "ड": "d", "ढ": "dh", "य": "y"}
 _VIRAMA, _NUKTA_SIGN = "्", "़"
 _NASAL = {"ं": "n", "ँ": "n"}
 _OTHER = {"ः": "h", "।": ".", "॥": ".", "ॐ": "om", **{chr(0x0966 + i): str(i) for i in range(10)}}
 # Common words whose everyday spelling the rules below would not guess (plus English loanwords often written in Devanagari).
 _WORDS = {"में": "mein", "मैं": "main", "हैं": "hain", "है": "hai", "नहीं": "nahi", "नही": "nahi", "हूँ": "hoon",
-          "हूं": "hoon", "क्या": "kya", "क्यों": "kyun", "क्यूँ": "kyun", "यह": "yeh", "वह": "woh", "और": "aur",
-          "भी": "bhi", "ही": "hi", "की": "ki", "जी": "ji", "तो": "to", "हाँ": "haan", "हां": "haan", "यहाँ": "yahan",
-          "यहां": "yahan", "वहाँ": "wahan", "वहां": "wahan", "कहाँ": "kahan", "कहां": "kahan", "थी": "thi",
-          "रही": "rahi", "कभी": "kabhi", "अभी": "abhi", "सभी": "sabhi", "भाई": "bhai", "मुझे": "mujhe",
-          "तुम": "tum", "हम": "hum", "आप": "aap", "बहुत": "bahut", "अच्छा": "accha", "ठीक": "theek", "लिए": "liye",
+          "हूं": "hoon", "क्या": "kya", "क्यों": "kyun", "क्यूँ": "kyun", "क्योंकि": "kyunki", "यह": "yeh",
+          "ये": "yeh", "वह": "woh", "वो": "woh", "और": "aur", "भी": "bhi", "ही": "hi", "की": "ki", "जी": "ji",
+          "तो": "to", "हाँ": "haan", "हां": "haan", "यहाँ": "yahan", "यहां": "yahan", "वहाँ": "wahan", "वहां": "wahan",
+          "कहाँ": "kahan", "कहां": "kahan", "थी": "thi", "रही": "rahi", "कभी": "kabhi", "अभी": "abhi", "सभी": "sabhi",
+          "भाई": "bhai", "मुझे": "mujhe", "तुम": "tum", "हम": "hum", "आप": "aap", "बहुत": "bahut", "अच्छा": "accha",
+          "ठीक": "theek", "लिए": "liye", "अरे": "arey", "कुछ": "kuch", "आ": "aa", "गया": "gaya", "गई": "gayi",
+          "गए": "gaye", "हुआ": "hua", "हुई": "hui", "हुए": "hue", "बढ़िया": "badhiya", "थोड़ा": "thoda",
+          "थोड़ी": "thodi", "ज़्यादा": "zyada", "ज्यादा": "zyada", "बिल्कुल": "bilkul", "जिंदगी": "zindagi",
+          "ज़िंदगी": "zindagi", "लड़का": "ladka", "लड़की": "ladki", "बड़ा": "bada", "बड़ी": "badi", "छोटा": "chhota",
+          "गाड़ी": "gaadi", "पड़ेगा": "padega", "पड़ता": "padta", "छोड़ो": "chhodo", "वापस": "wapas", "यार": "yaar",
           # English loanwords commonly spoken in Hinglish videos/streams
           "टेबल": "table", "चेयर": "chair", "व्हाट्स": "what's", "अप": "up", "एथलेटिक": "athletic",
+          "बैक": "back", "माय": "my", "टू": "to", "द": "the", "इज": "is", "इज़": "is", "आर": "are",
+          "फॉर": "for", "फ़ॉर": "for", "विद": "with", "एंड": "and", "बट": "but", "जस्ट": "just",
+          "ऑन": "on", "ऑफ": "off", "ऑफ़": "of", "आउट": "out", "जोन": "zone", "ज़ोन": "zone",
+          "यूट्यूब": "YouTube", "इंस्टाग्राम": "Instagram", "गूगल": "Google", "सॉल्व": "solve",
+          "किल": "kill", "पुश": "push", "रश": "rush", "ड्रॉप": "drop", "फाइट": "fight", "फ़ाइट": "fight",
+          "शॉट": "shot", "डैमेज": "damage", "हेल्थ": "health", "हील": "heal", "लूट": "loot",
+          "स्कॉड": "squad", "स्क्वाड": "squad", "मैच": "match", "रैंक": "rank", "राउंड": "round",
+          "वॉइस": "voice", "क्वालिटी": "quality", "स्पीड": "speed", "मॉडल": "model", "ऑप्शन": "option",
+          "कैप्शन": "caption", "कैप्शंस": "captions", "इंग्लिश": "English", "हिंदी": "Hindi", "हिन्दी": "Hindi",
+          "प्रोसेस": "process", "रिजल्ट": "result", "रिज़ल्ट": "result", "चांस": "chance", "टाइप": "type",
+          "पार्ट": "part", "साइड": "side", "बैकग्राउंड": "background", "रियली": "really", "अबाउट": "about",
+          "बिकॉज": "because", "बिकॉज़": "because", "समथिंग": "something", "एवरीथिंग": "everything",
+          "एनीथिंग": "anything", "नथिंग": "nothing", "फर्स्ट": "first", "फ़र्स्ट": "first", "सेकंड": "second",
+          "थर्ड": "third", "थिंग": "thing", "पीपल": "people", "वर्क": "work", "कनेक्ट": "connect",
+          "कंटिन्यू": "continue", "डायरेक्ट": "direct", "नॉर्मल": "normal", "सिंपल": "simple", "टोटल": "total",
+          "फाइनल": "final", "फ़ाइनल": "final", "रैंडम": "random", "सीक्रेट": "secret", "स्पेशल": "special",
+          "एनर्जी": "energy", "मनी": "money", "प्राइस": "price", "फ्री": "free", "फ़्री": "free",
           "गेम": "game", "गेमिंग": "gaming", "गेमर": "gamer", "लैपटॉप": "laptop", "कंप्यूटर": "computer",
           "मोबाइल": "mobile", "फोन": "phone", "फ़ोन": "phone", "ब्रो": "bro", "क्वेश्चन": "question",
           "कॉलेज": "college", "स्कूल": "school", "फ्यूचर": "future", "फ़्यूचर": "future", "नॉलेज": "knowledge",
