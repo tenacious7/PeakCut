@@ -51,7 +51,10 @@ _remote_down_until = 0.0
 WHISPER_MODELS = [
     {"id": "base", "label": "Base (~150 MB · Fastest)", "desc": "Lowest RAM & VRAM (~0.5 GB GPU)", "vram_mb": 550, "vram_int8_mb": 400},
     {"id": "small", "label": "Small (~500 MB · Recommended)", "desc": "Best balance of speed, accuracy & Hinglish (~1.1 GB GPU)", "vram_mb": 1100, "vram_int8_mb": 750},
+    {"id": "small-hindi", "hf_repo": "collabora/faster-whisper-small-hindi", "decode_lang": "hi", "label": "Small Hindi (~500 MB · Dedicated Hindi)", "desc": "Fine-tuned specifically for clear Hindi speech (~1.1 GB GPU)", "vram_mb": 1100, "vram_int8_mb": 750},
+    {"id": "hinglish-swift", "hf_repo": "MSpider3/whisper-hindi2hinglish-swift-ct2", "decode_lang": "en", "label": "Hinglish Swift (~500 MB · Direct Hinglish)", "desc": "Fine-tuned to write Roman Hinglish directly (~0.9 GB GPU)", "vram_mb": 950, "vram_int8_mb": 650},
     {"id": "medium", "label": "Medium (~1.5 GB · High Accuracy)", "desc": "Sharper accents & noisy gameplay audio (~2.5 GB GPU)", "vram_mb": 2500, "vram_int8_mb": 1600},
+    {"id": "medium-hindi", "hf_repo": "collabora/faster-whisper-medium-hindi", "decode_lang": "hi", "label": "Medium Hindi (~1.5 GB · Sharpest Hindi)", "desc": "Fine-tuned Medium model for accurate Hindi (~2.5 GB GPU)", "vram_mb": 2500, "vram_int8_mb": 1600},
     {"id": "large-v3-turbo", "label": "Large-v3-Turbo (~1.6 GB · Best)", "desc": "Top English + Hindi/Hinglish quality (~3.1 GB GPU)", "vram_mb": 3100, "vram_int8_mb": 2000},
 ]
 WHISPER_MODEL_MAP = {m["id"]: m for m in WHISPER_MODELS}
@@ -608,11 +611,13 @@ def _get_whisper_model(model_size: str = None, gpu_on: bool = None, force_cpu: b
                 for ct in pref_order:
                     if ct and ct not in try_types:
                         try_types.append(ct)
+                m_meta_load = WHISPER_MODEL_MAP.get(size, {})
+                repo_or_size = m_meta_load.get("hf_repo") or size
                 last_err = None
                 for ct in try_types:
                     try:
                         cand = WhisperModel(
-                            size,
+                            repo_or_size,
                             device="cuda",
                             compute_type=ct,
                             cpu_threads=WHISPER_THREADS,
@@ -644,8 +649,9 @@ def _get_whisper_model(model_size: str = None, gpu_on: bool = None, force_cpu: b
                     used_dev, used_ctype = "cpu", "int8"
 
         if model is None:
+            repo_or_size = WHISPER_MODEL_MAP.get(size, {}).get("hf_repo") or size
             model = WhisperModel(
-                size,
+                repo_or_size,
                 device="cpu",
                 compute_type="int8",
                 cpu_threads=WHISPER_THREADS,
@@ -1101,14 +1107,46 @@ def _decode_remote(pieces: list) -> list:
     return [(p["tokens"], p["timestamps"]) for p in got]
 
 
+def _windowed_peak_rms(wav: np.ndarray, win_samples: int = 8000) -> float:
+    """Max RMS over 0.5s windows so short speech inside a quiet outro is never misclassified as silence."""
+    n = len(wav)
+    if n == 0:
+        return 0.0
+    if n <= win_samples:
+        return float(np.sqrt(np.mean(wav * wav)))
+    best = 0.0
+    step = max(1, win_samples // 2)
+    for pos in range(0, n, step):
+        frame = wav[pos:pos + win_samples]
+        if len(frame) < 400:
+            break
+        r = float(np.sqrt(np.mean(frame * frame)))
+        if r > best:
+            best = r
+    return best
+
+
 def _transcribe_parakeet(audio: np.ndarray, on_progress=None) -> list:
     """Parakeet-v2 via sherpa-onnx (local CPU/GPU or remote GPU worker)."""
     global _remote_down_until
     todo = []
     for a, b in _chunks(audio):
         seg = audio[a:b].astype(np.float32) / 32768.0
-        if len(seg) < 4800 or float(np.sqrt((seg ** 2).mean())) < 0.004:
-            continue  # silence: skip, saves time and avoids made-up words
+        if len(seg) < 1600:
+            continue
+        # Check windowed peak RMS (not whole-chunk average) so trailing speech before an outro is NEVER skipped!
+        peak_rms = _windowed_peak_rms(seg)
+        if peak_rms < 0.0035:
+            continue  # genuine silence: skip, saves time and avoids made-up words
+        if len(seg) < 4800:
+            seg = np.concatenate([seg, np.zeros(4800 - len(seg), dtype=np.float32)])
+        # Gently lift quiet tail/voice chunks without clipping so Parakeet hears soft endings clearly
+        seg_rms = float(np.sqrt(np.mean(seg * seg)))
+        seg_max = float(np.max(np.abs(seg)))
+        if 0.001 < seg_rms < 0.05 and seg_max > 1e-6:
+            gain = min(0.07 / seg_rms, 0.92 / seg_max, 6.0)
+            if gain > 1.1:
+                seg = np.clip(seg * gain, -1.0, 1.0).astype(np.float32)
         todo.append((a, b, seg))
     if not todo:
         return []
@@ -1271,7 +1309,8 @@ def _arabic_word_ratio(words: list) -> float:
     return hits / max(1, len(sample))
 
 
-def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = "", word_timestamps: bool = True) -> list:
+def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = "", word_timestamps: bool = True,
+                        whisper_model_override: str = None) -> list:
     """Faster-Whisper (CTranslate2 CUDA int8_float32/float16 / CPU INT8) tuned for clear, accurate
     Hindi, Hinglish, and English transcription with gentle Silero VAD, beam search, hallucination filtering,
     and automatic sparse-speech / Urdu-script recovery."""
@@ -1282,6 +1321,10 @@ def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = ""
         return []
 
     _, wmod, pref_lang, gpu_on = _read_user_asr_settings()
+    if whisper_model_override:
+        ov = str(whisper_model_override).strip().lower()
+        if ov in WHISPER_MODEL_IDS:
+            wmod = ov
     model, batched, device, compute_type = _get_whisper_model(wmod, gpu_on=gpu_on)
     with _state_lock:
         _asr_state.update(status="ready", device=device, compute_type=compute_type)
@@ -1310,6 +1353,18 @@ def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = ""
         else:
             chosen_lang = pref_norm
             hinglish_mode = (pref_norm == "hi")
+
+    # Honor dedicated model decoding conventions:
+    # - Direct Hinglish CT2 models (e.g. hinglish-swift) output Roman Hinglish when decoded with language="en"
+    # - Dedicated Hindi CT2 models (small-hindi / medium-hindi) decode with language="hi" unless English was forced
+    w_meta = WHISPER_MODEL_MAP.get(wmod, {})
+    model_decode_lang = w_meta.get("decode_lang")
+    if model_decode_lang == "en":
+        chosen_lang = "en"
+        hinglish_mode = True
+    elif model_decode_lang == "hi" and chosen_lang != "en":
+        chosen_lang = "hi"
+        hinglish_mode = True
 
     total_sec = len(wav) / 16000.0
     # Gentle Silero VAD: catches soft/conversational Hindi voices without clipping word edges
@@ -1416,6 +1471,54 @@ def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang_hint: str = ""
         except Exception:
             pass
 
+    # Trailing-audio rescue pass: if VAD or Whisper stopped early (>= 3s before end) while the tail still has
+    # audible speech (common on soft endings, music outros, or 30s window edges in BOTH English and Hindi),
+    # decode just that trailing slice with direct model + vad_filter=False so the end of the clip is NEVER empty!
+    last_end = float(raw_words[-1]["e"]) if raw_words else 0.0
+    if total_sec - last_end >= 3.0:
+        tail_start = max(0.0, last_end - 0.35)
+        if total_sec - tail_start > 60.0:
+            tail_start = max(0.0, total_sec - 60.0)
+        tail_idx = int(tail_start * 16000)
+        if tail_idx < len(audio) - 3200:
+            tail_wav, tail_raw_rms = _prepare_whisper_audio(audio[tail_idx:])
+            if len(tail_wav) >= 3200 and (_windowed_peak_rms(tail_wav) >= 0.0045 or tail_raw_rms >= 0.004):
+                det_lang = str(getattr(info, "language", "") or "").lower() if info is not None else ""
+                tail_lang = chosen_lang or ("hi" if det_lang in ("hi", "ur", "mr", "ne", "pa") else (det_lang if det_lang in ("en", "hi") else None))
+                tail_kw = {
+                    "beam_size": 5,
+                    "best_of": 5,
+                    "patience": 1.0,
+                    "temperature": (0.0, 0.2, 0.4, 0.6, 0.8),
+                    "vad_filter": False,
+                    "word_timestamps": bool(word_timestamps),
+                    "condition_on_previous_text": False,
+                    "no_speech_threshold": 0.65,
+                    "log_prob_threshold": -1.0,
+                    "compression_ratio_threshold": 2.2,
+                    "repetition_penalty": 1.05,
+                    "language": tail_lang,
+                    "task": "transcribe",
+                }
+                if word_timestamps:
+                    tail_kw["hallucination_silence_threshold"] = 1.5
+                try:
+                    with _whisper_lock:
+                        t_segs, _ = model.transcribe(tail_wav, **_filter_supported_kwargs(model.transcribe, tail_kw))
+                        t_words = _extract_whisper_words(t_segs, len(tail_wav) / 16000.0)
+                    shifted = [
+                        {"w": w["w"], "s": round(w["s"] + tail_start, 2), "e": round(w["e"] + tail_start, 2)}
+                        for w in t_words
+                        if (w["s"] + tail_start) >= (last_end - 0.05)
+                    ]
+                    if shifted:
+                        # Avoid duplicating the exact boundary word if overlap caught it twice
+                        if raw_words and shifted[0]["w"].lower() == raw_words[-1]["w"].lower() and abs(shifted[0]["s"] - raw_words[-1]["s"]) < 0.45:
+                            shifted = shifted[1:]
+                        raw_words.extend(shifted)
+                except Exception:
+                    pass
+
     # Devanagari/Urdu script guard: works BOTH when language='hi' AND on auto-detect!
     # Whisper sometimes slips into vowel-less Urdu/Arabic script even when language='hi'.
     if total_sec <= 150.0 and raw_words and _arabic_word_ratio(raw_words) >= 0.25:
@@ -1481,7 +1584,7 @@ def _bump_asr_rt():
 
 
 def transcribe(audio: np.ndarray, on_progress=None, lang_hint: str = "", word_timestamps: bool = True,
-               engine_override: str = None) -> list:
+               engine_override: str = None, whisper_model_override: str = None) -> list:
     """Returns [{'w': word, 's': start_sec, 'e': end_sec}, ...] using the active ASR engine
     (Parakeet-v2 or Faster-Whisper). Automatically uses Faster-Whisper when Hindi/Hinglish is explicitly
     requested and Faster-Whisper is installed, falling back gracefully to Parakeet otherwise."""
@@ -1489,11 +1592,16 @@ def transcribe(audio: np.ndarray, on_progress=None, lang_hint: str = "", word_ti
     hint_low = (lang_hint or "").strip().lower()
     if not engine_override and hint_low in ("hi", "hinglish", "hi-en", "en-hi") and faster_whisper_installed():
         eng = "faster-whisper"
+    if engine_override and eng == "faster-whisper" and not faster_whisper_installed():
+        raise RuntimeError("Faster-Whisper is not installed yet. Run 'pip install faster-whisper' or pick Parakeet-v2.")
     use_fw = eng == "faster-whisper" and faster_whisper_installed()
     _e_cfg, wmod, _l_cfg, gpu_on = _read_user_asr_settings()
+    eff_wmod = (str(whisper_model_override).strip().lower() if whisper_model_override else wmod)
+    if eff_wmod not in WHISPER_MODEL_IDS:
+        eff_wmod = wmod
     if use_fw:
         dev, ctype = _detect_whisper_device(gpu_on)
-        run_eng, run_mod = "faster-whisper", wmod
+        run_eng, run_mod = "faster-whisper", eff_wmod
     else:
         dev, ctype = PROVIDER, ("int8" if PROVIDER == "cpu" else "fp16")
         run_eng, run_mod = "parakeet", "parakeet-v2"
@@ -1504,7 +1612,13 @@ def transcribe(audio: np.ndarray, on_progress=None, lang_hint: str = "", word_ti
     _bump_asr_rt()
     try:
         if use_fw:
-            return _transcribe_whisper(audio, on_progress=on_progress, lang_hint=lang_hint, word_timestamps=word_timestamps)
+            return _transcribe_whisper(
+                audio,
+                on_progress=on_progress,
+                lang_hint=lang_hint,
+                word_timestamps=word_timestamps,
+                whisper_model_override=eff_wmod if whisper_model_override else None,
+            )
         return _transcribe_parakeet(audio, on_progress=on_progress)
     finally:
         with _live_asr_lock:

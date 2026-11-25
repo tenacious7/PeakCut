@@ -332,11 +332,14 @@ label.ck input{accent-color:var(--brand);margin:0}
 .lp .rm:hover,.lp .rm:focus-visible{background:#FDECEC;color:#C53030}
 .lp .rm svg{width:14px;height:14px}
 .lp .pbar{position:absolute;left:0;bottom:0;height:3px;background:var(--brand);transition:width .2s ease}
+.lp-audio{flex:none;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--dim)}
+.lp-audio select{height:30px;max-width:168px;padding:0 8px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font-size:12px;font-weight:600;cursor:pointer;transition:border-color .15s ease,background-color .15s ease}
+.lp-audio select:hover,.lp-audio select:focus{border-color:var(--brand);outline:none}
 .addrow{display:flex;align-items:center;gap:8px;width:100%;height:42px;padding:0 12px;border:0;border-radius:12px;background:transparent;color:var(--dim);font-size:13px;font-weight:600;cursor:pointer;transition:background-color .15s ease,color .15s ease;animation:rise .28s ease both}
 .addrow:hover,.addrow:focus-visible{background:var(--brand-soft);color:var(--brand-ink)}
 .addrow svg{width:16px;height:16px}
 .addrow span{margin-left:auto;font-weight:500;color:var(--faint);font-size:12px}
-@media (max-width:560px){.lp .th{width:88px}.lp .ok{display:none}}
+@media (max-width:560px){.lp{flex-wrap:wrap}.lp .th{width:88px}.lp .ok{display:none}.lp-audio{width:100%;justify-content:flex-end}}
 .btn.primary:disabled{background:#F3E7DD;color:#B9A597;cursor:not-allowed}
 @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
@@ -2916,9 +2919,28 @@ function drawAtt() {
     }
     const i = l.info;
     const rb = i?.clip_rule ? " " + ruleBadge(i.clip_rule) : "";
+    const isYt = /youtube\.com|youtu\.be/i.test(l.url);
+    const tracks = Array.isArray(i.audio_tracks) ? i.audio_tracks : [];
+    const chosenAudio = l.audio_lang || "";
+    let audioPicker = "";
+    if (!i.is_live && !l.sending && (tracks.length > 1 || isYt)) {
+      const optsHtml = tracks.length > 1
+        ? tracks.map(tr => {
+            const val = tr.original ? "" : String(tr.code || "");
+            const lbl = tr.original ? `${tr.label || "Original"} (Original)` : (tr.label || tr.code);
+            return `<option value="${esc(val)}" ${chosenAudio === val ? "selected" : ""}>${esc(lbl)}</option>`;
+          }).join("")
+        : [
+            `<option value="" ${chosenAudio === "" ? "selected" : ""}>Original audio</option>`,
+            `<option value="hi" ${chosenAudio === "hi" ? "selected" : ""}>Hindi audio</option>`,
+            `<option value="en" ${chosenAudio === "en" ? "selected" : ""}>English audio</option>`,
+          ].join("");
+      audioPicker = `<label class="lp-audio" title="Choose which audio track to download from this video">Audio <select data-audio-lang="${l.id}" ${A.busy ? "disabled" : ""}>${optsHtml}</select></label>`;
+    }
+    const statusBadge = l.sending ? `<span class="ok up">Sending</span>` : i.is_live ? `<span class="ok live"><i></i>Live now</span>` : `<span class="ok">${ic("check")}Ready</span>`;
     return rowHtml(A, {id: l.id, kind: "link", thumb: i.thumb ? `<img src="${i.thumb}" alt="">` : "", len: i.duration && !i.is_live ? fmtLen(i.duration) : "",
       title: i.title, sub: esc(i.uploader || "Video link") + rb,
-      side: l.sending ? `<span class="ok up">Sending</span>` : i.is_live ? `<span class="ok live"><i></i>Live now</span>` : `<span class="ok">${ic("check")}Ready</span>`});
+      side: audioPicker + statusBadge});
   }).join("");
   h += A.files.map(f => rowHtml(A, {id: f.id, kind: "file", thumb: `<video src="${f.src}#t=1" muted preload="metadata" playsinline></video>`,
     len: f.dur ? fmtLen(f.dur) : "", title: f.file.name,
@@ -3162,7 +3184,14 @@ async function makeClips() {
     return;
   }
   const opts = jobOptions();
-  const confirmedLang = await confirmClipLanguage(opts.speech_lang || "auto");
+  const readyLinks = A.links.filter(x => x.state === "ok");
+  let initialLang = opts.speech_lang || "auto";
+  if (initialLang === "auto") {
+    const pickedAudio = readyLinks.map(x => String(x.audio_lang || "").toLowerCase()).find(Boolean) || "";
+    if (pickedAudio.startsWith("hi")) initialLang = "hi";
+    else if (pickedAudio.startsWith("en")) initialLang = "en";
+  }
+  const confirmedLang = await confirmClipLanguage(initialLang);
   if (confirmedLang === null) return;
   opts.speech_lang = confirmedLang;
   if ($("#o_speech_lang")) $("#o_speech_lang").value = confirmedLang;
@@ -3170,9 +3199,12 @@ async function makeClips() {
   A.busy = true; drawAtt();
   let started = 0, failed = 0;
   const who = targetCreator();
-  for (const l of A.links.filter(x => x.state === "ok")) {
+  for (const l of readyLinks) {
     l.sending = true; drawAtt();
-    try { await send("/api/jobs", {url: l.url, options: opts, creator: who}); l.state = "done"; started++; }
+    const linkOpts = Object.assign({}, opts, {audio_lang: l.audio_lang || ""});
+    if (linkOpts.speech_lang === "auto" && linkOpts.audio_lang.toLowerCase().startsWith("hi")) linkOpts.speech_lang = "hi";
+    else if (linkOpts.speech_lang === "auto" && linkOpts.audio_lang.toLowerCase().startsWith("en")) linkOpts.speech_lang = "en";
+    try { await send("/api/jobs", {url: l.url, options: linkOpts, creator: who}); l.state = "done"; started++; }
     catch (e) { l.state = "bad"; l.msg = e.message; failed++; }
     l.sending = false; drawAtt();
   }
@@ -3211,7 +3243,7 @@ function clipHtml(j, c) {
     body = `<img src="${m}${esc(c.cover || (c.id + '.jpg'))}?v=${c.version || 1}" alt="" loading="lazy"><span class="veil"><span class="veil-pill good">Approved</span></span>`;
   } else if (c.status === "rendering_final") {
     const eta = clipEtaText(c);
-    body = `<span class="making">Rendering final…${eta ? `<br><small style="opacity:.8;font-weight:500">${esc(eta)}</small>` : ""}</span>`;
+    body = `<span class="making">${esc(c.stage_note || "Rendering final…")}${eta ? `<br><small style="opacity:.8;font-weight:500">${esc(eta)}</small>` : ""}</span>`;
   } else if (c.status === "drafting") {
     const eta = clipEtaText(c);
     body = `<span class="making">Generating draft…${eta ? `<br><small style="opacity:.8;font-weight:500">${esc(eta)}</small>` : ""}</span>`;
@@ -3221,7 +3253,7 @@ function clipHtml(j, c) {
     body = `<span class="making" style="animation:none;color:var(--bad);background:var(--bad-soft)">${esc(c.error || "Could not make this clip. Open to retry.")}</span>`;
   } else {
     const eta = clipEtaText(c);
-    body = `<span class="making">${c.status === "rendering" ? "Making this clip…" : "Waiting its turn…"}${eta ? `<br><small style="opacity:.8;font-weight:500">${esc(eta)}</small>` : ""}</span>`;
+    body = `<span class="making">${esc(c.stage_note || (c.status === "rendering" ? "Making this clip…" : "Waiting its turn…"))}${eta ? `<br><small style="opacity:.8;font-weight:500">${esc(eta)}</small>` : ""}</span>`;
   }
 
   const key = `c:${j.id}:${c.id}`;
@@ -3928,7 +3960,10 @@ async function drawSettings() {
       const models = (asr.models && asr.models.length) ? asr.models : [
         {id: "base", label: "Base (~150 MB · Fastest)"},
         {id: "small", label: "Small (~500 MB · Recommended)"},
+        {id: "small-hindi", label: "Small Hindi (~500 MB · Fine-Tuned Hindi)"},
+        {id: "hinglish-swift", label: "Hinglish Swift (~500 MB · Direct Roman Hinglish)"},
         {id: "medium", label: "Medium (~1.5 GB · High Accuracy)"},
+        {id: "medium-hindi", label: "Medium Hindi (~1.5 GB · Fine-Tuned Hindi)"},
         {id: "large-v3-turbo", label: "Large-v3-Turbo (~1.6 GB · Best)"}
       ];
       const renderGpuMeter = (info, dev, ctype) => {
@@ -4418,7 +4453,7 @@ function drawClipDlg(full) {
   const j = jobOf(D.jid), c = j?.clips.find(x => x.id === D.cid), dlg = $("#clipdlg");
   if (!c) { if (dlg.open) dlg.close(); return; }
   const isBusySt = s => ["queued", "rendering", "rendering_final", "drafting", "approved"].includes(s);
-  const m = `/media/${j.id}/`, sig = c.status + "_" + (c.version || 0) + "_" + (c.draft_v || 0) + "_" + (c.eta_sec || 0) + (D.edit ? "_" + D.edit.version : "");
+  const m = `/media/${j.id}/`, sig = c.status + "_" + (c.version || 0) + "_" + (c.draft_v || 0) + "_" + (c.eta_sec || 0) + "_" + (c.stage_note || "") + (D.edit ? "_" + D.edit.version : "");
 
   const idx = j.clips.findIndex(x => x.id === c.id);
   const prevC = idx > 0 ? j.clips[idx - 1] : null;
@@ -4468,8 +4503,8 @@ function drawClipDlg(full) {
   } else if (c.status === "drafting") {
     stageHtml = `<div class="making">Rendering draft preview…${cEta ? `<br><small style="opacity:.85;font-weight:500">${esc(cEta)}</small>` : ""}</div>`;
   } else if (c.status === "queued" || c.status === "rendering" || c.status === "rendering_final" || c.status === "approved") {
-    const lbl = c.status === "queued" ? "Queued for remake…" : "Rendering final 1080p clip…";
-    stageHtml = `<div class="making">${lbl}${cEta ? `<br><small style="opacity:.85;font-weight:500">${esc(cEta)}</small>` : ""}</div>`;
+    const lbl = c.stage_note || (c.status === "queued" ? "Queued for remake…" : "Rendering final 1080p clip…");
+    stageHtml = `<div class="making">${esc(lbl)}${cEta ? `<br><small style="opacity:.85;font-weight:500">${esc(cEta)}</small>` : ""}</div>`;
   } else if (c.file) {
     stageHtml = `<div class="video-preview-wrap" id="vwrap">
       <video id="dlgVideo" src="${videoFile}" poster="${posterFile}" controls playsinline preload="metadata"></video>
@@ -4586,10 +4621,68 @@ function drawClipDlg(full) {
               <input type="checkbox" data-f="captions" data-caption-toggle id="dlg_cap_enabled" ${cap.enabled !== false && c.captions !== false ? "checked" : ""}> Captions
             </label>
             <div class="row" style="gap:4px">
+              <button type="button" class="btn xs" id="btnToggleRegenCap" ${isBusySt(c.status) ? "disabled" : ""} title="Re-transcribe only this clip with another speech model and re-render its final video">Regenerate</button>
               <button type="button" class="btn xs ghost" id="btnRemoveCap" title="Remove captions from this clip">${ic("trash")}Remove</button>
               <button type="button" class="btn xs ghost" data-act="applycapall" title="Apply caption style, size and position to all clips">Apply to all</button>
             </div>
           </div>
+          ${(() => {
+            const asr = S.asr || S.status?.asr || {};
+            const fwOk = asr.faster_whisper_installed !== false;
+            const curEng = asr.engine || "parakeet";
+            const curWmod = asr.whisper_model || "small";
+            const defaultModelVal = c.caption_model && c.caption_model.startsWith("faster-whisper:")
+              ? c.caption_model
+              : (c.caption_model === "parakeet-v2" ? "parakeet" : (curEng === "faster-whisper" ? `faster-whisper:${curWmod}` : "parakeet"));
+            const wModels = Array.isArray(asr.models) && asr.models.length ? asr.models : [
+              {id: "tiny", label: "Tiny · Fastest"},
+              {id: "base", label: "Base · Fast"},
+              {id: "small", label: "Small · Recommended (Hindi + English)"},
+              {id: "small-hindi", label: "Small Hindi · Fine-Tuned Hindi (4GB VRAM)"},
+              {id: "hinglish-swift", label: "Hinglish Swift · Direct Roman Hinglish (4GB VRAM)"},
+              {id: "medium", label: "Medium · High Accuracy"},
+              {id: "medium-hindi", label: "Medium Hindi · Fine-Tuned Hindi (High Accuracy)"},
+              {id: "large-v3-turbo", label: "Large-v3-Turbo · Fast Large"},
+              {id: "large-v3", label: "Large-v3 · Best Accuracy"},
+            ];
+            const curLang = (j.options?.speech_lang && j.options.speech_lang !== "auto")
+              ? j.options.speech_lang
+              : (j.lang && ["en", "hi", "hinglish"].includes(j.lang) ? j.lang : (asr.language || "auto"));
+            const modelOpts = [
+              `<option value="parakeet" ${defaultModelVal === "parakeet" ? "selected" : ""}>Parakeet-v2 (Fast English ONNX)</option>`,
+              ...wModels.map(m => {
+                const v = `faster-whisper:${m.id}`;
+                const dis = fwOk ? "" : "disabled";
+                const suffix = fwOk ? "" : " (install faster-whisper)";
+                return `<option value="${esc(v)}" ${defaultModelVal === v ? "selected" : ""} ${dis}>Faster-Whisper · ${esc(m.label || m.id)}${suffix}</option>`;
+              }),
+            ].join("");
+            return `
+            <div id="dlgRegenCapBox" style="display:none;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)">
+              <div style="font-size:12px;font-weight:700;color:var(--ink)">Regenerate captions for this clip only</div>
+              <div class="two">
+                <label class="f" style="margin:0">Speech model
+                  <select id="dlg_regen_model">${modelOpts}</select>
+                </label>
+                <label class="f" style="margin:0">Language
+                  <select id="dlg_regen_lang">
+                    <option value="auto" ${curLang === "auto" ? "selected" : ""}>Auto-detect</option>
+                    <option value="en" ${curLang === "en" ? "selected" : ""}>English</option>
+                    <option value="hi" ${curLang === "hi" ? "selected" : ""}>Hindi (Roman Hinglish)</option>
+                    <option value="hinglish" ${curLang === "hinglish" ? "selected" : ""}>Hindi + English (Hinglish)</option>
+                  </select>
+                </label>
+              </div>
+              <label class="sw" style="margin:0;font-size:12px">
+                <input type="checkbox" id="dlg_regen_ai" checked> Clean up spelling &amp; Romanize Hindi with AI
+              </label>
+              <div style="font-size:11px;color:var(--dim);line-height:1.4">Re-transcribes only this clip with the chosen model and updates its final video. Layout, heading, timing, and all other clips stay unchanged.</div>
+              <div class="row" style="gap:6px">
+                <button type="button" class="btn primary sm" data-act="regencaptions" style="flex:1" ${isBusySt(c.status) ? "disabled" : ""}>Regenerate &amp; render final video</button>
+                <button type="button" class="btn sm ghost" id="btnCancelRegenCap">Cancel</button>
+              </div>
+            </div>`;
+          })()}
           <div class="two">
             <label class="f">Caption style
               <select data-f="style" data-caption-style id="dlg_cap_style" ${cap.enabled === false || c.captions === false ? "disabled" : ""}>${opts(S.status.styles, cap.style || c.style)}</select>
@@ -4625,7 +4718,7 @@ function drawClipDlg(full) {
             ${(cap.words && cap.words.length) ? `
             <div>
               <div class="dlg-range-head" style="margin-bottom:4px">
-                <span>Words (${cap.words.length})</span>
+                <span>Words (${cap.words.length})${c.caption_model ? ` <small style="color:var(--dim);font-weight:500">· ${esc(c.caption_model)}</small>` : ""}</span>
                 <span style="font-size:10.5px;color:var(--faint)">Click any word to edit</span>
               </div>
               <div id="dlgWordsBox" style="display:flex;flex-wrap:wrap;gap:4px;max-height:84px;overflow-y:auto;padding:6px;background:#fff;border:1px solid var(--line);border-radius:8px">
@@ -4724,7 +4817,7 @@ function drawClipDlg(full) {
           </div>
           ` : (c.status === "approved" || c.status === "rendering_final" || c.status === "queued" || c.status === "rendering") ? `
           <div class="row" style="justify-content:space-between">
-            <span style="font-size:12px;color:var(--brand-deep);font-weight:600">${c.status === "queued" ? "Queued for remake…" : "Rendering final 1080p video…"}${cEta ? " " + esc(cEta) : ""}</span>
+            <span style="font-size:12px;color:var(--brand-deep);font-weight:600">${esc(c.stage_note || (c.status === "queued" ? "Queued for remake…" : "Rendering final 1080p video…"))}${cEta ? " " + esc(cEta) : ""}</span>
             <button type="button" class="btn sm ghost" data-act="resetreview">Reset to review</button>
           </div>
           ` : `
@@ -4757,6 +4850,14 @@ function drawClipDlg(full) {
     $("#dlg_cap_enabled")?.addEventListener("change", e => {
       if ($("#dlgCapExtraControls")) $("#dlgCapExtraControls").style.display = e.target.checked ? "flex" : "none";
       syncLiveOverlay(false);
+    });
+    $("#btnToggleRegenCap")?.addEventListener("click", () => {
+      const box = $("#dlgRegenCapBox");
+      if (box) box.style.display = box.style.display === "none" ? "flex" : "none";
+    });
+    $("#btnCancelRegenCap")?.addEventListener("click", () => {
+      const box = $("#dlgRegenCapBox");
+      if (box) box.style.display = "none";
     });
     $("#dlg_cap_size")?.addEventListener("input", () => syncLiveOverlay(false));
     $("#dlg_cap_y")?.addEventListener("input", () => syncLiveOverlay(false));
@@ -4981,6 +5082,24 @@ function syncCaptionStyle(toggle) {
 }
 document.addEventListener("change", async e => {
   const t = e.target;
+  if (t.dataset.audioLang !== undefined) {
+    const l = att().links.find(x => x.id === t.dataset.audioLang);
+    if (l) {
+      l.audio_lang = t.value || "";
+      const v = l.audio_lang.toLowerCase();
+      const langSel = $("#o_speech_lang");
+      if (langSel) {
+        if (v.startsWith("hi") && (langSel.value === "auto" || langSel.value === "en")) {
+          langSel.value = "hi";
+          window.updateOptsBadges?.();
+        } else if (v.startsWith("en") && langSel.value === "auto") {
+          langSel.value = "en";
+          window.updateOptsBadges?.();
+        }
+      }
+    }
+    return;
+  }
   if (t.id === "o_creator") {
     const toggle = $("#o_captions"), c = S.creators.find(c => c.id === t.value);
     if (!toggle.dataset.overridden) { toggle.checked = c?.captions !== false; syncCaptionStyle(toggle); }
@@ -5767,6 +5886,45 @@ document.addEventListener("click", async e => {
         await tick();
       } catch (err) {
         showErrorPopup({title: "Could not remake clip", where: "Clip Editor → Remake", what: err.message});
+      }
+      finally { b.disabled = false; }
+      return;
+    }
+    if (a === "regencaptions") {
+      b.disabled = true;
+      try {
+        const rawSel = $("#dlg_regen_model")?.value || "parakeet";
+        let engine = "parakeet", whisper_model = "";
+        if (rawSel.startsWith("faster-whisper:")) {
+          engine = "faster-whisper";
+          whisper_model = rawSel.slice("faster-whisper:".length);
+        } else {
+          engine = rawSel;
+        }
+        const language = $("#dlg_regen_lang")?.value || "auto";
+        const fix_with_ai = $("#dlg_regen_ai") ? $("#dlg_regen_ai").checked : true;
+
+        // Release active <video> file handle immediately so Windows never blocks replacing the MP4
+        const vid = $("#dlgVideo");
+        if (vid) { try { vid.pause(); vid.removeAttribute("src"); vid.load(); } catch {} }
+
+        const res = await send(`/api/jobs/${encodeURIComponent(D.jid)}/clips/${encodeURIComponent(D.cid)}/regen-captions`, {
+          engine, whisper_model, language, fix_with_ai
+        });
+        const j = jobOf(D.jid), c = j?.clips.find(x => x.id === D.cid);
+        if (c) {
+          c.status = "queued";
+          c.captions = true;
+          c.stage_note = `Regenerating captions with ${res.model_label || rawSel}…`;
+          c.render_started = Date.now() / 1000;
+          c.version = (c.version || 0) + 1;
+        }
+        D.wordsDirty = false;
+        toast(`Regenerating captions with ${res.model_label || rawSel} and re-rendering final video…`, "ok");
+        drawClipDlg(true);
+        await tick();
+      } catch (err) {
+        showErrorPopup({title: "Could not regenerate captions", where: "Clip Editor → Regenerate Captions", what: err.message});
       }
       finally { b.disabled = false; }
       return;

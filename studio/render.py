@@ -390,7 +390,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     min_cap_sz = max(18, int(round(36 * scale)))
     for gi, g in enumerate(groups):
         g_start = max(0.0, g[0]["s"] - start)
-        g_end = min(g[-1]["e"] + 0.25, groups[gi + 1][0]["s"] if gi + 1 < len(groups) else end) - start
+        if g_start >= dur - 0.05:
+            g_start = max(0.0, dur - 0.18)
+        raw_end = min(g[-1]["e"] + 0.25, groups[gi + 1][0]["s"] if gi + 1 < len(groups) else end) - start
+        g_end = min(dur, max(g_start + 0.14, raw_end)) if gi + 1 == len(groups) else min(dur, raw_end)
         if g_end - g_start < 0.02:
             continue
         texts = []
@@ -528,11 +531,11 @@ def build_stack_filter(cam, ratio=DEFAULT_SPLIT_RATIO, swap=False, face=None, W=
         return (f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},split=2[g0][c0];"
                 f"[g0]{game_f},setpts=PTS-STARTPTS[g];"
                 f"[c0]{cam_f},{delay_f}setpts=PTS-STARTPTS[c];"
-                f"[g][c]vstack=inputs=2,setsar=1{div_f},setpts=PTS-STARTPTS[v0];")
+                f"[g][c]vstack=inputs=2:shortest=1,setsar=1{div_f},setpts=PTS-STARTPTS[v0];")
     return (f"[0:v]setpts=PTS-STARTPTS,fps={config.OUT_FPS},split=2[c0][g0];"
             f"[c0]{cam_f},{delay_f}setpts=PTS-STARTPTS[c];"
             f"[g0]{game_f},setpts=PTS-STARTPTS[g];"
-            f"[c][g]vstack=inputs=2,setsar=1{div_f},setpts=PTS-STARTPTS[v0];")
+            f"[c][g]vstack=inputs=2:shortest=1,setsar=1{div_f},setpts=PTS-STARTPTS[v0];")
 
 
 def _filter(layout, fg_h, facecam=None, cam_delay=0.0, split_ratio=DEFAULT_SPLIT_RATIO,
@@ -983,15 +986,19 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
     cam_delay = float((clip or {}).get("cam_delay", 0.0) or 0.0)
     cam_swap = bool(cam_swap or (clip or {}).get("cam_swap", False))
 
+    clip_dur = max(0.5, float(end) - float(start))
+
     if quality == "draft":
         fc = _filter(layout, fg_h, face, cam_delay=cam_delay, split_ratio=split_ratio, cam_swap=cam_swap,
                      focus=focus, zoom=zoom, divider=divider, out_w=ow, out_h=oh, src_w=src_w, src_h=src_h)
         fc_clean = fc.rstrip(";")
         fc_draft = f"{fc_clean};[v0]scale={draft_w}:{draft_h},ass={name}.ass:fontsdir=f[vdraft]"
-        base_draft = ["ffmpeg", "-nostdin", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
+        # Put -t AFTER -i (output duration, never input -t before -i) so demuxer interleaving never cuts audio early!
+        base_draft = ["ffmpeg", "-nostdin", "-y", "-v", "error", "-accurate_seek", "-ss", f"{start:.2f}", "-i", str(src),
+                      "-t", f"{clip_dur:.2f}",
                       "-filter_complex", fc_draft, "-map", "[vdraft]", "-map", "0:a:0?",
-                      "-af", "asetpts=PTS-STARTPTS",
-                      "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", "-pix_fmt"]
+                      "-af", "aresample=48000:async=1:first_pts=0",
+                      "-c:a", "aac", "-b:a", "96k", "-ar", "48000", "-movflags", "+faststart", "-pix_fmt"]
         draft_encoders = _available_encoders(gpu_enabled, draft=True)
 
         err = None
@@ -1064,9 +1071,12 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
         else:
             fc_final = fc_clean
             v_map = "[v0]"
-        base_final = ["ffmpeg", "-nostdin", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
+        # Put -t AFTER -i (output duration) and use zero-tail-loss async resample + dynaudnorm + alimiter
+        # instead of input -t + single-pass loudnorm (which frequently muted/truncated the last 1-3s of audio).
+        base_final = ["ffmpeg", "-nostdin", "-y", "-v", "error", "-accurate_seek", "-ss", f"{start:.2f}", "-i", str(src),
+                      "-t", f"{clip_dur:.2f}",
                       "-filter_complex", fc_final, "-map", v_map, "-map", "0:a:0?",
-                      "-af", "asetpts=PTS-STARTPTS,aresample=48000,loudnorm=I=-14:TP=-1.5:LRA=11",
+                      "-af", "aresample=48000:async=1:first_pts=0,dynaudnorm=f=150:g=15:p=0.92:m=6,alimiter=limit=0.95",
                       "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", "-pix_fmt"]
         err = None
         for label, enc in encoders:

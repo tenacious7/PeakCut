@@ -116,7 +116,7 @@ DEFAULTS = {"max_clips": 6, "min_len": 15, "max_len": 60, "style": "bounce", "la
             "captions": True, "meme": "none", "music": "none", "format": "moment", "cam_delay": 0.0,
             "meme_vol": None, "music_db": None, "cam_pos": "auto",
             "split_ratio": 0.35, "split_divider": True, "cam_swap": False, "cap_anchor": "safe_bottom", "cam_fallback": "blur", "facecam": None, "cap_y": None,
-            "review_mode": "auto", "speech_lang": "auto"}
+            "review_mode": "auto", "speech_lang": "auto", "audio_lang": ""}
 
 
 LIMITS = {"max_clips": (1, 20), "min_len": (5, 120), "max_len": (10, 180), "quality": (360, 1080)}
@@ -207,7 +207,17 @@ def clean_options(options) -> dict:
             v = v if v in ("auto", "review", "review_first") else "auto"
         elif k == "speech_lang":
             sv = str(v).strip().lower()
+            if sv in ("hi-en", "en-hi"):
+                sv = "hinglish"
+            elif sv in ("hindi", "hi-in"):
+                sv = "hi"
+            elif sv in ("english", "en-us", "en-gb", "en-in"):
+                sv = "en"
             v = sv if sv in ("auto", "en", "hi", "hinglish") else "auto"
+        elif k == "audio_lang":
+            av = re.sub(r"[^a-zA-Z0-9-]", "", str(v).strip())[:16].lower()
+            out[k] = av
+            continue
         elif k == "layout":
             v = v if v in render.LAYOUTS else DEFAULTS["layout"]
         elif k == "cam_delay":
@@ -330,7 +340,7 @@ def public(job) -> dict:
     """What the browser may see: no server paths, no owner id."""
     out = {k: v for k, v in job.items() if k not in HIDDEN}
     out["source"] = {k: v for k, v in job["source"].items() if k != "path"}
-    out["clips"] = [{k: v for k, v in c.items() if k not in ("src", "fixed_words", "fixed_for")} for c in job["clips"]]
+    out["clips"] = [{k: v for k, v in c.items() if k not in ("src", "fixed_words", "fixed_for", "_regen_cap")} for c in job["clips"]]
     ai = job.get("ai") or {}
     out["ai"] = {"tokens": ai.get("tokens", 0), "note": ai.get("note", ""), "used": bool(ai.get("model"))}   # never the model, never raw errors
     if job.get("status") == "queued":
@@ -871,7 +881,8 @@ def render_one(job, clip, words, quality="final"):
             src = Path(clip["src"])
         off = clip.get("src_offset", 0.0)
         if not clip.get("src") and job.get("duration"):
-            clip["end"] = min(clip["end"], job["duration"])
+            max_end = min(float(job["duration"]), float(job.get("audio_duration") or job["duration"]))
+            clip["end"] = min(clip["end"], max_end)
         if clip.get("layout") in ("gameplay", "stack") and not clip.get("facecam"):
             clip_win = (max(0.0, float(clip["start"]) - off), max(0.0, float(clip["end"]) - off))
             face = job.get("facecam") or _facecam(job, src=src, window=clip_win)
@@ -931,6 +942,13 @@ def render_one(job, clip, words, quality="final"):
             edit.save_edit(edit_file, ed)
         else:
             ed = existing_ed
+            # Keep edit.json end strictly inside the file's real audio duration so clip endings never mute
+            if clip.get("src_end") is not None:
+                ed["start"] = max(float(ed.get("start", clip["start"])), float(clip.get("src_offset", 0.0)))
+                ed["end"] = max(ed["start"] + 1.0, min(float(ed.get("end", clip["end"])), float(clip["src_end"])))
+            elif not clip.get("src") and job.get("duration"):
+                max_end = min(float(job["duration"]), float(job.get("audio_duration") or job["duration"]))
+                ed["end"] = max(float(ed.get("start", clip["start"])) + 1.0, min(float(ed.get("end", clip["end"])), max_end))
             if "captions" in clip:
                 ed["caption"]["enabled"] = bool(clip["captions"])
             if "hook_enabled" in clip:
@@ -1130,6 +1148,209 @@ def regen_clip_titles(jid: str, cid: str) -> dict:
     clip["title_options"] = res["title_options"]
     save(job)
     return res
+
+
+def regen_clip_captions(jid: str, cid: str, engine: str = "", whisper_model: str = "",
+                        language: str = "", fix_with_ai: bool = True) -> dict:
+    """Re-transcribe ONLY this single clip using the user-chosen speech model & language,
+    keep all other clip settings (timing, layout, heading, facecam, music) and all other clips untouched,
+    and immediately re-render this clip's final video with the new captions."""
+    job = _jobs.get(jid)
+    if not job or job.get("user") != ctx.uid():
+        raise ValueError("No such video")
+    clip = next((c for c in job.get("clips") or [] if c["id"] == cid), None)
+    if not clip:
+        raise ValueError("No such clip")
+    if clip.get("status") in ("queued", "rendering", "rendering_final", "drafting"):
+        raise ValueError("This clip is currently busy. Wait a moment for it to finish first.")
+
+    cfg_eng, cfg_wmod, cfg_lang, _ = transcribe._read_user_asr_settings()
+    eng = (engine or cfg_eng or "parakeet").strip().lower()
+    if eng not in ("parakeet", "faster-whisper"):
+        raise ValueError(f"Unknown speech engine: {eng}")
+    wmod = (whisper_model or cfg_wmod or "small").strip().lower()
+    if eng == "faster-whisper":
+        if not transcribe.faster_whisper_installed():
+            raise ValueError("Faster-Whisper is not installed yet. Run 'pip install faster-whisper' or pick Parakeet-v2.")
+        if wmod not in transcribe.WHISPER_MODEL_IDS:
+            wmod = "small"
+    else:
+        wmod = "parakeet-v2"
+
+    lang = (language or "").strip().lower()
+    if lang not in ("auto", "en", "hi", "hinglish"):
+        lang = (job.get("options") or {}).get("speech_lang") or job.get("lang") or cfg_lang or "auto"
+        lang = str(lang).strip().lower()
+        if lang not in ("auto", "en", "hi", "hinglish"):
+            lang = "auto"
+
+    model_label = f"Faster-Whisper ({wmod})" if eng == "faster-whisper" else "Parakeet-v2"
+    dur = max(3.0, float(clip.get("end", 30.0)) - float(clip.get("start", 0.0)))
+    est_sec = max(5, int(round(dur * (0.45 if render._nvenc_ok else 0.9))))
+
+    clip["_regen_cap"] = {
+        "engine": eng,
+        "whisper_model": wmod,
+        "language": lang,
+        "fix_with_ai": bool(fix_with_ai),
+        "model_label": model_label,
+    }
+    clip["captions"] = True
+    clip["version"] = int(clip.get("version", 0)) + 1
+    clip.update(
+        status="queued",
+        stage_note=f"Regenerating captions with {model_label}…",
+        error=None,
+        error_detail=None,
+        eta_sec=est_sec,
+        render_started=time.time(),
+    )
+    save(job)
+    _q.put(("clip_regen_captions", jid, cid))
+    return {"ok": True, "clip_id": cid, "engine": eng, "whisper_model": wmod, "language": lang, "model_label": model_label}
+
+
+def _do_regen_clip_captions(job: dict, clip: dict) -> None:
+    """Worker routine for single-clip caption regeneration + final video re-render."""
+    cfg = clip.pop("_regen_cap", None) or {}
+    eng = cfg.get("engine") or transcribe.active_engine() or "parakeet"
+    wmod = cfg.get("whisper_model") or ""
+    lang = cfg.get("language") or "auto"
+    fix_with_ai = bool(cfg.get("fix_with_ai", True))
+    model_label = cfg.get("model_label") or (f"Faster-Whisper ({wmod})" if eng == "faster-whisper" else "Parakeet-v2")
+
+    d = Path(job["dir"])
+    clips_dir = d / "clips"
+    clips_dir.mkdir(parents=True, exist_ok=True)
+    edit_file = clips_dir / f"{clip['id']}_edit.json"
+    existing_ed = edit.load_edit(edit_file) if edit_file.is_file() else None
+
+    clip["status"] = "rendering_final"
+    clip["stage_note"] = f"Transcribing clip with {model_label}…"
+    save(job)
+
+    tmp_wav = clips_dir / f"{clip['id']}_regencap_{int(time.time() * 1000)}.wav"
+    try:
+        # Resolve source file for ONLY this clip (never modifies other clips)
+        src = None
+        if clip.get("src") and Path(clip["src"]).is_file():
+            src = Path(clip["src"])
+        elif job.get("source_path") and Path(job["source_path"]).is_file():
+            src = Path(job["source_path"])
+            clip.pop("src", None)
+            clip.pop("src_offset", None)
+            clip.pop("src_end", None)
+        if src is None:
+            clip.pop("src", None)
+            _piece_again(job, clip)
+            src = Path(clip["src"])
+
+        off = float(clip.get("src_offset", 0.0) or 0.0)
+        # Keep exact clip timing (respecting edit.json if present)
+        c_start = float((existing_ed or {}).get("start", clip["start"]))
+        c_end = float((existing_ed or {}).get("end", clip["end"]))
+        if clip.get("src_end") is not None:
+            c_start = max(c_start, off)
+            c_end = max(c_start + 1.0, min(c_end, float(clip["src_end"])))
+        clip["start"] = round(c_start, 2)
+        clip["end"] = round(c_end, 2)
+
+        loc_start = max(0.0, c_start - off)
+        loc_end = max(loc_start + 0.5, c_end - off)
+        meta = media.probe(src)
+        file_aud_dur = min(float(meta["duration"]), float(meta.get("audio_duration") or meta["duration"]))
+        a_sec = max(0.0, loc_start - 0.5)
+        b_sec = min(file_aud_dur, loc_end + 0.5)
+        slice_dur = max(0.5, b_sec - a_sec)
+
+        # Extract ONLY this clip's audio slice (fast accurate seek, -t after -i)
+        media.run([
+            "ffmpeg", "-nostdin", "-y", "-v", "error",
+            "-accurate_seek", "-ss", f"{a_sec:.3f}", "-i", str(src), "-t", f"{slice_dur:.3f}",
+            "-vn", "-ac", "1", "-ar", "16000",
+            "-af", "aresample=async=1:first_pts=0",
+            "-c:a", "pcm_s16le", str(tmp_wav),
+        ], timeout=120)
+        part_audio = media.load_audio(tmp_wav)
+
+        lang_hint = "" if lang == "auto" else lang
+        heard = transcribe.transcribe(
+            part_audio,
+            lang_hint=lang_hint,
+            word_timestamps=True,
+            engine_override=eng,
+            whisper_model_override=(wmod if eng == "faster-whisper" else None),
+        )
+
+        # Map slice-relative timestamps back to absolute video timeline & keep words inside this clip
+        abs_words = []
+        for w in (heard or []):
+            s_abs = round(float(w["s"]) + off + a_sec, 2)
+            e_abs = round(float(w["e"]) + off + a_sec, 2)
+            if c_start - 0.6 <= s_abs <= c_end + 0.6:
+                abs_words.append({"w": str(w["w"]), "s": s_abs, "e": max(s_abs + 0.08, e_abs)})
+
+        if not abs_words:
+            raise RuntimeError(
+                f"No speech was detected in this clip with {model_label}. "
+                "Try a different model (such as Faster-Whisper Small or Medium) or switch the language."
+            )
+
+        if fix_with_ai:
+            clip["stage_note"] = "Cleaning & Romanizing captions…"
+            save(job)
+            try:
+                usage.set_context(job.get("creator"), job.get("title") or "")
+                eff_lang = "" if lang == "auto" else lang
+                # Do NOT pass youtube_english here: user explicitly asked for the chosen speech model!
+                abs_words = brain.english_captions(abs_words, eff_lang, job.get("title") or "", asr_engine=eng)
+            except Exception:  # noqa: BLE001 - still render freshly transcribed words
+                pass
+
+        abs_words = roman.words(abs_words)
+        local_words = [
+            {"w": w["w"], "s": round(float(w["s"]) - off, 2), "e": round(float(w["e"]) - off, 2)}
+            for w in abs_words
+        ]
+
+        # Update ONLY this clip's words & edit.json (leave layout, heading, timing, facecam, music untouched)
+        span = [round(clip["start"], 2), round(clip["end"], 2), "en3"]
+        clip["words"] = local_words
+        clip["words_edited"] = False
+        clip["captions"] = True
+        clip["fixed_words"] = abs_words
+        clip["fixed_for"] = span
+        clip["caption_model"] = f"{eng}:{wmod}" if eng == "faster-whisper" else "parakeet-v2"
+        clip["_fast_caption_only"] = False
+
+        if existing_ed:
+            existing_ed.setdefault("caption", {})
+            existing_ed["caption"]["enabled"] = True
+            existing_ed["caption"]["words_edited"] = False
+            existing_ed["caption"]["words"] = [
+                {"text": w["w"], "start": w["s"], "end": w["e"]}
+                for w in local_words
+            ]
+            existing_ed["version"] = int(existing_ed.get("version", 1)) + 1
+            edit.save_edit(edit_file, existing_ed)
+
+        # Delete any stale _raw.mp4 so final render burns the brand-new captions cleanly
+        try:
+            (clips_dir / f"{clip['id']}_raw.mp4").unlink(missing_ok=True)
+        except OSError:
+            pass
+
+        clip["stage_note"] = "Rendering final video with new captions…"
+        save(job)
+        render_one(job, clip, abs_words, quality="final")
+        clip.pop("stage_note", None)
+        save(job)
+    finally:
+        clip.pop("stage_note", None)
+        try:
+            tmp_wav.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _refresh_review_stage(job: dict) -> None:
@@ -1336,8 +1557,12 @@ def _caption_words(job, clip, words, off):
         raw = [w for w in words if clip["start"] - 1 <= w["s"] <= clip["end"] + 1]
         try:
             usage.set_context(job.get("creator"), job.get("title") or "")
-            raw = brain.english_captions(raw, job.get("lang") or "", job.get("title") or "",
-                                         youtube_english=lambda: _english_part(job, clip))
+            eff_cap_lang = (job.get("options") or {}).get("speech_lang") or job.get("lang") or ""
+            if eff_cap_lang == "auto":
+                eff_cap_lang = job.get("lang") or ""
+            raw = brain.english_captions(raw, eff_cap_lang, job.get("title") or "",
+                                         youtube_english=lambda: _english_part(job, clip),
+                                         asr_engine=transcribe.active_engine())
             clip.update(fixed_words=raw, fixed_for=span)
         except Exception:  # noqa: BLE001 - captions still render with the words as heard
             pass
@@ -1417,13 +1642,15 @@ def _piece_again(job, clip):
     d = Path(job["dir"])
     want = max(0.0, clip["start"] - PAD)
     until = clip["end"] + PAD if not job.get("duration") else min(job["duration"], clip["end"] + PAD)
+    audio_lang = str((job.get("options") or {}).get("audio_lang") or "").strip()
     try:
         piece = media.download_section(src["url"], d / "clips", f"{clip['id']}.src", want, until,
-                                       int(job["options"]["quality"]), exact=False)
+                                       int(job["options"]["quality"]), exact=False, audio_lang=audio_lang)
         meta = media.probe(piece)
     except Exception as e:  # noqa: BLE001
         raise RuntimeError(f"Could not fetch this part of the video: {safe.friendly(e, 250)}") from e
-    clip.update(src=str(piece), src_offset=round(want, 2), src_end=round(want + meta["duration"], 2))
+    piece_dur = min(meta["duration"], meta.get("audio_duration") or meta["duration"])
+    clip.update(src=str(piece), src_offset=round(want, 2), src_end=round(want + piece_dur, 2))
     clip["end"] = min(clip["end"], clip["src_end"])
     job.setdefault("width", meta["width"])
     job.setdefault("height", meta["height"])
@@ -1433,17 +1660,20 @@ def _fetch_piece(job, clip, full_audio):
     """Long videos: download just this clip's stretch and pin down exactly where it starts."""
     d = Path(job["dir"])
     o = job["options"]
+    audio_lang = str(o.get("audio_lang") or "").strip()
     try:
         want = max(0.0, clip["start"] - PAD)
         piece = media.download_section(job["source"]["url"], d / "clips", f"{clip['id']}.src", want,
-                                       min(job["duration"], clip["end"] + PAD), int(o["quality"]))
+                                       min(job["duration"], clip["end"] + PAD), int(o["quality"]),
+                                       audio_lang=audio_lang)
         wav = d / "clips" / f"{clip['id']}.wav"
         media.extract_audio(piece, wav)
         part = media.load_audio(wav)
         wav.unlink(missing_ok=True)
         meta = media.probe(piece)
         off = media.find_offset(full_audio, part, want)
-        clip.update(src=str(piece), src_offset=round(off, 2), src_end=round(off + meta["duration"], 2))
+        piece_dur = min(meta["duration"], meta.get("audio_duration") or meta["duration"])
+        clip.update(src=str(piece), src_offset=round(off, 2), src_end=round(off + piece_dur, 2))
         clip["start"], clip["end"] = max(clip["start"], clip["src_offset"]), min(clip["end"], clip["src_end"])
         job.setdefault("width", meta["width"])
         job.setdefault("height", meta["height"])
@@ -1583,8 +1813,9 @@ def _run_job(job):
         usage.set_context(job["creator"], meta["title"])
         span = (o["range_end"] or meta["duration"]) - (o["range_start"] or 0)
         pieces = span > LONG_VIDEO or meta["duration"] <= 0 or bool(o.get("range_start")) or bool(o.get("range_end"))
+        audio_lang = str(o.get("audio_lang") or "").strip()
         if not pieces:  # shorter video: fetch all of it in the background while the audio is worked on
-            video = fetch.submit(media.download, src["url"], d, int(o["quality"]))
+            video = fetch.submit(media.download, src["url"], d, int(o["quality"]), audio_lang=audio_lang)
         last_audio_tick = [0.0]
 
         def _audio_progress(p, d_info=None):
@@ -1594,7 +1825,7 @@ def _run_job(job):
             if now - last_audio_tick[0] < 0.5 and p < 0.99:
                 return
             last_audio_tick[0] = now
-            stage = "Getting the audio"
+            stage = f"Getting the {audio_lang.upper()} audio" if audio_lang else "Getting the audio"
             kw = {}
             if d_info:
                 speed = d_info.get("speed")
@@ -1610,7 +1841,7 @@ def _run_job(job):
                     r_to = media.fmt_eta(o["range_end"]) if o.get("range_end") else "end"
                     parts.insert(0, f"part {r_from} to {r_to}")
                 if parts:
-                    stage = f"Getting the audio ({' · '.join(parts)})"
+                    stage = f"{stage} ({' · '.join(parts)})"
                 if speed_str:
                     kw["speed"] = speed_str
             _set(job, stage=stage, progress=0.03 + 0.1 * p, **kw)
@@ -1621,13 +1852,15 @@ def _run_job(job):
             is_paused=lambda: is_paused(job["id"]),
             start=o.get("range_start"),
             end=o.get("range_end"),
+            audio_lang=audio_lang,
         )
     else:
         pieces, audio_file = False, Path(src["path"])
         info = media.probe(audio_file)
         if info["duration"] > config.MAX_VIDEO_HOURS * 3600:
             raise RuntimeError(f"That video is longer than {config.MAX_VIDEO_HOURS:g} hours, which is the limit.")
-        _set(job, source_path=str(audio_file), width=info["width"], height=info["height"], duration=info["duration"])
+        _set(job, source_path=str(audio_file), width=info["width"], height=info["height"],
+             duration=info["duration"], audio_duration=info.get("audio_duration", info["duration"]))
         if not job.get("thumb") and media.save_thumb(d, video=audio_file):
             _set(job, thumb=True)
     wav = d / "audio.wav"
@@ -1659,12 +1892,13 @@ def _run_job(job):
                 except Exception as e:  # noqa: BLE001 - sites sometimes refuse a download
                     notes.append(f"Video download refused once ({str(e)[-80:]}), retrying")
                     try:
-                        path = media.download(src["url"], d, int(o["quality"]))
+                        path = media.download(src["url"], d, int(o["quality"]), audio_lang=str(o.get("audio_lang") or "").strip())
                     except Exception as e2:  # noqa: BLE001
                         notes.append(f"Whole-video download failed ({str(e2)[-80:]}), fetching clip parts instead")
                 if path:
                     info = media.probe(path)
-                    job.update(source_path=str(path), width=info["width"], height=info["height"])
+                    job.update(source_path=str(path), width=info["width"], height=info["height"],
+                               audio_duration=info.get("audio_duration", info["duration"]))
                 vstate["path"] = path
             return vstate["path"]
 
@@ -1690,8 +1924,11 @@ def _run_job(job):
         # When user is on Parakeet (not Whisper) and YouTube gave us real Hindi captions, KEEP YouTube's
         # Hindi captions instead of overwriting them — Parakeet-v2 is English-only and YouTube's Hindi track works great!
         keep_yt_hindi = bool(yt and yt_lang.startswith("hi") and not user_chose_whisper)
+        existing_slice = [w for w in words_now if clip["start"] - 1.0 <= w["s"] <= clip["end"] + 1.0]
+        # If existing words end > 3.5s before the clip's end (e.g. clip crossed a block boundary), re-transcribe!
+        missing_tail = (not existing_slice) or ((clip["end"] - float(existing_slice[-1].get("e", 0.0))) >= 3.5)
         should_retranscribe = bool(
-            not keep_yt_hindi and (
+            (not keep_yt_hindi and (
                 (yt and (
                     yt_lang.startswith("en")
                     or user_chose_whisper
@@ -1700,13 +1937,13 @@ def _run_job(job):
                 # When Faster-Whisper scanned the full video fast with word_timestamps=False,
                 # run crisp word_timestamps=True ONLY on this short selected clip!
                 or (not yt and whisper_active and not o.get("custom_ranges"))
-            )
+            ))
+            or (missing_tail and (not keep_yt_hindi or transcribe.faster_whisper_installed()))
         )
         if clip["status"] not in ("error", "failed") and clip.get("captions", True) and should_retranscribe:
             # Run crisp word-level timestamps on just this short clip (fast even on CPU, instant on GPU).
             a0, b0 = max(lo, int((clip["start"] - 1.5) * 16000)), min(hi, int((clip["end"] + 1.5) * 16000))
             eff_lang_hint = speech_lang if speech_lang in ("en", "hi", "hinglish") else (job.get("lang") or "")
-            existing_slice = [w for w in words_now if clip["start"] - 1.0 <= w["s"] <= clip["end"] + 1.0]
             try:
                 tw = [dict(w, s=round(w["s"] + a0 / 16000, 2), e=round(w["e"] + a0 / 16000, 2))
                       for w in transcribe.transcribe(audio[a0:b0], lang_hint=eff_lang_hint, word_timestamps=True)]
@@ -1715,6 +1952,11 @@ def _run_job(job):
             # Only replace a valid YouTube Hindi transcript if Whisper produced solid speech coverage
             min_needed = max(3, int(len(existing_slice) * 0.45)) if (yt and yt_lang.startswith("hi") and existing_slice) else 3
             if len(tw) >= min_needed:
+                # If existing_slice still has trailing words beyond where tw stopped (>2.5s gap), preserve them!
+                if existing_slice and tw and (float(existing_slice[-1]["e"]) - float(tw[-1]["e"])) > 2.5:
+                    tail_keep = [dict(w) for w in existing_slice if float(w["s"]) > float(tw[-1]["e"]) + 0.15]
+                    if tail_keep:
+                        tw.extend(tail_keep)
                 exact[clip["id"]] = (a0 / 16000, b0 / 16000, tw)
                 words_now = tw
                 clip.pop("fixed_for", None)
@@ -1731,9 +1973,14 @@ def _run_job(job):
     words, tokens, model = [], 0, None
     done_blocks = 0
     yt = None
+    _audio_lang = str(o.get("audio_lang") or "").strip().lower()
     _opt_lang = (o.get("speech_lang") or "auto").strip().lower()
     if _opt_lang in ("en", "hi", "hinglish"):
         _eff_speech_lang = _opt_lang
+    elif _audio_lang.startswith("hi"):
+        _eff_speech_lang = "hi"
+    elif _audio_lang.startswith("en"):
+        _eff_speech_lang = "en"
     else:
         try:
             _cfg_lang = str((accounts.settings() or {}).get("asr_language") or "auto").strip().lower()
@@ -1743,6 +1990,8 @@ def _run_job(job):
     speech_lang = _eff_speech_lang
     if speech_lang in ("en", "hi", "hinglish"):
         job["lang"] = speech_lang
+    elif _audio_lang:
+        job["lang"] = _audio_lang.split("-")[0]
     if remaking and (d / "words.json").is_file():
         try:
             cached_w = json.loads((d / "words.json").read_text(encoding="utf-8"))
@@ -1750,7 +1999,9 @@ def _run_job(job):
                 yt = (cached_w, job.get("lang") or "")
         except Exception:
             pass
-    elif src["type"] == "url" and config.YT_TRANSCRIPT and media.is_youtube(src["url"]):
+    elif not _audio_lang and src["type"] == "url" and config.YT_TRANSCRIPT and media.is_youtube(src["url"]):
+        # When a dubbed audio track (e.g. MrBeast Hindi audio_lang="hi") is explicitly chosen, skip YouTube's
+        # original-track subtitles and transcribe the actual downloaded dubbed audio directly so captions match!
         try:
             yt = media.youtube_words(src["url"], prefer_lang=speech_lang)
         except Exception:  # noqa: BLE001 - no transcript to borrow: ours is written as usual
@@ -1764,6 +2015,8 @@ def _run_job(job):
         if speech_lang not in ("en", "hi", "hinglish"):
             # Never let YouTube's auto-tag override Auto speech detection unless we actually borrowed YouTube's captions
             job["lang"] = yt[1] if yt else ""
+    else:
+        job["transcript_from"] = "own"
     if not yt and speech_lang in ("hi", "hinglish") and not transcribe.faster_whisper_installed():
         notes.append(
             "Parakeet-v2 only understands English and this video has no Hindi YouTube transcript. "
@@ -2090,7 +2343,8 @@ def _run_job(job):
                     except Exception:
                         pass
 
-                ed = edit.init_edit(job, c, words, c.get("facecam"))
+                full_w = list(yt[0]) if yt else list(words)
+                ed = edit.init_edit(job, c, full_w, c.get("facecam"))
                 (d / "clips").mkdir(parents=True, exist_ok=True)
                 edit.save_edit(d / "clips" / f"{cid}_edit.json", ed)
 
@@ -2102,7 +2356,7 @@ def _run_job(job):
                     q = "final"
 
                 job["clips"].append(c)
-                futures.append((renders.submit(ctx.bind(make), c, list(words), q), c))
+                futures.append((renders.submit(ctx.bind(make), c, full_w, q), c))
             job["ai"] = {"model": model, "tokens": tokens, "note": "", "log": notes[-5:]}
             job["done_blocks"] = bi + 1       # a restart from here on carries on with the next part
             save(job)
@@ -2167,6 +2421,11 @@ def _worker(quick_only=False):
                     if wf.is_file():
                         words = json.loads(wf.read_text(encoding="utf-8"))
                 render_one(job, clip, words, quality="final")
+            elif kind == "clip_regen_captions":
+                clip = next((c for c in job["clips"] if c["id"] == cid), None)
+                if not clip:
+                    continue
+                _do_regen_clip_captions(job, clip)
             elif kind == "clip_draft":
                 clip = next((c for c in job["clips"] if c["id"] == cid), None)
                 # Never let an earlier queued draft overwrite a clip that was already approved or finished!
@@ -2192,12 +2451,14 @@ def _worker(quick_only=False):
                         c.pop("eta_sec", None)
                 _set(job, status="error", error=detail["what"], error_detail=detail, stage="Stopped", eta_sec=None)
                 creators.log(job["creator"], f"Video failed ({failed_stage}): {detail['what'][:200]}")
-            elif kind in ("clip", "clip_final", "clip_draft") and cid:
+            elif kind in ("clip", "clip_final", "clip_draft", "clip_regen_captions") and cid:
                 clip = next((c for c in job.get("clips", []) if c["id"] == cid), None)
                 if clip and clip.get("status") in ("queued", "rendering", "rendering_final", "drafting", "approved"):
-                    detail = _classify_error(e, where=f"Clip {cid} ({kind})")
+                    where_lbl = f"Clip {cid} (Regenerate captions)" if kind == "clip_regen_captions" else f"Clip {cid} ({kind})"
+                    detail = _classify_error(e, where=where_lbl)
                     clip.pop("eta_sec", None)
                     clip.pop("render_started", None)
+                    clip.pop("stage_note", None)
                     clip.update(status="failed" if kind == "clip_draft" else "error", error=detail["what"], error_detail=detail)
                     _refresh_review_stage(job)
                     save(job)

@@ -290,9 +290,9 @@ def apply_meme_effect(src: Path, mood: str, out: Path = None, at: float = None, 
     else:
         vol = m_info.get("volume", -2)
 
-    af = (f"[0:a]volume=0.4:enable='between(t,{S:.3f},{S + 1.2:.3f})'[ad];"
+    af = (f"[0:a]aresample={SR}:async=1:first_pts=0,volume=0.4:enable='between(t,{S:.3f},{S + 1.2:.3f})'[ad];"
           f"[1:a]aresample={SR},aformat=channel_layouts=stereo,volume={vol}dB,adelay={int(S * 1000)}|{int(S * 1000)}[as];"
-          f"[ad][as]amix=inputs=2:normalize=0:duration=first,loudnorm=I=-14:TP=-1.5:LRA=9[ao]")
+          f"[ad][as]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.95[ao]")
 
     # Build subtle visual punch effect at payoff T if specified
     effects = set(m_info.get("effect", []))
@@ -310,20 +310,30 @@ def apply_meme_effect(src: Path, mood: str, out: Path = None, at: float = None, 
         from . import render
         vcodec = ["-c:v", "h264_nvenc", "-cq", "18", "-preset", "p4"] if getattr(render, "_nvenc_ok", None) else ["-c:v", "libx264", "-crf", "18", "-preset", "fast"]
 
+    same_file = out.resolve() == src.resolve()
+    tmp_out = out.with_name(f"{out.stem}_memetmp{out.suffix}") if same_file else out
     cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(src), "-i", str(snd_path),
            "-filter_complex", af]
     if vf != "null":
         cmd += ["-vf", vf]
-    cmd += ["-map", "0:v", "-map", "[ao]"] + vcodec + [
+    cmd += ["-map", "0:v", "-map", "[ao]", "-t", f"{dur:.3f}"] + vcodec + [
            "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
-           "-movflags", "+faststart", str(out)]
+           "-movflags", "+faststart", str(tmp_out)]
 
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
-        if r.returncode == 0 and out.exists():
+        if r.returncode == 0 and tmp_out.exists() and tmp_out.stat().st_size > 0:
+            if same_file:
+                os.replace(str(tmp_out), str(out))
             return out
     except Exception:
         pass
+    finally:
+        if same_file and tmp_out.exists():
+            try:
+                tmp_out.unlink(missing_ok=True)
+            except OSError:
+                pass
     return src
 
 
@@ -344,22 +354,32 @@ def apply_music_bed(src: Path, mood: str = "chill", out: Path = None, db: float 
     out = Path(out or src.with_name(f"{src.stem}_bed.mp4"))
 
     # Ducking filter: speech in [0:a] ducks background music in [1:a]
-    pre = (f"[0:a]aresample={SR},aformat=channel_layouts=stereo,asplit=3[sp][k][m];"
+    pre = (f"[0:a]aresample={SR}:async=1:first_pts=0,aformat=channel_layouts=stereo,asplit=3[sp][k][m];"
            f"[1:a]aresample={SR},aformat=channel_layouts=stereo,atrim=0:{dur:.3f},volume={db}dB,afade=t=in:d=0.3,afade=t=out:st={max(dur - 0.5, 0):.3f}:d=0.5[b];"
            f"[b][k]sidechaincompress=threshold=0.05:ratio=6:attack=15:release=350:makeup=1")
-    mix = f"[m][bd]amix=inputs=2:normalize=0:duration=first,loudnorm=I=-14:TP=-1.5:LRA=9,atrim=0:{dur:.3f}[ao]"
+    mix = f"[m][bd]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.95,atrim=0:{dur:.3f}[ao]"
 
+    same_file = out.resolve() == src.resolve()
+    tmp_out = out.with_name(f"{out.stem}_bedtmp{out.suffix}") if same_file else out
     cmd = ["ffmpeg", "-y", "-loglevel", "error",
            "-i", str(src), "-stream_loop", "-1", "-i", str(bed_path),
            "-filter_complex", f"{pre}[bd];[sp]anullsink;{mix}",
            "-map", "0:v", "-map", "[ao]", "-t", f"{dur:.3f}",
            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
-           "-movflags", "+faststart", str(out)]
+           "-movflags", "+faststart", str(tmp_out)]
 
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
-        if r.returncode == 0 and out.exists():
+        if r.returncode == 0 and tmp_out.exists() and tmp_out.stat().st_size > 0:
+            if same_file:
+                os.replace(str(tmp_out), str(out))
             return out
     except Exception:
         pass
+    finally:
+        if same_file and tmp_out.exists():
+            try:
+                tmp_out.unlink(missing_ok=True)
+            except OSError:
+                pass
     return src
