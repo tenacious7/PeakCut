@@ -1663,6 +1663,10 @@ def _fetch_piece(job, clip, full_audio):
     audio_lang = str(o.get("audio_lang") or "").strip()
     try:
         want = max(0.0, clip["start"] - PAD)
+        r_from = media.fmt_eta(clip["start"])
+        r_to = media.fmt_eta(clip["end"])
+        _set(job, stage=f"Downloading video for clip ({r_from} to {r_to})\u2026",
+             progress=max(job.get("progress", 0.15), 0.15))
         piece = media.download_section(job["source"]["url"], d / "clips", f"{clip['id']}.src", want,
                                        min(job["duration"], clip["end"] + PAD), int(o["quality"]),
                                        audio_lang=audio_lang)
@@ -2089,8 +2093,9 @@ def _run_job(job):
             r_mode = crange.get("mode", o.get("timestamp_mode", "direct"))
             cid = f"clip{len(job['clips']) + 1:02d}"
 
-            _set(job, stage=f"Processing clip {i + 1} of {len(custom_ranges)} ({media.fmt_eta(r_start)} to {media.fmt_eta(r_end)})",
-                 progress=0.15 + 0.75 * (i / len(custom_ranges)))
+            base_prog = 0.15 + 0.75 * (i / max(1, len(custom_ranges)))
+            _set(job, stage=f"Transcribing clip {i + 1} of {len(custom_ranges)} ({media.fmt_eta(r_start)} to {media.fmt_eta(r_end)})\u2026",
+                 progress=base_prog)
 
             a_s = int(r_start * 16000)
             b_s = min(len(audio), int(r_end * 16000))
@@ -2102,7 +2107,11 @@ def _run_job(job):
                     if yt:
                         raw_w = [dict(w) for w in yt[0] if r_start <= w["s"] < r_end]
                     else:
-                        raw_w = transcribe.transcribe(slice_audio, lang_hint=job.get("lang") or "")
+                        def _crange_prog(p, _bp=base_prog, _n=max(1, len(custom_ranges))):
+                            _set(job, progress=max(job.get("progress", _bp),
+                                                   _bp + (0.75 / _n) * p))
+                        raw_w = transcribe.transcribe(slice_audio, lang_hint=job.get("lang") or "",
+                                                      on_progress=_crange_prog)
                     clip_words = [dict(w, s=round(w["s"] + (0 if yt else r_start), 2),
                                        e=round(w["e"] + (0 if yt else r_start), 2)) for w in raw_w]
                 except Exception as e:
